@@ -1,0 +1,29 @@
+# Ignoruj wirtualne środowisko
+.venv/
+
+# Standardowe pliki Pythona
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+
+# Pliki logów
+*.log
+
+# Pliki cache
+*.pytest_cache/
+.mypy_cache/
+.pytest_cache/
+.pyre/
+.pytype/
+
+# IDE / edytory
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Pliki systemowe
+.DS_Store
+Thumbs.db
