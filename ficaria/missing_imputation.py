@@ -1,6 +1,8 @@
 from sklearn.base import BaseEstimator, TransformerMixin
 import numpy as np
 import pandas as pd
+from fuzzycmeans import FCM
+import random
 from .utils import *
 
 class FCMCentroidImputer(BaseEstimator, TransformerMixin):
@@ -26,7 +28,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
         Fit the FCM imputer on complete data only.
         """
-        X = self._check_input(X)
+        X = check_input(X)
         complete, _ = split_complete_incomplete(X)
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
@@ -41,7 +43,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
         Impute missing values using nearest cluster centroid.
         """
-        X = self._check_input(X)
+        X = check_input(X)
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -60,13 +62,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 
         return X_imputed
 
-    def _check_input(self, X):
-        """
-        Convert input to DataFrame if not already.
-        """
-        if not isinstance(X, pd.DataFrame):
-            X = pd.DataFrame(X)
-        return X
+
     
 
 class FCMParameterImputer(BaseEstimator, TransformerMixin):
@@ -92,7 +88,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         """
         Fit the FCM imputer on complete data only.
         """
-        X = self._check_input(X)
+        X = check_input(X)
         complete, _ = split_complete_incomplete(X)
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
@@ -111,7 +107,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         Each missing value is the weighted sum of all centroids
         based on membership values.
         """
-        X = self._check_input(X).copy()
+        X = check_input(X).copy()
         _, incomplete = split_complete_incomplete(X)
         
         if incomplete.empty:
@@ -132,12 +128,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
                 X_imputed.at[idx, col] = np.sum(u * self.centers_[:, X.columns.get_loc(col)])
 
         return X_imputed
-    
-    
-    def _check_input(self, X):
-        if not isinstance(X, pd.DataFrame):
-            X = pd.DataFrame(X)
-        return X
+
     
 
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
@@ -158,7 +149,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         Fit the imputer on complete data.
         """
-        X = self._check_input(X)
+        X = check_input(X)
         complete, _ = split_complete_incomplete(X)
         complete_array = complete.to_numpy()
         
@@ -185,7 +176,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         Impute missing values using rough parameter-based FCM method.
         """
-        X = self._check_input(X)
+        X = check_input(X)
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -216,10 +207,63 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         
         return X_imputed
 
-    def _check_input(self, X):
-        """
-        Convert input to DataFrame if not already.
-        """
-        if not isinstance(X, pd.DataFrame):
-            X = pd.DataFrame(X)
-        return X
+class KIImputer(BaseEstimator, TransformerMixin):
+    """
+    KIImputer: Hybrid KNN + Iterative Imputer for Missing Data.
+
+    Implements the KI imputation method, which combines k-nearest neighbors (KNN)
+    and iterative imputation to estimate missing values. For each incomplete row,
+    the best number of neighbors (k) is selected by minimizing reconstruction error,
+    and the imputation is refined using a model-based iterative approach.
+    """
+    def __init__(self, random_state=None):
+        self.random_state = random_state
+        pass
+
+    def fit(self, X, y=None):
+        X = check_input(X)
+        self.X_train_ = X.copy()
+
+        self.rng_ = random.Random(self.random_state)
+        return self
+
+    def transform(self, X):
+        X = check_input(X)
+        X_imputed = impute_KI(X, self.X_train_, rng=self.rng_)
+        return X_imputed
+
+
+class FCKIImputer(BaseEstimator, TransformerMixin):
+    """
+   Hybrid imputer combining fuzzy c-means clustering, k-nearest neighbors, and iterative imputation.
+
+   FCKI improves missing data imputation by first clustering data with fuzzy c-means,
+   allowing points to belong to multiple clusters. It then performs KNN-based imputation
+   within clusters, followed by iterative imputation for refinement. This two-level
+   similarity search enhances accuracy compared to standard KNN imputation.
+    """
+
+    def __init__(self, random_state=None):
+        self.random_state = random_state
+        pass
+
+    def fit(self, X, y=None):
+        X = check_input(X)
+        self.X_train_ = X.copy()
+
+        self.optimal_c_ = find_optimal_clusters_fuzzy(X, k_min=2, k_max=10, impute_strategy='mean')
+        self.rng_ = random.Random(self.random_state)
+
+        self.imputer_ = SimpleImputer(strategy="mean")
+        X_filled = self.imputer_.fit_transform(self.X_train_)
+        X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
+
+        self.fcm_ = FCM(n_clusters=self.optimal_c_)
+        self.fcm_.fit(X_filled.values)
+
+        return self
+
+    def transform(self, X):
+        X = check_input(X)
+        X_imputed = impute_FCKI(X, self.X_train_, self.fcm_, self.optimal_c_, self.imputer_, self.rng_)
+        return X_imputed
