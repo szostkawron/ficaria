@@ -296,7 +296,7 @@ def compute_fcm_objective(X, centers, U, m=2):
     return obj
 
 
-def find_optimal_clusters_fuzzy(X, k_min=2, k_max=10, impute_strategy='mean', random_state=42):
+def find_optimal_clusters_fuzzy(X, k_min=2, k_max=10, impute_strategy='mean', random_state=42, m=2):
     """
     Elbow method for fuzzy C-means with missing data imputation and objective function calculation.
 
@@ -311,21 +311,17 @@ def find_optimal_clusters_fuzzy(X, k_min=2, k_max=10, impute_strategy='mean', ra
     Returns:
         int or None: Optimal number of clusters found by the elbow method.
     """
-    imputer = SimpleImputer(strategy=impute_strategy)
-    X_imputed = imputer.fit_transform(X)
-
     objective_values = []
     k_values = list(range(k_min, k_max + 1))
 
     for k in k_values:
         np.random.seed(random_state)
-        fcm = FCM(n_clusters=k)
-        fcm.fit(X_imputed)
+        fcm = FCM(n_clusters=k, m=m)
+        fcm.fit(X)
 
-        obj = compute_fcm_objective(X_imputed, fcm.cluster_centers_, fcm.u, m=fcm.m)
+        obj = compute_fcm_objective(X, fcm.cluster_centers_, fcm.u, m=fcm.m)
         objective_values.append(obj)
 
-        # Znalezienie "łokcia"
     kl = KneeLocator(k_values, objective_values, curve="convex", direction="decreasing")
     optimal_k = kl.elbow
 
@@ -333,13 +329,26 @@ def find_optimal_clusters_fuzzy(X, k_min=2, k_max=10, impute_strategy='mean', ra
 
 
 def impute_FCKI(X, X_train, fcm, c, imputer, rng=None):
+    """
+    Impute missing values using the FCKI method (FCM + KNN + Iterative Imputation).
+
+    Parameters:
+        X (pd.DataFrame): Data to impute.
+        X_train (pd.DataFrame or None): Optional reference data.
+        fcm: A fitted Fuzzy C-Means used to divide data into clusters
+        c (int): Optimal number of clusters used in fuzzy c-means.
+        imputer: A fitted simple imputer used for the initial rough imputation
+        rng (random.Random or None): Random generator for reproducibility.
+
+    Returns:
+        np.ndarray: Imputed dataset.
+    """
     X_filled = imputer.transform(X)
     X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
     membership_matrix = fcm.predict(X_filled.values)
 
     fcm_labels_train = fcm.u.argmax(axis=1)
     fcm_labels_X = membership_matrix.argmax(axis=1)
-    print("clusters: ", fcm_labels_X)
 
     all_clusters = pd.DataFrame(columns=X.columns)
 
