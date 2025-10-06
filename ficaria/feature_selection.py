@@ -76,7 +76,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         self._entropy_cache = {}
 
         self.D_partition = self._create_partitions()
-        self.S = self.FIGFS_algorithm()
+        self.S = self._FIGFS_algorithm()
 
         return self
 
@@ -381,7 +381,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         return partitions
 
 
-    def FIGFS_algorithm(self):
+    def _FIGFS_algorithm(self):
         """
         Execute the Fuzzy Implication Granularity-based Feature Selection (FIGFS) algorithm.
 
