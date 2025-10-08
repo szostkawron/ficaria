@@ -1,5 +1,11 @@
 import numpy as np
 import pandas as pd
+import random
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer, SimpleImputer
+from kneed import KneeLocator
+from fuzzycmeans import FCM
+
 
 # Ta funkcja dzieli zbiory danych na kompletne i niekompletne
 # Uwaga - z tego co widziałam potrzebne w wielu miejscach!
@@ -16,6 +22,15 @@ def split_complete_incomplete(X: pd.DataFrame):
     complete = X.dropna()
     incomplete = X[X.isna().any(axis=1)]
     return complete, incomplete
+
+
+def check_input(X):
+    """
+    Convert input to DataFrame if not already.
+    """
+    if not isinstance(X, pd.DataFrame):
+        X = pd.DataFrame(X)
+    return X
 
 
 def euclidean_distance(a: np.ndarray, b: np.ndarray):
@@ -54,7 +69,7 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
 
     for iteration in range(max_iter):
         u_old = u.copy()
-        
+
         uv = u ** v
         centers = (uv.T @ X) / np.sum(uv.T, axis=1)[:, None]
 
@@ -104,19 +119,251 @@ def find_nearest_approximation(obs, lower, upper):
         
     Returns:
         'lower' or 'upper'
-    """    
+    """
     if lower.shape[0] > 0:
         dist_lower = np.min([euclidean_distance(obs, row) for row in lower])
     else:
         dist_lower = np.inf
-        
+
     if upper.shape[0] > 0:
         dist_upper = np.min([euclidean_distance(obs, row) for row in upper])
     else:
         dist_upper = np.inf
-    
+
     if dist_lower <= dist_upper:
         return 'lower'
     else:
         return 'upper'
 
+
+def get_neighbors(train, test_row, num_neighbors):
+    """
+    Returns the `num_neighbors` closest rows in `train` to `test_row`
+    using Euclidean distance (ignores NaNs).
+
+    Parameters:
+        train (list of array-like): Training data.
+        test_row (array-like): Query point.
+        num_neighbors (int): Number of neighbors to return.
+
+    Returns:
+        list: Closest `num_neighbors` rows from `train`.
+    """
+    distances = list()
+    for train_row in train:
+        dist = np.sqrt(np.nansum((np.array(test_row) - np.array(train_row)) ** 2))
+        distances.append((train_row, dist))
+    distances.sort(key=lambda tup: tup[1])
+    neighbors = list()
+    for i in range(num_neighbors):
+        neighbors.append(distances[i][0])
+    return neighbors
+
+
+def find_best_k(St: pd.DataFrame, random_col: int, original_value: float, rng) -> int:
+    """
+    Select the optimal number of neighbors (k) that minimizes RMSE
+    when imputing a masked value in a selected column.
+
+    Parameters:
+        St (pd.DataFrame): Data with last row partially masked.
+        random_col (int): Index of the masked column.
+        original_value (float): True value before masking.
+        rng (Random): Random number generator.
+
+    Returns:
+        int: Best value of k.
+    """
+    Np = len(St)
+    K_List = []
+    RMSE_List = []
+
+    xi = St.iloc[-1].values.tolist()
+    St_without_xi = St.iloc[:-1].values.tolist()
+
+    for k in range(1, Np):
+        neighbors = get_neighbors(St_without_xi, xi, k)
+        neighbor_df = pd.DataFrame(neighbors, columns=St.columns)
+        mean_value = neighbor_df.iloc[:, random_col].mean()
+        rmse = np.sqrt((mean_value - original_value) ** 2)
+        K_List.append(k)
+        RMSE_List.append(rmse)
+
+    best_k = K_List[np.argmin(RMSE_List)]
+    return best_k
+
+
+def impute_KI(X, X_train=None, rng=None):
+    """
+    Impute missing values using the KI method (KNN + Iterative Imputation).
+
+    Parameters:
+        X (pd.DataFrame): Data to impute.
+        X_train (pd.DataFrame or None): Optional reference data.
+        rng (random.Random or None): Random generator for reproducibility.
+
+    Returns:
+        np.ndarray: Imputed dataset.
+    """
+    if rng is None:
+        rng = random
+    X_incomplete_rows = X.copy()
+
+    Xmis = X_incomplete_rows[X_incomplete_rows.isnull().any(axis=1)]
+
+    if X_train is not None and not X.equals(X_train):
+        all_data = pd.concat([X, X_train], axis=0)
+    else:
+        all_data = X
+    while not (Xmis.empty):
+
+        xi = Xmis.iloc[0]
+
+        index_of_xi = Xmis.index.tolist()[0]
+        col_index_missing = []
+        col_name_missing = []
+        for j in range(len(X_incomplete_rows.columns)):
+            if pd.isnull(xi.iloc[j]):
+                col_index_missing.append(j)
+                col_name_missing.append(X_incomplete_rows.columns[j])
+
+        X_rows_without_missing_cols_in_xi = all_data.dropna(inplace=False, axis=0,
+                                                            subset=col_name_missing)
+        Pt = X_rows_without_missing_cols_in_xi
+        Pt = pd.concat([Pt, Xmis.iloc[[0]]], axis=0)
+        St = Pt.copy()
+        St_Complete_Temp = St.copy()
+        random_missing_col = rng.randint(0, len(St.columns) - 1)
+        AV = St_Complete_Temp.iloc[len(St.index) - 1, random_missing_col]
+        while (pd.isnull(AV)):
+            random_missing_col = rng.randint(0, len(St.columns) - 1)
+            AV = St_Complete_Temp.iloc[len(St.index) - 1, random_missing_col]
+        St.iloc[len(St.index) - 1, random_missing_col] = np.NaN
+
+        best_k = find_best_k(St, random_missing_col, AV, rng)
+
+        xi_from_Pt = Pt.iloc[-1].values.tolist()
+        Pt_without_xi = Pt.iloc[:-1].values.tolist()
+
+        neighbors_xi = get_neighbors(Pt_without_xi, xi_from_Pt, best_k)
+
+        df_neighbors_xi = pd.DataFrame(data=neighbors_xi, columns=Pt.columns)
+
+        S = pd.concat([df_neighbors_xi, Xmis.iloc[[0]]], axis=0)
+        S_filled_EM = IterativeImputer().fit_transform(S.values)
+        S_filled_EM = pd.DataFrame(data=S_filled_EM, columns=Pt.columns)
+        xi_imputed = S_filled_EM.iloc[len(S_filled_EM.index) - 1]
+        xi_imputed_with_index = pd.DataFrame([xi_imputed], index=[index_of_xi])
+
+        all_data = pd.concat([all_data, xi_imputed_with_index], axis=0)
+
+        all_data = all_data.loc[~all_data.index.duplicated(keep='last')]
+        all_data.sort_index(inplace=True)
+
+        X_incomplete_rows = pd.concat([X_incomplete_rows, xi_imputed_with_index], axis=0)
+        X_incomplete_rows = X_incomplete_rows.loc[~X_incomplete_rows.index.duplicated(keep='last')]
+        X_incomplete_rows.sort_index(inplace=True)
+
+        Xmis = Xmis.iloc[1:]
+
+    X_incomplete_rows.sort_index(inplace=True)
+    all_dataset_imputed = X_incomplete_rows.copy()
+
+    return all_dataset_imputed.to_numpy()
+
+
+def compute_fcm_objective(X, centers, U, m=2):
+    """
+    Compute the fuzzy c-means objective function value.
+
+    Parameters:
+        X (np.array): Data points, shape (n_samples, n_features).
+        centers (np.array): Cluster centers, shape (n_clusters, n_features).
+        U (np.array): Membership matrix, shape (n_samples, n_clusters).
+        m (float): Fuzziness parameter (default is 2).
+
+    Returns:
+        float: Value of the fuzzy c-means objective function.
+    """
+    centers = np.array(centers)
+
+    dist_sq = np.zeros((X.shape[0], centers.shape[0]))
+    for j in range(centers.shape[0]):
+        diff = X - centers[j]
+        dist_sq[:, j] = np.sum(diff ** 2, axis=1)
+
+    obj = np.sum((U ** m) * dist_sq)
+    return obj
+
+
+def find_optimal_clusters_fuzzy(X, k_min=2, k_max=10, impute_strategy='mean', random_state=42, m=2):
+    """
+    Elbow method for fuzzy C-means with missing data imputation and objective function calculation.
+
+    Parameters:
+        X (np.array or pd.DataFrame): Input data with missing values.
+        k_min (int): Minimum number of clusters.
+        k_max (int): Maximum number of clusters.
+        impute_strategy (str): Imputation strategy ('mean', 'median', etc.).
+        plot (bool): Whether to plot the elbow curve.
+        random_state (int): Seed for reproducibility.
+
+    Returns:
+        int or None: Optimal number of clusters found by the elbow method.
+    """
+    objective_values = []
+    k_values = list(range(k_min, k_max + 1))
+
+    for k in k_values:
+        np.random.seed(random_state)
+        fcm = FCM(n_clusters=k, m=m)
+        fcm.fit(X)
+
+        obj = compute_fcm_objective(X, fcm.cluster_centers_, fcm.u, m=fcm.m)
+        objective_values.append(obj)
+
+    kl = KneeLocator(k_values, objective_values, curve="convex", direction="decreasing")
+    optimal_k = kl.elbow
+
+    return optimal_k
+
+
+def impute_FCKI(X, X_train, fcm, c, imputer, rng=None):
+    """
+    Impute missing values using the FCKI method (FCM + KNN + Iterative Imputation).
+
+    Parameters:
+        X (pd.DataFrame): Data to impute.
+        X_train (pd.DataFrame or None): Optional reference data.
+        fcm: A fitted Fuzzy C-Means used to divide data into clusters
+        c (int): Optimal number of clusters used in fuzzy c-means.
+        imputer: A fitted simple imputer used for the initial rough imputation
+        rng (random.Random or None): Random generator for reproducibility.
+
+    Returns:
+        np.ndarray: Imputed dataset.
+    """
+    X_filled = imputer.transform(X)
+    X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
+    membership_matrix = fcm.predict(X_filled.values)
+
+    fcm_labels_train = fcm.u.argmax(axis=1)
+    fcm_labels_X = membership_matrix.argmax(axis=1)
+
+    all_clusters = pd.DataFrame(columns=X.columns)
+
+    for i in range(c):
+        cluster_train_i = X_train[fcm_labels_train == i]
+        cluster_X_i = X[fcm_labels_X == i]
+        imputed_claster_X_I = impute_KI(cluster_X_i, cluster_train_i, rng)
+        imputed_claster_X_I = pd.DataFrame(imputed_claster_X_I, columns=X.columns, index=cluster_X_i.index)
+        if len(all_clusters) == 0:
+            all_clusters = imputed_claster_X_I
+        else:
+            all_clusters = pd.concat([all_clusters, imputed_claster_X_I], axis=0)
+
+    all_clusters = all_clusters.loc[~all_clusters.index.duplicated(keep='last')]
+
+    all_clusters.sort_index(inplace=True)
+
+    return all_clusters
