@@ -1,14 +1,9 @@
 import numpy as np
 import pandas as pd
-import random
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer, SimpleImputer
 from kneed import KneeLocator
-from fuzzycmeans import FCM
+from sklearn.impute import IterativeImputer
 
 
-# Ta funkcja dzieli zbiory danych na kompletne i niekompletne
-# Uwaga - z tego co widziałam potrzebne w wielu miejscach!
 def split_complete_incomplete(X: pd.DataFrame):
     """
     Split the dataset into complete (no missing values) and incomplete (with missing values) objects.
@@ -71,7 +66,8 @@ def euclidean_distance(a: np.ndarray, b: np.ndarray):
     return np.linalg.norm(a[mask] - b[mask])
 
 
-def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int = 100, tol: float = 1e-5):
+def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
+                  random_state=None):
     """
     Fuzzy C-Means clustering algorithm.
     
@@ -81,6 +77,7 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
         m (float): fuzziness parameter (>1)
         max_iter (int): maximum number of iterations
         tol (float): convergence tolerance
+        random_state (int): random seed
     
     Returns:
         centers (np.ndarray): cluster centers
@@ -88,7 +85,8 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
     """
     n_samples, n_features = X.shape
 
-    u = np.random.rand(n_samples, n_clusters)
+    rng = np.random.default_rng(random_state)
+    u = rng.random((n_samples, n_clusters))
     u = u / np.sum(u, axis=1, keepdims=True)
 
     for iteration in range(max_iter):
@@ -108,6 +106,30 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
             break
 
     return centers, u
+
+
+def fcm_predict(X_new, centers, m=2.0):
+    """
+    Compute fuzzy membership matrix for new data points given cluster centers.
+
+    Parameters:
+        X_new (np.ndarray): New data to classify (n_samples x n_features).
+        centers (np.ndarray): Cluster centers obtained from Fuzzy C-Means (n_clusters x n_features).
+        m (float): Fuzziness parameter (>1), typically same as used in training.
+
+    Returns:
+        u_new (np.ndarray): Membership matrix for new samples (n_samples x n_clusters),
+                            where each row sums to 1.
+    """
+    n_samples = X_new.shape[0]
+    n_clusters = centers.shape[0]
+    dist = np.zeros((n_samples, n_clusters))
+    for j in range(n_clusters):
+        dist[:, j] = np.linalg.norm(X_new - centers[j], axis=1)
+    dist = np.fmax(dist, 1e-10)
+
+    u_new = 1 / np.sum((dist[:, :, None] / dist[:, None, :]) ** (2 / (m - 1)), axis=2)
+    return u_new
 
 
 def compute_lower_upper_approximation(cluster_data, threshold=0.5):
@@ -216,20 +238,21 @@ def find_best_k(St: pd.DataFrame, random_col: int, original_value: float) -> int
     return best_k
 
 
-def impute_KI(X: pd.DataFrame, X_train=None, rng=None) -> np.ndarray:
+def impute_KI(X: pd.DataFrame, X_train=None, np_rng=None, random_state=42) -> np.ndarray:
     """
     Impute missing values using the KI method (KNN + Iterative Imputation).
 
     Parameters:
         X (pd.DataFrame): Data to impute.
         X_train (pd.DataFrame): Optional reference data.
-        rng (random.Random): Random generator for reproducibility.
+        np_rng (np.random.RandomState): Random generator for reproducibility.
+        random_state (int): Random state for reproducibility.
 
     Returns:
         np.ndarray: Imputed dataset.
     """
-    if rng is None:
-        rng = random
+    if np_rng is None:
+        np_rng = np.random.RandomState()
     X_incomplete_rows = X.copy()
 
     X_mis = X_incomplete_rows[X_incomplete_rows.isnull().any(axis=1)]
@@ -252,12 +275,17 @@ def impute_KI(X: pd.DataFrame, X_train=None, rng=None) -> np.ndarray:
 
         P = all_data.dropna(inplace=False, axis=0, subset=A_mis)
         P = pd.concat([P, X_mis.iloc[[0]]], axis=0)
+        if P.empty:
+            raise ValueError(f"No complete rows in dataset for columns: {A_mis}")
         St = P.copy()
         St_Complete_Temp = St.copy()
-        A_r = rng.randint(0, len(St.columns) - 1)
+        if St_Complete_Temp.iloc[-1].isnull().all():
+            raise ValueError("Data contains a row with only NaN values.")
+
+        A_r = np_rng.randint(0, St_Complete_Temp.shape[1])
         AV = St_Complete_Temp.iloc[len(St.index) - 1, A_r]
         while (pd.isnull(AV)):
-            A_r = rng.randint(0, len(St.columns) - 1)
+            A_r = np_rng.randint(0, St_Complete_Temp.shape[1])
             AV = St_Complete_Temp.iloc[len(St.index) - 1, A_r]
         St.iloc[len(St.index) - 1, A_r] = np.NaN
 
@@ -271,7 +299,9 @@ def impute_KI(X: pd.DataFrame, X_train=None, rng=None) -> np.ndarray:
         df_neighbors_xi = pd.DataFrame(data=neighbors_xi, columns=P.columns)
 
         S = pd.concat([df_neighbors_xi, X_mis.iloc[[0]]], axis=0)
-        S_filled_EM = IterativeImputer().fit_transform(S.values)
+
+        S_filled_EM = IterativeImputer(random_state=random_state).fit_transform(S.values)
+
         S_filled_EM = pd.DataFrame(data=S_filled_EM, columns=P.columns)
         xi_imputed = S_filled_EM.iloc[len(S_filled_EM.index) - 1]
         xi_imputed_with_index = pd.DataFrame([xi_imputed], index=[index_of_xi])
@@ -336,41 +366,42 @@ def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters=2, max_clusters=10
 
     for k in k_values:
         np.random.seed(random_state)
-        fcm = FCM(n_clusters=k, m=m)
-        fcm.fit(X)
+        centers, u = fuzzy_c_means(X.values, n_clusters=k, v=m, random_state=random_state)
 
-        obj = compute_fcm_objective(X, fcm.cluster_centers_, fcm.u, m=fcm.m)
+        obj = compute_fcm_objective(X, centers, u, m)
         objective_values.append(obj)
 
     kl = KneeLocator(k_values, objective_values, curve="convex", direction="decreasing")
     optimal_k = kl.elbow
 
     if optimal_k is None:
-        return int((max_clusters + min_clusters) //2)
+        return int((max_clusters + min_clusters) // 2)
 
     return int(optimal_k)
 
 
-def impute_FCKI(X, X_train, fcm, c, imputer, rng=None) -> np.ndarray:
+def impute_FCKI(X, X_train, centers, u_train, c, imputer, m, np_rng=None, random_state=42) -> np.ndarray:
     """
     Impute missing values using the FCKI method (FCM + KNN + Iterative Imputation).
 
     Parameters:
         X (pd.DataFrame): Data to impute.
         X_train (pd.DataFrame or None): Optional reference data.
-        fcm: A fitted Fuzzy C-Means used to divide data into clusters
+        centers (np.ndarray): Cluster centers obtained from fuzzy c-means (shape: [n_clusters, n_features]).
+        u_train (np.ndarray): Membership matrix for the training data (shape: [n_samples_train, n_clusters]).
         c (int): Optimal number of clusters used in fuzzy c-means.
         imputer: A fitted simple imputer used for the initial rough imputation
-        rng (random.Random or None): Random generator for reproducibility.
+        m (float): Fuzziness parameter used in fuzzy c-means (m > 1).
+        np_rng (np.random.RandomState or None): Optional NumPy random generator for reproducibility.
+        random_state (int): Random seed used for KNN-based imputation and reproducibility.
 
     Returns:
         np.ndarray: Imputed dataset.
     """
     X_filled = imputer.transform(X)
     X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
-    membership_matrix = fcm.predict(X_filled.values)
-
-    fcm_labels_train = fcm.u.argmax(axis=1)
+    membership_matrix = fcm_predict(X_filled.values, centers, m)
+    fcm_labels_train = u_train.argmax(axis=1)
     fcm_labels_X = membership_matrix.argmax(axis=1)
 
     all_clusters = pd.DataFrame(columns=X.columns)
@@ -378,7 +409,7 @@ def impute_FCKI(X, X_train, fcm, c, imputer, rng=None) -> np.ndarray:
     for i in range(c):
         cluster_train_i = X_train[fcm_labels_train == i]
         cluster_X_i = X[fcm_labels_X == i]
-        imputed_claster_X_I = impute_KI(cluster_X_i, cluster_train_i, rng)
+        imputed_claster_X_I = impute_KI(cluster_X_i, cluster_train_i, np_rng, random_state)
         imputed_claster_X_I = pd.DataFrame(imputed_claster_X_I, columns=X.columns, index=cluster_X_i.index)
         if len(all_clusters) == 0:
             all_clusters = imputed_claster_X_I

@@ -1,10 +1,5 @@
-import math
-
 from sklearn.base import BaseEstimator, TransformerMixin
-import numpy as np
-import pandas as pd
-from fuzzycmeans import FCM
-import random
+
 from .utils import *
 
 
@@ -219,18 +214,20 @@ class KIImputer(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, random_state=None):
+        if random_state is not None and not isinstance(random_state, int):
+            raise TypeError('Invalid random_state: Expected an integer or None.')
         self.random_state = random_state
         pass
 
     def fit(self, X, y=None):
         X = check_input_dataset(X)
         self.X_train_ = X.copy()
-        self.rng_ = random.Random(self.random_state)
+        self.np_rng_ = np.random.RandomState(self.random_state)
         return self
 
     def transform(self, X):
         X = check_input_dataset(X)
-        X_imputed = impute_KI(X, self.X_train_, rng=self.rng_)
+        X_imputed = impute_KI(X, self.X_train_, np_rng=self.np_rng_)
         return X_imputed
 
 
@@ -245,6 +242,15 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, random_state=None, max_clusters=10, m=2):
+        if random_state is not None and not isinstance(random_state, int):
+            raise TypeError('Invalid random_state: Expected an integer or None.')
+
+        if not isinstance(max_clusters, int) or max_clusters <= 1:
+            raise TypeError('Invalid max_clusters: Expected an integer greater than 1.')
+
+        if not isinstance(m, (int, float)) or m <= 1:
+            raise TypeError('Invalid m value: Expected a numeric value greater than 1.')
+
         self.random_state = random_state
         self.max_clusters = max_clusters
         self.m = m
@@ -258,16 +264,24 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         X_filled = self.imputer_.fit_transform(self.X_train_)
         X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
 
-        self.optimal_c_ = find_optimal_clusters_fuzzy(X_filled, min_clusters=1, max_clusters=self.max_clusters, m=self.m,
+        self.optimal_c_ = find_optimal_clusters_fuzzy(X_filled, min_clusters=1, max_clusters=self.max_clusters,
+                                                      m=self.m,
                                                       random_state=self.random_state)
-        self.rng_ = random.Random(self.random_state)
+        self.np_rng_ = np.random.RandomState(self.random_state)
         np.random.seed(self.random_state)
-        self.fcm_ = FCM(n_clusters=self.optimal_c_, m = self.m)
-        self.fcm_.fit(X_filled.values)
+
+        self.centers_, self.u_ = fuzzy_c_means(
+            X_filled.values,
+            n_clusters=self.optimal_c_,
+            v=self.m,
+            random_state=self.random_state,
+        )
 
         return self
 
     def transform(self, X):
         X = check_input_dataset(X, require_numeric=True)
-        X_imputed = impute_FCKI(X, self.X_train_, self.fcm_, self.optimal_c_, self.imputer_, self.rng_)
+
+        X_imputed = impute_FCKI(X, self.X_train_, self.centers_, self.u_, self.optimal_c_, self.imputer_, self.m,
+                                self.np_rng_, self.random_state)
         return X_imputed
