@@ -3,31 +3,52 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import MinMaxScaler
-from typing import List, Dict, Tuple, Optional, Any
-
+from sklearn.preprocessing import MinMaxScaler, LabelEncoder
+from typing import Optional, List, Tuple, Dict, Any
 
 class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixin):
-    def __init__(self, classifier, eps: float = 0.1, d: int = 100, sigma: int = 3):
+    def __init__(self, classifier, eps: float = 0.1, d: int = 100, sigma: int = 3, random_state: Optional[int] = None):
         """
         Initialize FIGFS feature selection
 
         Parameters
         ----------
         classifier : sklearn-like classifier
+            Estimator with fit/predict method.
         eps : float
             Parameter for fuzzy adaptive neighborhood radius.
         d : int
             Maximum number of features to select.
         sigma : int
             Percentile threshold for inclusion in selection.
+        random_state: int, optional
+            Controls randomness.
         """
-        self.d = d
-        self.sigma = sigma
+        if classifier is None or not (hasattr(classifier, "fit") and hasattr(classifier, "predict")):
+            raise ValueError("Classifier must be a valid estimator with fit and predict methods.")
+        if not isinstance(eps, (int, float)) or eps <= 0:
+            raise ValueError("eps must be greater than 0.")
+        if not isinstance(d, int) or d <= 0:
+            raise ValueError("d must be greater than 0.")
+        if not isinstance(sigma, int) or not (0 <= sigma <= 100):
+            raise ValueError("sigma must be an integer between 0 and 100.")
+
+        if random_state is not None and not isinstance(random_state, int):
+            raise ValueError("random_state must be an integer or None.")
+
         self.classifier = classifier
         self.eps = eps
+        self.d = d
+        self.sigma = sigma
+        self.random_state = random_state
 
-    def fit(self, X: pd.DataFrame, y: pd.Series | np.ndarray | pd.DataFrame):
+        self.U = None
+        self.S = None
+        self.S_opt = None
+        self.acc_list = None
+        self._label_encoders = {}
+
+    def fit(self, X: pd.DataFrame, y: Optional[pd.Series | np.ndarray | pd.DataFrame] = None):
         """
         Fit the FIGFS algorithm on the dataset
 
@@ -35,15 +56,28 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         ----------
         X : pd.DataFrame
             Feature matrix.
-        y : pd.Series, np.ndarray or pd.DataFrame
-            Target variable.
+        y : pd.Series, np.ndarray, pd.DataFrame or None
+            Target variable. Can be None for unsupervised feature selection.
 
         Returns
         -------
         self : object
             Fitted instance with selected feature ordering in self.S
         """
-        if isinstance(y, pd.DataFrame):
+        if X is None:
+            raise ValueError("X cannot be None.")
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("X must be a pandas DataFrame.")
+        if len(X) == 0:
+            raise ValueError("X cannot be empty.")
+        if y is not None and isinstance(y, (np.ndarray, pd.Series, pd.DataFrame)) and len(y) != len(X):
+            raise ValueError("X and y must have the same number of rows.")
+
+        rng = np.random.default_rng(self.random_state)
+
+        if y is None:
+            y_ser = pd.Series(np.zeros(len(X)), name="___dummy_target___")
+        elif isinstance(y, pd.DataFrame):
             y_ser = y.iloc[:, 0]
         else:
             y_ser = pd.Series(y).reset_index(drop=True)
@@ -57,20 +91,22 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
             dtype = 'numeric' if pd.api.types.is_numeric_dtype(X[col]) else 'nominal'
             self.C[idx] = (col, dtype)
 
-        self.D = (len(X.columns), self.target_name) 
+        self.D = (len(X.columns), self.target_name)
         self.n = len(self.U)
         self.m = len(self.C)
 
         self.fuzzy_adaptive_neighbourhood_radius = {}
         for col_idx, (col_name, col_type) in self.C.items():
             if col_type == 'numeric':
-                self.fuzzy_adaptive_neighbourhood_radius[col_idx] = float(self.U[col_name].std(ddof=0)) / self.eps
+                std_val = float(self.U[col_name].std(ddof=0))
+                self.fuzzy_adaptive_neighbourhood_radius[col_idx] = std_val / self.eps if self.eps != 0 else 0.0
             else:
                 self.fuzzy_adaptive_neighbourhood_radius[col_idx] = None
 
-        self.similarity_matrices = {}
-        for col_index in range(self.m): 
-            self.similarity_matrices[col_index] = self._calculate_similarity_matrix_for_df(col_index, self.U)
+        self.similarity_matrices = {
+            col_index: self._calculate_similarity_matrix_for_df(col_index, self.U)
+            for col_index in range(self.m)
+        }
 
         self._delta_cache = {}
         self._entropy_cache = {}
@@ -94,6 +130,22 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         pd.DataFrame
             Dataset restricted to selected optimal features.
         """
+        if self.S is None:
+            raise RuntimeError("You must fit the model before calling transform().")
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("X must be a pandas DataFrame.")
+
+        X_transformed = X.copy()
+        for idx, (col, col_type) in self.C.items():
+            if col_type == 'nominal' and col in X_transformed.columns:
+                if col not in self._label_encoders:
+                    le = LabelEncoder()
+                    X_transformed[col] = le.fit_transform(X_transformed[col])
+                    self._label_encoders[col] = le
+                else:
+                    le = self._label_encoders[col]
+                    X_transformed[col] = le.transform(X_transformed[col])
+
         S_opt = None
         best_acc = -np.inf
         self.acc_list = []
@@ -102,11 +154,15 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
             current_subset = list(self.S[:i])
             cols = [self.C[idx][0] for idx in current_subset]
 
-            X_full = self.U.drop(columns=[self.target_name])
+            X_full = X_transformed
             y_full = self.U[self.target_name]
 
             X_train, X_test, y_train, y_test = train_test_split(
-                X_full[cols], y_full, test_size=0.3, random_state=42, stratify=y_full
+                X_full[cols],
+                y_full,
+                test_size=0.3,
+                random_state=self.random_state,
+                stratify=y_full if len(np.unique(y_full)) > 1 else None
             )
 
             num_cols = X_train.select_dtypes(include=['int64', 'float64']).columns
@@ -126,9 +182,10 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
 
             X_train_scaled = pd.concat([X_train_num, X_train[cat_cols]], axis=1)
             X_test_scaled = pd.concat([X_test_num, X_test[cat_cols]], axis=1)
-            
-            self.classifier.fit(X_train_scaled, y_train.values.ravel())
-            y_pred = self.classifier.predict(X_test_scaled)
+
+            model = clone(self.classifier)
+            model.fit(X_train_scaled, y_train.values.ravel())
+            y_pred = model.predict(X_test_scaled)
 
             acc = accuracy_score(y_test, y_pred)
             self.acc_list.append(acc)
@@ -139,7 +196,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
 
         self.S_opt = S_opt
         final_cols = [self.C[idx][0] for idx in S_opt]
-        return self.U[final_cols].copy()
+        return X_transformed[final_cols].copy()
 
 
     def _calculate_similarity_matrix_for_df(self, col_index: int, df: pd.DataFrame) -> np.ndarray:
@@ -156,7 +213,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         Returns
         -------
         np.ndarray
-            Similarity matrix (n x n) for the given column.
+            Similarity matrix for the given column.
         """
         col_name, col_type = self.C[col_index]
         vals = df[col_name].values
@@ -400,7 +457,11 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         for col_index in B:
             cor = self._granual_consistency_of_B_subset([col_index]) + self._local_granularity_consistency_of_B_subset([col_index])
             cor_list.append(cor)
-        c1 = cor_list.index(np.max(cor_list))
+
+        cor_arr = np.asarray(cor_list, dtype=float)
+        best = np.where(cor_arr == cor_arr.max())[0]
+        c1 = int(best[0])
+
         S.append(c1)
         B.remove(c1)
 
@@ -421,8 +482,12 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
                     cor = self._granual_consistency_of_B_subset([col_index]) + self._local_granularity_consistency_of_B_subset([col_index])
                     j = W * cor - sim
                     J_list.append(j)
-                arg_max = J_list.index(max(J_list))
+
+                J_arr = np.asarray(J_list, dtype=float)
+                best = np.where(J_arr == J_arr.max())[0]
+                arg_max = int(best[0])
                 cv = B[arg_max]
+                
                 S.append(cv)
                 B.remove(cv)
         else:
