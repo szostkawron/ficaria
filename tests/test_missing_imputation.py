@@ -2,8 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.impute import SimpleImputer
-
-from ficaria.missing_imputation import KIImputer, FCMKIterativeImputer
+from ficaria.missing_imputation import KIImputer, FCMKIterativeImputer, LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans
 
 
 @pytest.mark.parametrize("random_state", [
@@ -211,3 +210,130 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
     assert result.shape == X_test.shape
     assert not np.isnan(result).any()
     np.testing.assert_array_equal(result, result2)
+
+
+
+## ---------LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans-------------------------
+
+@pytest.mark.parametrize("random_state", [42, 0, None])
+def test_liiifcm_init_random_state(random_state):
+    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(random_state=random_state)
+    assert imputer.random_state == random_state
+
+
+@pytest.mark.parametrize("random_state", ["abc", [1], 3.14])
+def test_liiifcm_init_random_state_invalid(random_state):
+    with pytest.raises(TypeError, match="Invalid random_state: Expected an integer or None."):
+        LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(random_state=random_state)
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [np.nan, 0.2, 0.8], 'b': [0.5, np.nan, 0.7]}),
+])
+def test_liiifcm_reproducibility(X):
+    params = dict(
+        n_clusters=3,
+        m=2.0,
+        alpha=2.0,
+        max_iter=50,
+        tol=1e-4,
+        max_outer_iter=5,
+        stop_criteria=0.01,
+        sigma=False,
+        random_state=42
+    )
+
+    imputer1 = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(**params)
+    imputer2 = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(**params)
+
+    imputer1.fit(X)
+    imputer2.fit(X)
+
+    result1 = imputer1.transform(X)
+    result2 = imputer2.transform(X)
+
+    pd.testing.assert_frame_equal(result1, result2)
+
+
+@pytest.mark.parametrize("n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_criteria, sigma", [
+    (3, 2.0, 2.0, 100, 1e-5, 20, 0.01, False),
+    (5, 1.5, 3.0, 50, 1e-4, 10, 0.05, True),
+])
+def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_criteria, sigma):
+    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(
+        n_clusters=n_clusters,
+        m=m,
+        alpha=alpha,
+        max_iter=max_iter,
+        tol=tol,
+        max_outer_iter=max_outer_iter,
+        stop_criteria=stop_criteria,
+        sigma=sigma
+    )
+
+    assert imputer.n_clusters == n_clusters
+    assert imputer.m == m
+    assert imputer.alpha == alpha
+    assert imputer.max_iter == max_iter
+    assert imputer.tol == tol
+    assert imputer.max_outer_iter == max_outer_iter
+    assert imputer.stop_criteria == stop_criteria
+    assert imputer.sigma == sigma
+
+
+@pytest.mark.parametrize("param,value", [
+    ("n_clusters", 1),
+    ("m", 1.0),
+    ("alpha", -1),
+    ("max_iter", 0),
+    ("tol", -1e-5),
+    ("max_outer_iter", 0),
+    ("stop_criteria", 0),
+    ("sigma", "yes"),
+])
+def test_liiifcm_init_invalid(param, value):
+    kwargs = dict()
+    kwargs[param] = value
+    with pytest.raises(TypeError):
+        LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(**kwargs)
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [np.nan, 0.5, 1.0], 'b': [0.3, np.nan, 0.9]}),
+    pd.DataFrame({'x': [0.1, 0.2], 'y': [0.3, np.nan]}),
+])
+def test_liiifcm_fit_transform(X):
+    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(n_clusters=3)
+    imputer.fit(X)
+    assert hasattr(imputer, 'columns_')
+    result = imputer.transform(X)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X.shape
+    assert not result.isnull().any().any()
+
+
+@pytest.mark.parametrize("bad_X", [
+    pd.DataFrame(),
+    np.array([]),
+    None,
+    "not a dataframe",
+])
+def test_liiifcm_fit_invalid_input(bad_X):
+    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans()
+    with pytest.raises((ValueError, TypeError)):
+        imputer.fit(bad_X)
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [0.1, 0.5, 0.9], 'b': [0.2, 0.4, 0.8]}),
+])
+def test_liiifcm_ifcm_output_shapes(X):
+    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans()
+    U_star, V_star, J_history = imputer._ifcm(X)
+    assert isinstance(U_star, np.ndarray)
+    assert isinstance(V_star, np.ndarray)
+    assert isinstance(J_history, list)
+    assert U_star.shape[1] == imputer.n_clusters
+    assert V_star.shape[0] == imputer.n_clusters
+    assert V_star.shape[1] == X.shape[1]
+
