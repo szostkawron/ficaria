@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from sklearn.exceptions import NotFittedError
 from sklearn.impute import SimpleImputer
 
 from ficaria.missing_imputation import KIImputer, FCMKIterativeImputer
@@ -24,10 +25,22 @@ def test_kiimputer_init(random_state):
     [[35]],
     3.5
 ])
-def test_kiimputer_init_errors(random_state):
+def test_kiimputer_init_errors_randomstate(random_state):
     with pytest.raises(TypeError,
-                       match="Invalid random_state: Expected an integer or None."):
+                       match="Invalid random_state: Expected an integer or None"):
         imputer = KIImputer(random_state=random_state)
+
+
+@pytest.mark.parametrize("max_iter", [
+    "txt",
+    [24],
+    [[35]],
+    3.5
+])
+def test_kiimputer_init_errors_maxiter(max_iter):
+    with pytest.raises(TypeError,
+                       match="Invalid max_iter: Expected a positive integer"):
+        imputer = KIImputer(max_iter=max_iter)
 
 
 @pytest.mark.parametrize("X, random_state", [
@@ -86,6 +99,38 @@ def test_kiimputer_transform(X, X_test, random_state):
     np.testing.assert_array_equal(result, result2)
 
 
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
+    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
+])
+def test_kiimputer_transform_without_fit(X):
+    imputer = KIImputer(random_state=42)
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
+
+
+@pytest.mark.parametrize("X_fit, X_transform", [
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2]})
+    ),
+])
+def test_kiimputer_transform_column_mismatch(X_fit, X_transform):
+    imputer = KIImputer(random_state=42)
+    imputer.fit(X_fit)
+
+    with pytest.raises(ValueError, match="Invalid input: Input dataset columns do not match columns seen during fit"):
+        imputer.transform(X_transform)
+
+
 @pytest.mark.parametrize("random_state, max_clusters, m", [
     (42, 5, 1.1),
     (None, 8, 25),
@@ -106,7 +151,7 @@ def test_fcmkiimputer_init(random_state, max_clusters, m):
 ])
 def test_fcmkiimputer_init_errors_randomstate(random_state):
     with pytest.raises(TypeError,
-                       match="Invalid random_state: Expected an integer or None."):
+                       match="Invalid random_state: Expected an integer or None"):
         imputer = FCMKIterativeImputer(random_state=random_state)
 
 
@@ -121,7 +166,7 @@ def test_fcmkiimputer_init_errors_randomstate(random_state):
 ])
 def test_fcmkiimputer_init_errors_maxclusters(max_clusters):
     with pytest.raises(TypeError,
-                       match="Invalid max_clusters: Expected an integer greater than 1."):
+                       match="Invalid max_clusters: Expected an integer greater than 1"):
         imputer = FCMKIterativeImputer(max_clusters=max_clusters)
 
 
@@ -136,8 +181,20 @@ def test_fcmkiimputer_init_errors_maxclusters(max_clusters):
 ])
 def test_fcmkiimputer_init_errors_m(m):
     with pytest.raises(TypeError,
-                       match="Invalid m value: Expected a numeric value greater than 1."):
+                       match="Invalid m value: Expected a numeric value greater than 1"):
         imputer = FCMKIterativeImputer(m=m)
+
+
+@pytest.mark.parametrize("max_iter", [
+    "txt",
+    [24],
+    [[35]],
+    3.5
+])
+def test_fcmkiimputer_init_errors_maxiter(max_iter):
+    with pytest.raises(TypeError,
+                       match="Invalid max_iter: Expected a positive integer greater than 1"):
+        imputer = FCMKIterativeImputer(max_iter=max_iter)
 
 
 @pytest.mark.parametrize("X, random_state, max_clusters, m", [
@@ -211,3 +268,35 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
     assert result.shape == X_test.shape
     assert not np.isnan(result).any()
     np.testing.assert_array_equal(result, result2)
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
+    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
+])
+def test_fcmkiimputer_transform_without_fit(X):
+    imputer = FCMKIterativeImputer(random_state=42)
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
+
+
+@pytest.mark.parametrize("X_fit, X_transform", [
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2]})
+    ),
+])
+def test_fcmkiimputer_transform_column_mismatch(X_fit, X_transform):
+    imputer = FCMKIterativeImputer(random_state=42)
+    imputer.fit(X_fit)
+
+    with pytest.raises(ValueError, match="Invalid input: Input dataset columns do not match columns seen during fit"):
+        imputer.transform(X_transform)
