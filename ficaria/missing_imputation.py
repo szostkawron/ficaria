@@ -368,6 +368,8 @@ class LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(BaseEstimator, 
             raise TypeError("Input must be a pandas DataFrame")
         if X.empty:
             raise ValueError("Input DataFrame is empty")
+        if not all(np.issubdtype(dt, np.number) for dt in X.dtypes):
+            raise TypeError("All columns must be numeric")
 
         X = check_input_dataset(X)
         self.columns_ = X.columns
@@ -391,6 +393,10 @@ class LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(BaseEstimator, 
             raise TypeError("Input must be a pandas DataFrame")
         if X.empty:
             raise ValueError("Input DataFrame is empty")
+        if not hasattr(self, "columns_"):
+            raise AttributeError("You must call fit before transform")
+
+
         X = check_input_dataset(X)
         missing_mask = X.isnull().reset_index(drop=True)
         X_filled = X.interpolate(method='linear', limit_direction='both').reset_index(drop=True)
@@ -463,7 +469,7 @@ class LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(BaseEstimator, 
                 for j in range(self.n_clusters):
                     diff = np.linalg.norm(data[i] - V_star[j])
                     if self.sigma:
-                        numerator = np.sum(U_star[:, j] ** self.m * (data - V_star[j]) ** 2, axis=0)
+                        numerator = np.sum((U_star[:, j][:, None] ** self.m) * (data - V_star[j]) ** 2, axis=0)
                         denominator = np.sum(U_star[:, j] ** self.m)
                         sigma_j = np.sqrt(np.sum(numerator) / (denominator + 1e-10))
                         diff = diff / (sigma_j + 1e-10)
