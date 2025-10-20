@@ -215,6 +215,41 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
 
 ## ---------LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans-------------------------
 
+
+@pytest.mark.parametrize("bad_X", [
+    pd.DataFrame(),  
+    np.array([]), 
+    None,  
+    "not a dataframe", 
+    [1, 2, 3],  
+    3.14,  
+    pd.DataFrame({'a': [0.1, 'bad', 0.3]}), 
+])
+def test_liiifcm_fit_invalid_input_types(bad_X):
+    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans()
+    with pytest.raises((TypeError, ValueError)):
+        imputer.fit(bad_X)
+
+
+def test_liiifcm_transform_before_fit():
+    X = pd.DataFrame({'a': [0.1, np.nan, 0.5]})
+    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans()
+    with pytest.raises(AttributeError, match="must call fit"):
+        imputer.transform(X)
+
+
+def test_liiifcm_sigma_branch():
+    X = pd.DataFrame({
+        'a': [0.1, 0.5, np.nan],
+        'b': [0.2, np.nan, 0.8]
+    })
+    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(n_clusters=3, sigma=True, random_state=42)
+    imputer.fit(X)
+    result = imputer.transform(X)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X.shape
+    assert not result.isnull().any().any()
+
 @pytest.mark.parametrize("random_state", [42, 0, None])
 def test_liiifcm_init_random_state(random_state):
     imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(random_state=random_state)
@@ -310,18 +345,6 @@ def test_liiifcm_fit_transform(X):
     assert isinstance(result, pd.DataFrame)
     assert result.shape == X.shape
     assert not result.isnull().any().any()
-
-
-@pytest.mark.parametrize("bad_X", [
-    pd.DataFrame(),
-    np.array([]),
-    None,
-    "not a dataframe",
-])
-def test_liiifcm_fit_invalid_input(bad_X):
-    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans()
-    with pytest.raises((ValueError, TypeError)):
-        imputer.fit(bad_X)
 
 
 @pytest.mark.parametrize("X", [
