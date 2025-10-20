@@ -1,7 +1,10 @@
 import numpy as np
 import pandas as pd
+import random
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer, SimpleImputer
 from kneed import KneeLocator
-from sklearn.impute import IterativeImputer
+from fuzzycmeans import FCM
 
 
 def split_complete_incomplete(X: pd.DataFrame):
@@ -50,6 +53,16 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True):
         raise ValueError("Missing values are not allowed.")
 
     return X
+
+
+def select_numeric_columns(df: pd.DataFrame):
+    """
+    Select only numeric columns from a DataFrame.
+
+    Parameters:
+        df : input DataFrame containing mixed data types.
+    """
+    return df.select_dtypes(include=["number"])
 
 
 def euclidean_distance(a: np.ndarray, b: np.ndarray):
@@ -108,6 +121,133 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
     return centers, u
 
 
+def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter=100, tol=1e-4):
+    """
+    Rough K-Means
+    Applied after FCM clustering (using its centroids as initialization).
+    """
+    n_samples = X.shape[0]
+    n_clusters = center_init.shape[0]
+    centers = center_init.copy()
+
+    lower_sets = [[] for _ in range(n_clusters)]
+    upper_sets = [[] for _ in range(n_clusters)]
+
+    init_labels = np.argmax(memberships, axis=1)
+    for i, lbl in enumerate(init_labels):
+        lower_sets[lbl].append(i)
+        upper_sets[lbl].append(i)
+
+    for iteration in range(max_iter):
+
+        new_centers = np.zeros_like(centers)
+        for k in range(n_clusters):
+            lower_idx = lower_sets[k]
+            upper_idx = upper_sets[k]
+            boundary_idx = list(set(upper_idx) - set(lower_idx))
+
+            if len(lower_idx) == 0:
+                new_centers[k] = centers[k]
+                continue
+
+            lower_mean = np.mean(X[lower_idx], axis=0)
+
+            if len(boundary_idx) > 0:
+                boundary_mean = np.mean(X[boundary_idx], axis=0)
+                new_centers[k] = wl * lower_mean + wb * boundary_mean
+            else:
+                new_centers[k] = lower_mean
+
+        new_lower_sets = [[] for _ in range(n_clusters)]
+        new_upper_sets = [[] for _ in range(n_clusters)]
+
+        for i, x in enumerate(X):
+            distances = np.array([euclidean_distance(x, c) for c in new_centers])
+            h = np.argmin(distances)
+            dmin = distances[h]
+
+            new_upper_sets[h].append(i)
+
+            for k in range(n_clusters):
+                if k != h and (distances[k] - dmin) <= tau:
+                    new_upper_sets[k].append(i)
+
+            count_upper = sum([i in new_upper_sets[k] for k in range(n_clusters)])
+            if count_upper == 1:
+                new_lower_sets[h].append(i)
+
+        shift = np.linalg.norm(new_centers - centers)
+
+        if shift < tol:
+            break
+
+        centers = new_centers
+        lower_sets = new_lower_sets
+        upper_sets = new_upper_sets
+
+    clusters = []
+    for k in range(n_clusters):
+        lower = X[lower_sets[k]] if len(lower_sets[k]) > 0 else np.array([])
+        upper = X[upper_sets[k]] if len(upper_sets[k]) > 0 else np.array([])
+        clusters.append((lower, upper, centers[k]))
+
+    return clusters
+
+
+
+
+
+# def compute_lower_upper_approximation(cluster_data, threshold=0.5):
+#     """
+#     Compute lower and upper approximation of a cluster.
+#     Objects with membership >= threshold are in lower approximation,
+#     others (membership < threshold) are in upper approximation.
+    
+#     Parameters:
+#         cluster_data (tuple): (data, memberships) for the cluster
+#         threshold (float): cutoff for lower approximation
+    
+#     Returns:
+#         lower (np.ndarray): rows in lower approximation
+#         upper (np.ndarray): rows in upper approximation
+#     """
+#     X, memberships = cluster_data
+#     lower_mask = memberships >= threshold
+#     lower = X[lower_mask]
+#     upper = X[~lower_mask]
+#     return lower, upper
+
+
+# def find_nearest_approximation(obs, lower, upper):
+#     """
+#     Determine if the object belongs to lower or upper approximation
+#     based on distance to mean of each approximation.
+    
+#     Parameters:
+#         obs (np.ndarray): incomplete object
+#         lower (np.ndarray)
+#         upper (np.ndarray)
+        
+#     Returns:
+#         'lower' or 'upper'
+#     """
+#     if lower.shape[0] > 0:
+#         dist_lower = np.min([euclidean_distance(obs, row) for row in lower])
+#     else:
+#         dist_lower = np.inf
+
+#     if upper.shape[0] > 0:
+#         dist_upper = np.min([euclidean_distance(obs, row) for row in upper])
+#     else:
+#         dist_upper = np.inf
+
+#     if dist_lower <= dist_upper:
+#         return 'lower'
+#     else:
+#         return 'upper'
+
+
+
 def fcm_predict(X_new, centers, m=2.0):
     """
     Compute fuzzy membership matrix for new data points given cluster centers.
@@ -132,54 +272,6 @@ def fcm_predict(X_new, centers, m=2.0):
     return u_new
 
 
-def compute_lower_upper_approximation(cluster_data, threshold=0.5):
-    """
-    Compute lower and upper approximation of a cluster.
-    Objects with membership >= threshold are in lower approximation,
-    others (membership < threshold) are in upper approximation.
-    
-    Parameters:
-        cluster_data (tuple): (data, memberships) for the cluster
-        threshold (float): cutoff for lower approximation
-    
-    Returns:
-        lower (np.ndarray): rows in lower approximation
-        upper (np.ndarray): rows in upper approximation
-    """
-    X, memberships = cluster_data
-    lower_mask = memberships >= threshold
-    lower = X[lower_mask]
-    upper = X[~lower_mask]
-    return lower, upper
-
-
-def find_nearest_approximation(obs, lower, upper):
-    """
-    Determine if the object belongs to lower or upper approximation
-    based on distance to mean of each approximation.
-    
-    Parameters:
-        obs (np.ndarray): incomplete object
-        lower (np.ndarray)
-        upper (np.ndarray)
-        
-    Returns:
-        'lower' or 'upper'
-    """
-    if lower.shape[0] > 0:
-        dist_lower = np.min([euclidean_distance(obs, row) for row in lower])
-    else:
-        dist_lower = np.inf
-
-    if upper.shape[0] > 0:
-        dist_upper = np.min([euclidean_distance(obs, row) for row in upper])
-    else:
-        dist_upper = np.inf
-
-    if dist_lower <= dist_upper:
-        return 'lower'
-    else:
-        return 'upper'
 
 
 def get_neighbors(train: list[list[float]], test_row: list[float], k: int) -> list[list[float]]:

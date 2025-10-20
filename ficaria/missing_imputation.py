@@ -127,7 +127,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 
 
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, v=2.0, max_iter=100, tol=1e-5, lower_threshold=0.5):
+    def __init__(self, n_clusters=3, v=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5):
         """
         Fuzzy C-Means Rough Parameter-based imputer.
         
@@ -138,13 +138,17 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         self.v = v
         self.max_iter = max_iter
         self.tol = tol
-        self.lower_threshold = lower_threshold
+        self.wl = wl
+        self.wb = wb
+        self.tau = tau
 
     def fit(self, X, y=None):
         """
         Fit the imputer on complete data.
         """
         X = check_input_dataset(X)
+        X = select_numeric_columns(X)
+
         complete, _ = split_complete_incomplete(X)
         complete_array = complete.to_numpy()
 
@@ -156,14 +160,16 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
             tol=self.tol
         )
 
-        self.lower_upper_ = []
-        for k in range(self.n_clusters):
-            cluster_memberships = self.memberships_[:, k]
-            cluster_data = (complete_array, cluster_memberships)
-            lower, upper = compute_lower_upper_approximation(
-                cluster_data, threshold=self.lower_threshold
-            )
-            self.lower_upper_.append((lower, upper))
+        self.clusters_ = rough_kmeans_from_fcm(
+                    complete_array,
+                    self.memberships_,
+                    self.centers_,
+                    wl=self.wl,
+                    wb=self.wb,
+                    tau=self.tau,
+                    max_iter=self.max_iter,
+                    tol=self.tol
+                )
 
         return self
 
@@ -172,6 +178,8 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         Impute missing values using rough parameter-based FCM method.
         """
         X = check_input_dataset(X)
+        X = select_numeric_columns(X)
+
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -185,22 +193,30 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
             distances = np.array([euclidean_distance(obs, center) for center in self.centers_])
             nearest_idx = np.argmin(distances)
 
-            lower, upper = self.lower_upper_[nearest_idx]
-            approx_type = find_nearest_approximation(obs, lower, upper)
+            lower, upper, center = self.clusters_[nearest_idx]
 
-            if approx_type == 'lower' and lower.shape[0] > 0:
-                approx_data = lower
-            elif approx_type == 'upper' and upper.shape[0] > 0:
+            if len(lower) == 0:
                 approx_data = upper
+            elif len(upper) == 0:
+                approx_data = lower
             else:
-                approx_data = np.array([self.centers_[nearest_idx]])
+                dist_to_lower = np.mean([euclidean_distance(obs, x) for x in lower]) if len(lower) > 0 else np.inf
+                dist_to_upper = np.mean([euclidean_distance(obs, x) for x in upper]) if len(upper) > 0 else np.inf
+                approx_data = lower if dist_to_lower <= dist_to_upper else upper
 
             missing_cols = row[row.isna()].index
             for col in missing_cols:
                 col_idx = X.columns.get_loc(col)
+
+                approx_data = np.atleast_2d(approx_data)
                 X_imputed.at[idx, col] = np.mean(approx_data[:, col_idx])
 
         return X_imputed
+
+
+
+
+
 
 
 class KIImputer(BaseEstimator, TransformerMixin):
