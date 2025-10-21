@@ -1,9 +1,12 @@
 import numpy as np
 import pandas as pd
 import pytest
-from sklearn.impute import SimpleImputer
 
-from ficaria.missing_imputation import KIImputer, FCMKIterativeImputer
+from sklearn.impute import SimpleImputer
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from ficaria.missing_imputation import *
+import ficaria.utils as utils
 
 
 @pytest.mark.parametrize("random_state", [
@@ -211,3 +214,101 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
     assert result.shape == X_test.shape
     assert not np.isnan(result).any()
     np.testing.assert_array_equal(result, result2)
+
+
+
+@pytest.fixture(autouse=True)
+def mock_dependencies(monkeypatch):
+    def mock_check_input_dataset(X, require_numeric=True):
+        return X
+    def mock_split_complete_incomplete(X):
+        complete = X.dropna()
+        incomplete = X[X.isna().any(axis=1)]
+        return complete, incomplete
+    def mock_fuzzy_c_means(X, n_clusters=3, v=2.0, max_iter=100, tol=1e-5, **kwargs):
+        n_features = X.shape[1]
+        centers = np.arange(n_clusters * n_features).reshape(n_clusters, n_features) + 1.0
+        memberships = np.random.rand(X.shape[0], n_clusters)
+        return centers, memberships
+    def mock_rough_kmeans_from_fcm(X, memberships, centers, wl, wb, tau, max_iter, tol):
+        lower = [np.array([[1, 2], [1, 3]])]
+        upper = [np.array([[2, 3], [2, 4]])]
+        clusters = [(lower[0], upper[0], centers[0])]
+        return clusters
+    def mock_euclidean_distance(a, b):
+        a = np.nan_to_num(a, nan=0.0)
+        b = np.nan_to_num(b, nan=0.0)
+        return np.linalg.norm(a - b)
+
+    monkeypatch.setattr(utils, "check_input_dataset", mock_check_input_dataset)
+    monkeypatch.setattr(utils, "split_complete_incomplete", mock_split_complete_incomplete)
+    monkeypatch.setattr(utils, "fuzzy_c_means", mock_fuzzy_c_means)
+    monkeypatch.setattr(utils, "rough_kmeans_from_fcm", mock_rough_kmeans_from_fcm)
+    monkeypatch.setattr(utils, "euclidean_distance", mock_euclidean_distance)
+
+
+def test_fcmcentroidimputer_init():
+    imputer = FCMCentroidImputer(n_clusters=4, v=2.5, max_iter=200, tol=1e-4)
+    assert imputer.n_clusters == 4
+    assert imputer.v == 2.5
+    assert imputer.max_iter == 200
+    assert imputer.tol == 1e-4
+
+
+def test_fcmcentroidimputer_fit_creates_attributes():
+    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMCentroidImputer()
+    imputer.fit(X)
+    assert hasattr(imputer, "centers_")
+    assert hasattr(imputer, "memberships_")
+    assert imputer.centers_.shape[1] == X.shape[1]
+
+
+def test_fcmcentroidimputer_transform_imputes_missing_values():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [4.0, 5.0, np.nan]})
+    imputer = FCMCentroidImputer()
+    imputer.fit(X.dropna())
+    result = imputer.transform(X)
+    assert not result.isna().any().any(), "Imputer should fill all missing values"
+
+
+def test_fcmcentroidimputer_transform_no_missing_returns_same():
+    X = pd.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0]})
+    imputer = FCMCentroidImputer()
+    imputer.fit(X)
+    result = imputer.transform(X)
+    pd.testing.assert_frame_equal(X, result)
+
+
+def test_fcmparameterimputer_fit_creates_attributes():
+    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMParameterImputer()
+    imputer.fit(X)
+    assert hasattr(imputer, "centers_")
+    assert hasattr(imputer, "memberships_")
+    assert hasattr(imputer, "feature_names_in_")
+
+
+def test_fcmparameterimputer_transform_imputes_values():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [4.0, 5.0, np.nan]})
+    imputer = FCMParameterImputer()
+    imputer.fit(X.dropna())
+    result = imputer.transform(X)
+    assert not result.isna().any().any()
+
+
+def test_fcmroughparameterimputer_fit_creates_clusters():
+    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMRoughParameterImputer()
+    imputer.fit(X)
+    assert hasattr(imputer, "centers_")
+    assert hasattr(imputer, "memberships_")
+    assert hasattr(imputer, "clusters_")
+
+
+def test_fcmroughparameterimputer_transform_imputes_values():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [4.0, 5.0, np.nan]})
+    imputer = FCMRoughParameterImputer()
+    imputer.fit(X.dropna())
+    result = imputer.transform(X)
+    assert not result.isna().any().any()

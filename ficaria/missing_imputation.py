@@ -1,8 +1,10 @@
 from sklearn.base import BaseEstimator, TransformerMixin
-
 from .utils import *
 
 
+# --------------------------------------
+# FCMCentroidImputer
+# --------------------------------------
 class FCMCentroidImputer(BaseEstimator, TransformerMixin):
     def __init__(self, n_clusters=3, v=2.0, max_iter=100, tol=1e-5):
         """
@@ -26,7 +28,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
         Fit the FCM imputer on complete data only.
         """
-        X = check_input_dataset(X)
+        X = check_input_dataset(X, require_numeric=True)
         complete, _ = split_complete_incomplete(X)
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
@@ -41,7 +43,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
         Impute missing values using nearest cluster centroid.
         """
-        X = check_input_dataset(X)
+        X = check_input_dataset(X, require_numeric=True)
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -61,6 +63,10 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         return X_imputed
 
 
+
+# --------------------------------------
+# FCMParameterImputer
+# --------------------------------------
 class FCMParameterImputer(BaseEstimator, TransformerMixin):
     def __init__(self, n_clusters=3, v=2.0, max_iter=150, tol=1e-5, random_state=None):
         """
@@ -84,7 +90,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         """
         Fit the FCM imputer on complete data only.
         """
-        X = check_input_dataset(X)
+        X = check_input_dataset(X, require_numeric=True)
         complete, _ = split_complete_incomplete(X)
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
@@ -103,7 +109,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         Each missing value is the weighted sum of all centroids
         based on membership values.
         """
-        X = check_input_dataset(X).copy()
+        X = check_input_dataset(X, require_numeric=True).copy()
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -126,6 +132,10 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         return X_imputed
 
 
+
+# --------------------------------------
+# FCMRoughParameterImputer
+# --------------------------------------
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
     def __init__(self, n_clusters=3, v=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5):
         """
@@ -146,8 +156,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         Fit the imputer on complete data.
         """
-        X = check_input_dataset(X)
-        X = select_numeric_columns(X)
+        X = check_input_dataset(X, require_numeric=True)
 
         complete, _ = split_complete_incomplete(X)
         complete_array = complete.to_numpy()
@@ -177,8 +186,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         Impute missing values using rough parameter-based FCM method.
         """
-        X = check_input_dataset(X)
-        X = select_numeric_columns(X)
+        X = check_input_dataset(X, require_numeric=True)
 
         _, incomplete = split_complete_incomplete(X)
 
@@ -215,10 +223,9 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
 
 
-
-
-
-
+# --------------------------------------
+# KIImputer
+# --------------------------------------
 class KIImputer(BaseEstimator, TransformerMixin):
     """
     KIImputer: Hybrid KNN + Iterative Imputer for Missing Data.
@@ -247,6 +254,10 @@ class KIImputer(BaseEstimator, TransformerMixin):
         return X_imputed
 
 
+
+# --------------------------------------
+# FCMKIterativeImputer
+# --------------------------------------
 class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
     """
    Hybrid imputer combining fuzzy c-means clustering, k-nearest neighbors, and iterative imputation.

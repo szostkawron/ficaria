@@ -7,6 +7,7 @@ from kneed import KneeLocator
 from fuzzycmeans import FCM
 
 
+
 def split_complete_incomplete(X: pd.DataFrame):
     """
     Split the dataset into complete (no missing values) and incomplete (with missing values) objects.
@@ -20,6 +21,7 @@ def split_complete_incomplete(X: pd.DataFrame):
     complete = X.dropna()
     incomplete = X[X.isna().any(axis=1)]
     return complete, incomplete
+
 
 
 def check_input_dataset(X, require_numeric=False, allow_nan=True):
@@ -55,16 +57,6 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True):
     return X
 
 
-def select_numeric_columns(df: pd.DataFrame):
-    """
-    Select only numeric columns from a DataFrame.
-
-    Parameters:
-        df : input DataFrame containing mixed data types.
-    """
-    return df.select_dtypes(include=["number"])
-
-
 def euclidean_distance(a: np.ndarray, b: np.ndarray):
     """
     Compute Euclidean distance between two vectors, ignoring NaNs.
@@ -77,6 +69,7 @@ def euclidean_distance(a: np.ndarray, b: np.ndarray):
     """
     mask = ~np.isnan(a) & ~np.isnan(b)
     return np.linalg.norm(a[mask] - b[mask])
+
 
 
 def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
@@ -119,6 +112,7 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
             break
 
     return centers, u
+
 
 
 def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter=100, tol=1e-4):
@@ -195,59 +189,6 @@ def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, 
 
 
 
-
-
-# def compute_lower_upper_approximation(cluster_data, threshold=0.5):
-#     """
-#     Compute lower and upper approximation of a cluster.
-#     Objects with membership >= threshold are in lower approximation,
-#     others (membership < threshold) are in upper approximation.
-    
-#     Parameters:
-#         cluster_data (tuple): (data, memberships) for the cluster
-#         threshold (float): cutoff for lower approximation
-    
-#     Returns:
-#         lower (np.ndarray): rows in lower approximation
-#         upper (np.ndarray): rows in upper approximation
-#     """
-#     X, memberships = cluster_data
-#     lower_mask = memberships >= threshold
-#     lower = X[lower_mask]
-#     upper = X[~lower_mask]
-#     return lower, upper
-
-
-# def find_nearest_approximation(obs, lower, upper):
-#     """
-#     Determine if the object belongs to lower or upper approximation
-#     based on distance to mean of each approximation.
-    
-#     Parameters:
-#         obs (np.ndarray): incomplete object
-#         lower (np.ndarray)
-#         upper (np.ndarray)
-        
-#     Returns:
-#         'lower' or 'upper'
-#     """
-#     if lower.shape[0] > 0:
-#         dist_lower = np.min([euclidean_distance(obs, row) for row in lower])
-#     else:
-#         dist_lower = np.inf
-
-#     if upper.shape[0] > 0:
-#         dist_upper = np.min([euclidean_distance(obs, row) for row in upper])
-#     else:
-#         dist_upper = np.inf
-
-#     if dist_lower <= dist_upper:
-#         return 'lower'
-#     else:
-#         return 'upper'
-
-
-
 def fcm_predict(X_new, centers, m=2.0):
     """
     Compute fuzzy membership matrix for new data points given cluster centers.
@@ -272,8 +213,6 @@ def fcm_predict(X_new, centers, m=2.0):
     return u_new
 
 
-
-
 def get_neighbors(train: list[list[float]], test_row: list[float], k: int) -> list[list[float]]:
     """
     Returns the k closest rows in `train` to `test_row`
@@ -296,6 +235,7 @@ def get_neighbors(train: list[list[float]], test_row: list[float], k: int) -> li
     for i in range(k):
         neighbors.append(distances[i][0])
     return neighbors
+
 
 
 def find_best_k(St: pd.DataFrame, random_col: int, original_value: float) -> int:
@@ -328,6 +268,7 @@ def find_best_k(St: pd.DataFrame, random_col: int, original_value: float) -> int
 
     best_k = K_List[np.argmin(RMSE_List)]
     return best_k
+
 
 
 def impute_KI(X: pd.DataFrame, X_train=None, np_rng=None, random_state=42) -> np.ndarray:
@@ -415,6 +356,7 @@ def impute_KI(X: pd.DataFrame, X_train=None, np_rng=None, random_state=42) -> np
     return all_dataset_imputed.to_numpy()
 
 
+
 def compute_fcm_objective(X, centers, U, m=2):
     """
     Compute the fuzzy c-means objective function value.
@@ -437,6 +379,7 @@ def compute_fcm_objective(X, centers, U, m=2):
 
     obj = np.sum((U ** m) * dist_sq)
     return obj
+
 
 
 def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters=2, max_clusters=10, random_state=None, m=2):
@@ -470,6 +413,7 @@ def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters=2, max_clusters=10
         return int((max_clusters + min_clusters) // 2)
 
     return int(optimal_k)
+
 
 
 def impute_FCKI(X, X_train, centers, u_train, c, imputer, m, np_rng=None, random_state=42) -> np.ndarray:
