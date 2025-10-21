@@ -371,7 +371,7 @@ def test_impute_FCKI(X, X_train, n_clusters, random_state, m):
     centers, u = fuzzy_c_means(
         X_train_filled_df.values,
         n_clusters=n_clusters,
-        v=m,
+        m=m,
         random_state=random_state,
     )
     result = impute_FCKI(X, X_train, centers, u, n_clusters, imputer, m, np_rng, random_state)
