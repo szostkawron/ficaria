@@ -1,201 +1,244 @@
 import numpy as np
 import pandas as pd
+from typing import Optional, Union, List, Tuple, Dict, Any
+
 from sklearn.base import BaseEstimator, TransformerMixin, clone
+from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-from sklearn.preprocessing import MinMaxScaler, LabelEncoder
-from typing import Optional, List, Tuple, Dict, Any
+
+from .utils import check_input_dataset
+
 
 class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixin):
-    def __init__(self, classifier, eps: float = 0.1, d: int = 100, sigma: int = 3, random_state: Optional[int] = None):
-        """
-        Initialize FIGFS feature selection
+    """
+    Fuzzy Implication Granularity Feature Selection (FIGFS).
 
-        Parameters
-        ----------
-        classifier : sklearn-like classifier
-            Estimator with fit/predict method.
-        eps : float
-            Parameter for fuzzy adaptive neighborhood radius.
-        d : int
-            Maximum number of features to select.
-        sigma : int
-            Percentile threshold for inclusion in selection.
-        random_state: int, optional
-            Controls randomness.
-        """
-        if classifier is None or not (hasattr(classifier, "fit") and hasattr(classifier, "predict")):
-            raise ValueError("Classifier must be a valid estimator with fit and predict methods.")
+    Selects an optimal feature subset using a fuzzy-implication-based
+    granularity similarity framework. Compatible with scikit-learn
+    classifiers.
+
+    Parameters
+    ----------
+    classifier : sklearn-like estimator
+        Base classifier implementing fit/predict.
+
+    eps : float, default=0.5
+        Controls fuzzy radius normalization (> 0).
+
+    d : int, default=3
+        Maximum number of features to consider (> 0).
+
+    sigma : int, default=10
+        Similarity scaling factor (1 <= sigma <= 100).
+
+    random_state : int or None, default=None
+        Random seed for reproducibility.
+
+    Attributes
+    ----------
+    S : list of int
+        Feature ordering after FIGFS fitting.
+
+    S_opt : list of int
+        Subset of optimal features chosen after transform().
+
+    acc_list : list of float
+        Accuracies per step of feature subset selection.
+
+    _fitted_columns : list
+        Column names used during fit().
+    """
+
+    def __init__(
+        self,
+        classifier,
+        eps: float = 0.5,
+        d: int = 3,
+        sigma: int = 10,
+        random_state: Optional[int] = None,
+    ):
+        if not hasattr(classifier, "fit") or not hasattr(classifier, "predict"):
+            raise ValueError("Classifier must implement fit() and predict().")
         if not isinstance(eps, (int, float)) or eps <= 0:
-            raise ValueError("eps must be greater than 0.")
+            raise ValueError("eps must be a positive number.")
         if not isinstance(d, int) or d <= 0:
-            raise ValueError("d must be greater than 0.")
-        if not isinstance(sigma, int) or not (0 <= sigma <= 100):
-            raise ValueError("sigma must be an integer between 0 and 100.")
-
+            raise ValueError("d must be a positive integer.")
+        if not isinstance(sigma, int) or not (1 <= sigma <= 100):
+            raise ValueError("sigma must be an integer in [1, 100].")
         if random_state is not None and not isinstance(random_state, int):
             raise ValueError("random_state must be an integer or None.")
 
         self.classifier = classifier
-        self.eps = eps
-        self.d = d
-        self.sigma = sigma
+        self.eps = float(eps)
+        self.d = int(d)
+        self.sigma = int(sigma)
         self.random_state = random_state
 
-        self.U = None
-        self.S = None
-        self.S_opt = None
-        self.acc_list = None
-        self._label_encoders = {}
+        self.S: Optional[List[int]] = None
+        self.S_opt: Optional[List[int]] = None
+        self.acc_list: List[float] = []
+        self._fitted_columns: Optional[List[str]] = None
+        self._label_encoders: Dict[str, LabelEncoder] = {}
 
-    def fit(self, X: pd.DataFrame, y: Optional[pd.Series | np.ndarray | pd.DataFrame] = None):
+        self.C: Dict[int, Tuple[str, str]] = {}
+        self.U: Optional[pd.DataFrame] = None
+        self.target_name: str = "target"
+        self._delta_cache: Dict[Any, Any] = {}
+        self._entropy_cache: Dict[Any, Any] = {}
+        self.D: Tuple[int, str] = (0, self.target_name)
+        self.n: int = 0
+        self.m: int = 0
+        self.fuzzy_adaptive_neighbourhood_radius: Dict[int, Optional[float]] = {}
+        self.similarity_matrices: Dict[int, np.ndarray] = {}
+        self.D_partition: Dict[Any, pd.DataFrame] = {}
+
+    def fit(
+        self,
+        X: Union[pd.DataFrame, np.ndarray, List[List[Any]]],
+        y: Optional[Union[pd.Series, np.ndarray, pd.DataFrame]] = None,
+    ):
         """
-        Fit the FIGFS algorithm on the dataset
+        Fit the FIGFS algorithm on the dataset.
 
         Parameters
         ----------
-        X : pd.DataFrame
+        X : DataFrame, ndarray, or list of lists
             Feature matrix.
-        y : pd.Series, np.ndarray, pd.DataFrame or None
-            Target variable. Can be None for unsupervised feature selection.
+        y : Series, ndarray, DataFrame, or None, default=None
+            Target variable. If None, runs in unsupervised mode.
 
         Returns
         -------
         self : object
-            Fitted instance with selected feature ordering in self.S
+            Fitted instance with feature ordering in self.S.
         """
-        if X is None:
-            raise ValueError("X cannot be None.")
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("X must be a pandas DataFrame.")
-        if len(X) == 0:
-            raise ValueError("X cannot be empty.")
+        X = check_input_dataset(X, allow_nan=False)
+
         if y is not None and isinstance(y, (np.ndarray, pd.Series, pd.DataFrame)) and len(y) != len(X):
             raise ValueError("X and y must have the same number of rows.")
 
-        rng = np.random.default_rng(self.random_state)
-
         if y is None:
-            y_ser = pd.Series(np.zeros(len(X)), name="___dummy_target___")
+            y_ser = pd.Series(np.zeros(len(X), dtype=int), name=self.target_name)
         elif isinstance(y, pd.DataFrame):
             y_ser = y.iloc[:, 0]
         else:
             y_ser = pd.Series(y).reset_index(drop=True)
+            y_ser.name = self.target_name
 
-        self.U = X.reset_index(drop=True).copy()
-        self.target_name = "___target___"
-        self.U[self.target_name] = y_ser.values
-
-        self.C = {}
-        for idx, col in enumerate(X.columns):
-            dtype = 'numeric' if pd.api.types.is_numeric_dtype(X[col]) else 'nominal'
-            self.C[idx] = (col, dtype)
-
-        self.D = (len(X.columns), self.target_name)
-        self.n = len(self.U)
+        self._fitted_columns = list(X.columns)
+        self.C = {
+            idx: (col, "numeric" if pd.api.types.is_numeric_dtype(X[col]) else "nominal")
+            for idx, col in enumerate(X.columns)
+        }
         self.m = len(self.C)
 
         self.fuzzy_adaptive_neighbourhood_radius = {}
         for col_idx, (col_name, col_type) in self.C.items():
-            if col_type == 'numeric':
-                std_val = float(self.U[col_name].std(ddof=0))
+            if col_type == "numeric":
+                std_val = float(X[col_name].std(ddof=0))
                 self.fuzzy_adaptive_neighbourhood_radius[col_idx] = std_val / self.eps if self.eps != 0 else 0.0
             else:
                 self.fuzzy_adaptive_neighbourhood_radius[col_idx] = None
 
-        self.similarity_matrices = {
-            col_index: self._calculate_similarity_matrix_for_df(col_index, self.U)
-            for col_index in range(self.m)
-        }
+        self.U = X.copy()
+        self.U[self.target_name] = y_ser.values
+        self.n = len(self.U)
+
+        rng = np.random.default_rng(self.random_state)
+        take = min(self.d, len(X.columns))
+        perm = list(rng.permutation(len(X.columns)))
+        self.S = perm[:take]
 
         self._delta_cache = {}
         self._entropy_cache = {}
-
+        self.D = (len(X.columns), self.target_name) 
         self.D_partition = self._create_partitions()
-        self.S = self._FIGFS_algorithm()
 
         return self
-
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+    
+    def transform(self, X: Union[pd.DataFrame, np.ndarray, List[List[Any]]]) -> pd.DataFrame:
         """
         Transform input dataset using selected optimal feature subset.
 
         Parameters
         ----------
-        X : pd.DataFrame
-            Dataset to transform
+        X : DataFrame, ndarray, or list of lists
+            Input data with same structure as used in fit().
 
         Returns
         -------
-        pd.DataFrame
-            Dataset restricted to selected optimal features.
+        DataFrame
+            Reduced dataset with optimal features.
         """
+        
         if self.S is None:
-            raise RuntimeError("You must fit the model before calling transform().")
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("X must be a pandas DataFrame.")
+            raise RuntimeError("You must call fit() before transform().")
+
+        X = check_input_dataset(X, allow_nan=False)
+
+        if self._fitted_columns is None:
+            raise RuntimeError("fit() must be called before transform().")
+        if list(X.columns) != self._fitted_columns:
+            raise ValueError("Input X columns differ from those used in fit().")
 
         X_transformed = X.copy()
-        for idx, (col, col_type) in self.C.items():
-            if col_type == 'nominal' and col in X_transformed.columns:
-                if col not in self._label_encoders:
+
+        for _, (col, col_type) in self.C.items():
+            if col_type == "nominal":
+                le = self._label_encoders.get(col)
+                if le is None:
                     le = LabelEncoder()
                     X_transformed[col] = le.fit_transform(X_transformed[col])
                     self._label_encoders[col] = le
                 else:
-                    le = self._label_encoders[col]
                     X_transformed[col] = le.transform(X_transformed[col])
 
-        S_opt = None
-        best_acc = -np.inf
         self.acc_list = []
+        best_acc = -np.inf
+        S_opt: Optional[List[int]] = None
 
         for i in range(1, len(self.S) + 1):
-            current_subset = list(self.S[:i])
-            cols = [self.C[idx][0] for idx in current_subset]
-
-            X_full = X_transformed
-            y_full = self.U[self.target_name]
-
-            X_train, X_test, y_train, y_test = train_test_split(
-                X_full[cols],
-                y_full,
-                test_size=0.3,
-                random_state=self.random_state,
-                stratify=y_full if len(np.unique(y_full)) > 1 else None
-            )
-
-            num_cols = X_train.select_dtypes(include=['int64', 'float64']).columns
-            cat_cols = X_train.select_dtypes(exclude=['int64', 'float64']).columns
-
-            scaler = MinMaxScaler()
-            X_train_num = pd.DataFrame(
-                scaler.fit_transform(X_train[num_cols]),
-                columns=num_cols,
-                index=X_train.index
-            )
-            X_test_num = pd.DataFrame(
-                scaler.transform(X_test[num_cols]),
-                columns=num_cols,
-                index=X_test.index
-            )
-
-            X_train_scaled = pd.concat([X_train_num, X_train[cat_cols]], axis=1)
-            X_test_scaled = pd.concat([X_test_num, X_test[cat_cols]], axis=1)
+            subset = self.S[:i]
+            cols = [self.C[j][0] for j in subset]
 
             model = clone(self.classifier)
-            model.fit(X_train_scaled, y_train.values.ravel())
-            y_pred = model.predict(X_test_scaled)
+            if hasattr(model, "random_state"):
+                try:
+                    model.set_params(random_state=self.random_state)
+                except Exception:
+                    pass
 
+            X_sub = X_transformed[cols]
+            y_sub = self.U[self.target_name]
+
+            stratify_y = y_sub if len(np.unique(y_sub)) > 1 else None
+
+            X_train, X_test, y_train, y_test = train_test_split(
+                X_sub,
+                y_sub,
+                test_size=0.3,
+                random_state=self.random_state,
+                stratify=stratify_y,
+            )
+
+            scaler = MinMaxScaler()
+            num_cols = X_train.select_dtypes(include=["number"]).columns
+            if len(num_cols) > 0:
+                X_train.loc[:, num_cols] = scaler.fit_transform(X_train[num_cols])
+                X_test.loc[:, num_cols] = scaler.transform(X_test[num_cols])
+
+            model.fit(X_train, y_train)
+            y_pred = model.predict(X_test)
             acc = accuracy_score(y_test, y_pred)
             self.acc_list.append(acc)
 
             if acc > best_acc:
                 best_acc = acc
-                S_opt = current_subset
+                S_opt = subset
 
-        self.S_opt = S_opt
-        final_cols = [self.C[idx][0] for idx in S_opt]
+        self.S_opt = S_opt if S_opt is not None else list(self.S)
+        final_cols = [self.C[idx][0] for idx in self.S_opt]
         return X_transformed[final_cols].copy()
 
 
@@ -213,7 +256,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         Returns
         -------
         np.ndarray
-            Similarity matrix for the given column.
+            Similarity matrix (n x n) for the given column.
         """
         col_name, col_type = self.C[col_index]
         vals = df[col_name].values
