@@ -6,7 +6,7 @@ from .utils import *
 # FCMCentroidImputer
 # --------------------------------------
 class FCMCentroidImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, v=2.0, max_iter=100, tol=1e-5):
+    def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, random_state=None):
         """
         Fuzzy C-Means centroid-based imputer.
 
@@ -19,10 +19,20 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
             max_iter (int): maximum number of FCM iterations
             tol (float): convergence tolerance
         """
+        validate_params({
+            'n_clusters': n_clusters,
+            'm': m,
+            'max_iter': max_iter,
+            'tol': tol,
+            'random_state': random_state
+        })
+
         self.n_clusters = n_clusters
-        self.v = v
+        self.m = m
         self.max_iter = max_iter
         self.tol = tol
+        self.random_state = random_state
+
 
     def fit(self, X, y=None):
         """
@@ -30,12 +40,16 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
         X = check_input_dataset(X, require_numeric=True)
         complete, _ = split_complete_incomplete(X)
+        if self.n_clusters > len(complete):
+            raise ValueError("n_clusters cannot be larger than the number of complete rows")
+
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
             n_clusters=self.n_clusters,
-            v=self.v,
+            m=self.m,
             max_iter=self.max_iter,
-            tol=self.tol
+            tol=self.tol,
+            random_state=self.random_state
         )
         return self
 
@@ -68,7 +82,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 # FCMParameterImputer
 # --------------------------------------
 class FCMParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, v=2.0, max_iter=150, tol=1e-5, random_state=None):
+    def __init__(self, n_clusters=3, m=2.0, max_iter=150, tol=1e-5, random_state=None):
         """
         Fuzzy C-Means Parameter-based Imputation.
         
@@ -81,10 +95,20 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
             max_iter (int): maximum number of FCM iterations
             tol (float): convergence tolerance
         """
+        validate_params({
+            'n_clusters': n_clusters,
+            'm': m,
+            'max_iter': max_iter,
+            'tol': tol,
+            'random_state': random_state
+        })
+
         self.n_clusters = n_clusters
-        self.v = v
+        self.m = m
         self.max_iter = max_iter
         self.tol = tol
+        self.random_state = random_state
+
 
     def fit(self, X, y=None):
         """
@@ -92,12 +116,17 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         """
         X = check_input_dataset(X, require_numeric=True)
         complete, _ = split_complete_incomplete(X)
+        
+        if self.n_clusters > len(complete):
+            raise ValueError("n_clusters cannot be larger than the number of complete rows")
+
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
             n_clusters=self.n_clusters,
-            v=self.v,
+            m=self.m,
             max_iter=self.max_iter,
-            tol=self.tol
+            tol=self.tol,
+            random_state=self.random_state
         )
 
         self.feature_names_in_ = complete.columns
@@ -123,7 +152,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
             dist = np.array([euclidean_distance(obs, center) for center in self.centers_])
             dist = np.fmax(dist, 1e-10)
 
-            u = 1 / np.sum((dist[:, None] / dist[None, :]) ** (2 / (self.v - 1)), axis=1)
+            u = 1 / np.sum((dist[:, None] / dist[None, :]) ** (2 / (self.m - 1)), axis=1)
 
             missing_cols = row[row.isna()].index
             for col in missing_cols:
@@ -137,36 +166,51 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 # FCMRoughParameterImputer
 # --------------------------------------
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, v=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5):
+    def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
         """
         Fuzzy C-Means Rough Parameter-based imputer.
         
         Each missing value is imputed using information from the 
         lower or upper approximation of the nearest fuzzy cluster.
         """
+        validate_params({
+            'n_clusters': n_clusters,
+            'm': m,
+            'max_iter': max_iter,
+            'tol': tol,
+            'wl': wl,
+            'wb': wb,
+            'tau': tau,
+            'random_state': random_state
+        })
+
         self.n_clusters = n_clusters
-        self.v = v
+        self.m = m
         self.max_iter = max_iter
         self.tol = tol
         self.wl = wl
         self.wb = wb
         self.tau = tau
+        self.random_state = random_state
 
     def fit(self, X, y=None):
         """
         Fit the imputer on complete data.
         """
         X = check_input_dataset(X, require_numeric=True)
-
         complete, _ = split_complete_incomplete(X)
-        complete_array = complete.to_numpy()
+        
+        if self.n_clusters > len(complete):
+            raise ValueError("n_clusters cannot be larger than the number of complete rows")
 
+        complete_array = complete.to_numpy()
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete_array,
             n_clusters=self.n_clusters,
-            v=self.v,
+            m=self.m,
             max_iter=self.max_iter,
-            tol=self.tol
+            tol=self.tol,
+            random_state=self.random_state
         )
 
         self.clusters_ = rough_kmeans_from_fcm(
@@ -300,7 +344,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         self.centers_, self.u_ = fuzzy_c_means(
             X_filled.values,
             n_clusters=self.optimal_c_,
-            v=self.m,
+            m=self.m,
             random_state=self.random_state,
         )
 

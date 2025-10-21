@@ -225,7 +225,7 @@ def mock_dependencies(monkeypatch):
         complete = X.dropna()
         incomplete = X[X.isna().any(axis=1)]
         return complete, incomplete
-    def mock_fuzzy_c_means(X, n_clusters=3, v=2.0, max_iter=100, tol=1e-5, **kwargs):
+    def mock_fuzzy_c_means(X, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, **kwargs):
         n_features = X.shape[1]
         centers = np.arange(n_clusters * n_features).reshape(n_clusters, n_features) + 1.0
         memberships = np.random.rand(X.shape[0], n_clusters)
@@ -248,9 +248,9 @@ def mock_dependencies(monkeypatch):
 
 
 def test_fcmcentroidimputer_init():
-    imputer = FCMCentroidImputer(n_clusters=4, v=2.5, max_iter=200, tol=1e-4)
+    imputer = FCMCentroidImputer(n_clusters=4, m=2.5, max_iter=200, tol=1e-4)
     assert imputer.n_clusters == 4
-    assert imputer.v == 2.5
+    assert imputer.m == 2.5
     assert imputer.max_iter == 200
     assert imputer.tol == 1e-4
 
@@ -312,3 +312,46 @@ def test_fcmroughparameterimputer_transform_imputes_values():
     imputer.fit(X.dropna())
     result = imputer.transform(X)
     assert not result.isna().any().any()
+
+@pytest.mark.parametrize(
+    "params, expected_exception, expected_msg",
+    [
+        # n_clusters
+        ({"n_clusters": "3"}, TypeError, "Invalid type for n_clusters"),
+        ({"n_clusters": -1}, ValueError, "Invalid value for n_clusters"),
+        ({"n_clusters": 0}, ValueError, "Invalid value for n_clusters"),
+        
+        # max_iter
+        ({"max_iter": "100"}, TypeError, "Invalid type for max_iter"),
+        ({"max_iter": 0}, ValueError, "Invalid value for max_iter"),
+        
+        # random_state
+        ({"random_state": "abc"}, TypeError, "Invalid type for random_state"),
+        
+        # m (fuzziness)
+        ({"m": "2.0"}, TypeError, "Invalid type for m"),
+        ({"m": 1.0}, ValueError, "Invalid value for m"),
+        
+        # tol
+        ({"tol": "1e-5"}, TypeError, "Invalid type for tol"),
+        ({"tol": 0}, ValueError, "Invalid value for tol"),
+        
+        # wl
+        ({"wl": "0.5"}, TypeError, "Invalid type for wl"),
+        ({"wl": -0.1}, ValueError, "Invalid value for wl"),
+        ({"wl": 1.5}, ValueError, "Invalid value for wl"),
+        
+        # wb
+        ({"wb": "0.2"}, TypeError, "Invalid type for wb"),
+        ({"wb": -0.1}, ValueError, "Invalid value for wb"),
+        ({"wb": 1.5}, ValueError, "Invalid value for wb"),
+        
+        # tau
+        ({"tau": "0.5"}, TypeError, "Invalid type for tau"),
+        ({"tau": -0.1}, ValueError, "Invalid value for tau"),
+    ]
+)
+def test_validate_params_errors(params, expected_exception, expected_msg):
+    with pytest.raises(expected_exception) as excinfo:
+        validate_params(params)
+    assert expected_msg in str(excinfo.value)

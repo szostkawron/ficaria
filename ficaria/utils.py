@@ -57,6 +57,74 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True):
     return X
 
 
+def validate_params(params):
+    """
+    Validate parameters.
+
+    Parameters:
+        params (dict): Dictionary of parameter names and values
+
+    Raises:
+        TypeError, ValueError: If any parameter is invalid.
+    """
+
+    if 'n_clusters' in params:
+        n_clusters = params['n_clusters']
+        if not isinstance(n_clusters, int):
+            raise TypeError(f"Invalid type for n_clusters: {type(n_clusters).__name__}. Must be int.")
+        if n_clusters < 1:
+            raise ValueError(f"Invalid value for n_clusters: {n_clusters}. Must be >= 1.")
+
+    if 'max_iter' in params:
+        max_iter = params['max_iter']
+        if not isinstance(max_iter, int):
+            raise TypeError(f"Invalid type for max_iter: {type(max_iter).__name__}. Must be int.")
+        if max_iter < 1:
+            raise ValueError(f"Invalid value for max_iter: {max_iter}. Must be >= 1.")
+
+    if 'random_state' in params:
+        rs = params['random_state']
+        if rs is not None and not isinstance(rs, int):
+            raise TypeError(f"Invalid type for random_state: {type(rs).__name__}. Must be int or None.")
+
+    if 'm' in params:
+        m = params['m']
+        if not isinstance(m, (int, float)):
+            raise TypeError(f"Invalid type for m: {type(m).__name__}. Must be float.")
+        if m <= 1.0:
+            raise ValueError(f"Invalid value for m: {m}. Must be > 1.0.")
+
+    if 'tol' in params:
+        tol = params['tol']
+        if not isinstance(tol, (int, float)):
+            raise TypeError(f"Invalid type for tol: {type(tol).__name__}. Must be float.")
+        if tol <= 0:
+            raise ValueError(f"Invalid value for tol: {tol}. Must be > 0.")
+
+    if 'wl' in params:
+        wl = params['wl']
+        if not isinstance(wl, (int, float)):
+            raise TypeError(f"Invalid type for wl: {type(wl).__name__}. Must be int or float.")
+        if wl <= 0 or wl > 1:
+            raise ValueError(f"Invalid value for wl: {wl}. Must be in range (0, 1].")
+
+    if 'wb' in params:
+        wb = params['wb']
+        if not isinstance(wb, (int, float)):
+            raise TypeError(f"Invalid type for wb: {type(wb).__name__}. Must be int or float.")
+        if wb < 0 or wb > 1:
+            raise ValueError(f"Invalid value for wb: {wb}. Must be in range [0, 1].")
+
+    if 'tau' in params:
+        tau = params['tau']
+        if not isinstance(tau, (int, float)):
+            raise TypeError(f"Invalid type for tau: {type(tau).__name__}. Must be int or float.")
+        if tau < 0:
+            raise ValueError(f"Invalid value for tau: {tau}. Must be >= 0.")
+
+
+
+
 def euclidean_distance(a: np.ndarray, b: np.ndarray):
     """
     Compute Euclidean distance between two vectors, ignoring NaNs.
@@ -72,7 +140,7 @@ def euclidean_distance(a: np.ndarray, b: np.ndarray):
 
 
 
-def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
+def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
                   random_state=None):
     """
     Fuzzy C-Means clustering algorithm.
@@ -98,7 +166,7 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
     for iteration in range(max_iter):
         u_old = u.copy()
 
-        uv = u ** v
+        uv = u ** m
         centers = (uv.T @ X) / np.sum(uv.T, axis=1)[:, None]
 
         dist = np.zeros((n_samples, n_clusters))
@@ -106,7 +174,7 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
             dist[:, j] = np.linalg.norm(X - centers[j], axis=1)
         dist = np.fmax(dist, 1e-10)
 
-        u = 1 / np.sum((dist[:, :, None] / dist[:, None, :]) ** (2 / (v - 1)), axis=2)
+        u = 1 / np.sum((dist[:, :, None] / dist[:, None, :]) ** (2 / (m - 1)), axis=2)
 
         if np.linalg.norm(u - u_old) < tol:
             break
