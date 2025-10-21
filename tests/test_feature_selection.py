@@ -19,15 +19,6 @@ def test_init_invalid_classifier():
     with pytest.raises(ValueError):
         FuzzyImplicationGranularityFeatureSelection("not_a_model")
 
-def test_fit_and_transform(sample_data):
-    X, y = sample_data
-    clf = DecisionTreeClassifier(random_state=42)
-    selector = FuzzyImplicationGranularityFeatureSelection(clf, eps=0.5, d=3, random_state=42)
-    selector.fit(X, y)
-    transformed = selector.transform(X)
-    assert isinstance(transformed, pd.DataFrame)
-    assert all(col in X.columns for col in transformed.columns)
-
 def test_deterministic_results(sample_data):
     X, y = sample_data
     clf = DecisionTreeClassifier(random_state=42)
@@ -47,17 +38,6 @@ def test_transform_without_fit(sample_data):
     selector = FuzzyImplicationGranularityFeatureSelection(clf)
     with pytest.raises(RuntimeError):
         selector.transform(X)
-
-
-@pytest.fixture
-def sample_data():
-    X = pd.DataFrame({
-        "a": [0.1, 0.4, 0.5, 0.9, 0.3],
-        "b": [1, 2, 1, 2, 1],
-        "c": ["x", "y", "x", "x", "y"]
-    })
-    y = pd.Series([0, 1, 0, 1, 0])
-    return X, y
 
 
 def test_init_valid(sample_data):
@@ -92,18 +72,27 @@ def test_fit_and_transform(sample_data):
     assert all(col in X.columns for col in transformed.columns)
 
 
-def test_fit_invalid_input(sample_data):
+def test_fit_invalid_input_types(sample_data):
     X, y = sample_data
     clf = DecisionTreeClassifier()
     selector = FuzzyImplicationGranularityFeatureSelection(clf)
+
     with pytest.raises(ValueError):
         selector.fit(None, y)
-    with pytest.raises(TypeError):
-        selector.fit(np.array(X), y)
+
     with pytest.raises(ValueError):
-        selector.fit(X.iloc[:0, :], y)
+        selector.fit(pd.DataFrame(), y)
+
     with pytest.raises(ValueError):
         selector.fit(X, y.iloc[:-1])
+
+    arr = np.array(X)
+    selector2 = FuzzyImplicationGranularityFeatureSelection(clf)
+    selector2.fit(arr, y)
+
+    ll = X.values.tolist()
+    selector3 = FuzzyImplicationGranularityFeatureSelection(clf)
+    selector3.fit(ll, y) 
 
 
 def test_deterministic_results(sample_data):
@@ -120,14 +109,37 @@ def test_deterministic_results(sample_data):
     transformed2 = selector2.transform(X)
     pd.testing.assert_frame_equal(transformed1, transformed2)
 
-
-def test_transform_without_fit(sample_data):
-    X, _ = sample_data
+def test_missing_values_in_X_raises(sample_data):
+    X, y = sample_data
+    X_nan = X.copy()
+    X_nan.loc[0, "a"] = np.nan
     clf = DecisionTreeClassifier()
     selector = FuzzyImplicationGranularityFeatureSelection(clf)
-    with pytest.raises(RuntimeError):
-        selector.transform(X)
+    with pytest.raises(ValueError):
+        selector.fit(X_nan, y)
 
+def test_inconsistent_columns_between_fit_and_transform(sample_data):
+    X, y = sample_data
+    clf = DecisionTreeClassifier(random_state=0)
+    selector = FuzzyImplicationGranularityFeatureSelection(clf)
+    selector.fit(X, y)
+
+    X_bad = X[["b", "a", "c"]].copy()
+    with pytest.raises(ValueError):
+        selector.transform(X_bad)
+
+    X_missing = X.drop(columns=["c"])
+    with pytest.raises(ValueError):
+        selector.transform(X_missing)
+
+def test_unsupervised_mode_y_none(sample_data):
+    X, _ = sample_data
+    clf = DecisionTreeClassifier(random_state=42)
+    selector = FuzzyImplicationGranularityFeatureSelection(clf, eps=0.5, d=3, random_state=42)
+    selector.fit(X, y=None)
+    transformed = selector.transform(X)
+    assert isinstance(transformed, pd.DataFrame)
+    assert transformed.shape[0] == X.shape[0]
 
 def test_mixed_numerical_and_categorical():
     X = pd.DataFrame({
