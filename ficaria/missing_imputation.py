@@ -395,6 +395,9 @@ class LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(BaseEstimator, 
             raise ValueError("Input DataFrame is empty")
         if not hasattr(self, "columns_"):
             raise AttributeError("You must call fit before transform")
+        if list(X.columns) != list(self.columns_):
+            raise ValueError("Columns of input DataFrame differ from those used in fit")
+
 
 
         X = check_input_dataset(X)

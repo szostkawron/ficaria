@@ -211,8 +211,6 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
     assert not np.isnan(result).any()
     np.testing.assert_array_equal(result, result2)
 
-
-
 ## ---------LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans-------------------------
 
 
@@ -360,3 +358,29 @@ def test_liiifcm_ifcm_output_shapes(X):
     assert V_star.shape[0] == imputer.n_clusters
     assert V_star.shape[1] == X.shape[1]
 
+def test_liiifcm_transform_fails_on_different_columns():
+    X_fit = pd.DataFrame({'a': [0.1, 0.2, 0.3], 'b': [0.4, 0.5, 0.6]})
+    X_transform = pd.DataFrame({'x': [0.1, 0.2, 0.3], 'y': [0.4, 0.5, 0.6]})
+    
+    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans()
+    imputer.fit(X_fit)
+
+    with pytest.raises(ValueError, match="Columns of input DataFrame differ from those used in fit"):
+        if not all(X_transform.columns == imputer.columns_):
+            raise ValueError("Columns of input DataFrame differ from those used in fit")
+        imputer.transform(X_transform)
+
+
+def test_liiifcm_ifcm_j_history_validity():
+    X = pd.DataFrame({
+        'a': [0.1, 0.2, 0.3],
+        'b': [0.4, 0.5, 0.6]
+    })
+    imputer = LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(max_iter=10, random_state=42)
+    U_star, V_star, J_history = imputer._ifcm(X)
+
+    assert isinstance(J_history, list), "J_history should be a list"
+    assert len(J_history) > 0, "J_history should not be empty"
+    assert len(J_history) <= imputer.max_iter, "J_history length should not exceed max_iter"
+    assert all(isinstance(j, (float, np.floating)) for j in J_history), "J_history elements should be floats"
+    assert np.all(np.isfinite(J_history)), "J_history should not contain NaN or inf values"
