@@ -6,7 +6,6 @@ from sklearn.impute import SimpleImputer
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ficaria.missing_imputation import *
-import ficaria.utils as utils
 
 
 @pytest.mark.parametrize("random_state", [
@@ -216,43 +215,55 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
     np.testing.assert_array_equal(result, result2)
 
 
+dataframes_list = [
+    pd.DataFrame({
+        "a": [1.0, 2.0, 3.0, np.nan, 5.0],
+        "b": [5.0, 4.0, 3.0, 2.0, 1.0],
+    }),
 
-@pytest.fixture(autouse=True)
-def mock_dependencies(monkeypatch):
-    def mock_check_input_dataset(X, require_numeric=True):
-        return X
-    def mock_split_complete_incomplete(X):
-        complete = X.dropna()
-        incomplete = X[X.isna().any(axis=1)]
-        return complete, incomplete
-    def mock_fuzzy_c_means(X, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, **kwargs):
-        n_features = X.shape[1]
-        centers = np.arange(n_clusters * n_features).reshape(n_clusters, n_features) + 1.0
-        memberships = np.random.rand(X.shape[0], n_clusters)
-        return centers, memberships
-    def mock_rough_kmeans_from_fcm(X, memberships, centers, wl, wb, tau, max_iter, tol):
-        lower = [np.array([[1, 2], [1, 3]])]
-        upper = [np.array([[2, 3], [2, 4]])]
-        clusters = [(lower[0], upper[0], centers[0])]
-        return clusters
-    def mock_euclidean_distance(a, b):
-        a = np.nan_to_num(a, nan=0.0)
-        b = np.nan_to_num(b, nan=0.0)
-        return np.linalg.norm(a - b)
+        pd.DataFrame({
+        "a": [np.nan, np.nan, 3.0, 4.0, 5.0],
+        "b": [np.nan, np.nan, 3.0, 2.0, 1.0],
+    }),
 
-    monkeypatch.setattr(utils, "check_input_dataset", mock_check_input_dataset)
-    monkeypatch.setattr(utils, "split_complete_incomplete", mock_split_complete_incomplete)
-    monkeypatch.setattr(utils, "fuzzy_c_means", mock_fuzzy_c_means)
-    monkeypatch.setattr(utils, "rough_kmeans_from_fcm", mock_rough_kmeans_from_fcm)
-    monkeypatch.setattr(utils, "euclidean_distance", mock_euclidean_distance)
+    pd.DataFrame({
+        "a": [np.nan, np.nan, 3.0, 4.0, 5.0, 6.0],
+        "b": [np.nan, 2.0, 3.0, np.nan, 5.0, 6.0],
+        "c": [2.0, 3.0, 4.0, 5.0, 5.0, 6.0],
+    }),
+
+    pd.DataFrame({
+        "a": [np.nan, 2.0, -3.0, -4.0, -5.0, -6.0],
+        "b": [1.0, 2.0, np.nan, -4.0, -5.0, -6.0],
+        "c": [1.0, 2.0, -3.0, np.nan, -5.0, -6.0],
+    }),
+
+    pd.DataFrame({
+        "a": [1.0, 2.0, 3.0, np.nan, 5.0, 6.0, 7.0],
+        "b": [5.0, 4.0, 3.0, np.nan, 2.0, 1.0, 0.0],
+        "c": [9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0],
+        "d": [10.0, np.nan, 15.0, 16.0, 17.0, 18.0, 19.0],
+        "e": [9.0, np.nan, 7.0, 6.0, 5.0, np.nan, np.nan],
+    }),
+]
 
 
-def test_fcmcentroidimputer_init():
-    imputer = FCMCentroidImputer(n_clusters=4, m=2.5, max_iter=200, tol=1e-4)
-    assert imputer.n_clusters == 4
-    assert imputer.m == 2.5
-    assert imputer.max_iter == 200
-    assert imputer.tol == 1e-4
+@pytest.mark.parametrize(
+    "n_clusters,m,max_iter,tol",
+    [
+        (2, 2.0, 100, 1e-3),
+        (3, 1.5, 150, 1e-5),
+        (4, 2.5, 200, 1e-4),
+    ],
+)
+def test_fcmcentroidimputer_init_parametrized(n_clusters, m, max_iter, tol):
+    imputer = FCMCentroidImputer(
+        n_clusters=n_clusters, m=m, max_iter=max_iter, tol=tol
+    )
+    assert imputer.n_clusters == n_clusters
+    assert imputer.m == m
+    assert imputer.max_iter == max_iter
+    assert imputer.tol == tol
 
 
 def test_fcmcentroidimputer_fit_creates_attributes():
@@ -264,8 +275,8 @@ def test_fcmcentroidimputer_fit_creates_attributes():
     assert imputer.centers_.shape[1] == X.shape[1]
 
 
-def test_fcmcentroidimputer_transform_imputes_missing_values():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [4.0, 5.0, np.nan]})
+@pytest.mark.parametrize("X", dataframes_list)
+def test_fcmcentroidimputer_transform_imputes_missing_values(X):
     imputer = FCMCentroidImputer()
     imputer.fit(X.dropna())
     result = imputer.transform(X)
@@ -273,11 +284,25 @@ def test_fcmcentroidimputer_transform_imputes_missing_values():
 
 
 def test_fcmcentroidimputer_transform_no_missing_returns_same():
-    X = pd.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0]})
+    X = pd.DataFrame({"a": [1.0, 2.0, 2.0], "b": [3.0, 4.0, 4.0]})
     imputer = FCMCentroidImputer()
     imputer.fit(X)
     result = imputer.transform(X)
     pd.testing.assert_frame_equal(X, result)
+
+
+def test_fcmcentroidimputer_fit_raises_if_too_many_clusters():
+    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMCentroidImputer(n_clusters=5)
+    with pytest.raises(ValueError, match="n_clusters cannot be larger than the number of complete rows"):
+        imputer.fit(X)
+
+
+def test_fcmcentroidimputer_fit_no_complete_rows():
+    X = pd.DataFrame({"a": [np.nan, np.nan], "b": [np.nan, np.nan]})
+    imputer = FCMCentroidImputer()
+    with pytest.raises(ValueError, match="No complete rows found for fitting"):
+        imputer.fit(X)
 
 
 def test_fcmparameterimputer_fit_creates_attributes():
@@ -289,12 +314,27 @@ def test_fcmparameterimputer_fit_creates_attributes():
     assert hasattr(imputer, "feature_names_in_")
 
 
-def test_fcmparameterimputer_transform_imputes_values():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [4.0, 5.0, np.nan]})
+@pytest.mark.parametrize("X", dataframes_list)
+def test_fcmparameterimputer_transform_imputes_values(X):
     imputer = FCMParameterImputer()
     imputer.fit(X.dropna())
     result = imputer.transform(X)
     assert not result.isna().any().any()
+
+
+def test_fcmparameterimputer_fit_raises_if_too_many_clusters():
+    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMParameterImputer(n_clusters=5)
+    with pytest.raises(ValueError, match="n_clusters cannot be larger than the number of complete rows"):
+        imputer.fit(X)
+
+
+def test_fcmparameterimputer_feature_names_in_assigned():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0], 
+                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    imputer = FCMParameterImputer()
+    imputer.fit(X)
+    assert list(imputer.feature_names_in_) == list(X.columns)
 
 
 def test_fcmroughparameterimputer_fit_creates_clusters():
@@ -306,12 +346,20 @@ def test_fcmroughparameterimputer_fit_creates_clusters():
     assert hasattr(imputer, "clusters_")
 
 
-def test_fcmroughparameterimputer_transform_imputes_values():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0], "b": [4.0, 5.0, np.nan]})
+@pytest.mark.parametrize("X", dataframes_list)
+def test_fcmroughparameterimputer_transform_imputes_values(X):
     imputer = FCMRoughParameterImputer()
     imputer.fit(X.dropna())
     result = imputer.transform(X)
     assert not result.isna().any().any()
+
+
+def test_fcmroughparameterimputer_fit_raises_if_too_many_clusters():
+    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMRoughParameterImputer(n_clusters=5)
+    with pytest.raises(ValueError, match="n_clusters cannot be larger than the number of complete rows"):
+        imputer.fit(X)
+
 
 @pytest.mark.parametrize(
     "params, expected_exception, expected_msg",

@@ -48,6 +48,10 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True):
 
     X = pd.DataFrame(X)
 
+    complete_rows = X.dropna(how="any")
+    if complete_rows.empty:
+        raise ValueError("No complete rows found for fitting.")
+
     if require_numeric and not all(pd.api.types.is_numeric_dtype(dt) for dt in X.dtypes):
         raise TypeError("All columns must be numeric.")
 
@@ -157,6 +161,9 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int 
         centers (np.ndarray): cluster centers
         u (np.ndarray): membership matrix (n_samples x n_clusters)
     """
+    if isinstance(X, pd.DataFrame):
+        X = X.to_numpy()
+    
     n_samples, n_features = X.shape
 
     rng = np.random.default_rng(random_state)
@@ -188,6 +195,10 @@ def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, 
     Rough K-Means
     Applied after FCM clustering (using its centroids as initialization).
     """
+
+    if isinstance(X, pd.DataFrame):
+        X = X.to_numpy()
+    
     n_samples = X.shape[0]
     n_clusters = center_init.shape[0]
     centers = center_init.copy()
@@ -469,7 +480,7 @@ def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters=2, max_clusters=10
 
     for k in k_values:
         np.random.seed(random_state)
-        centers, u = fuzzy_c_means(X.values, n_clusters=k, v=m, random_state=random_state)
+        centers, u = fuzzy_c_means(X.values, n_clusters=k, m=m, random_state=random_state)
 
         obj = compute_fcm_objective(X, centers, u, m)
         objective_values.append(obj)
