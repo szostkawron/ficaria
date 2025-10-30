@@ -93,6 +93,21 @@ def test_fuzzy_c_means_converges_reasonably():
     assert np.linalg.norm(centers[0] - centers[1]) > 1.0
 
 
+def test_fuzzy_c_means_same_random_state_reproducible():
+    X = np.array([[1, 2], [3, 4], [5, 6], [8, 9]])
+    n_clusters = 3
+
+    centers_1, memberships_1 = fuzzy_c_means(
+        X, n_clusters=n_clusters, m=2.0, max_iter=50, tol=1e-4, random_state=42
+    )
+    centers_2, memberships_2 = fuzzy_c_means(
+        X, n_clusters=n_clusters, m=2.0, max_iter=50, tol=1e-4, random_state=42
+    )
+
+    np.testing.assert_allclose(centers_1, centers_2, rtol=1e-8, atol=1e-8)
+    np.testing.assert_allclose(memberships_1, memberships_2, rtol=1e-8, atol=1e-8)
+
+
 
 # ----- rough_kmeans_from_fcm -----------------------------------------------
 

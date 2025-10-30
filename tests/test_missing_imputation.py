@@ -275,6 +275,25 @@ def test_fcmcentroidimputer_fit_creates_attributes():
     assert imputer.centers_.shape[1] == X.shape[1]
 
 
+def test_fcmcentroidimputer_transform_raises_if_not_fitted():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0], 
+                    "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    imputer = FCMCentroidImputer()
+    with pytest.raises(AttributeError, match="fit must be called before transform"):
+        imputer.transform(X)
+
+
+def test_fcmcentroidimputer_transform_raises_if_columns_differ():
+    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
+    
+    imputer = FCMCentroidImputer()
+    imputer.fit(X_train)
+    
+    with pytest.raises(ValueError, match="Columns in transform do not match columns seen during fit"):
+        imputer.transform(X_test)
+
+
 @pytest.mark.parametrize("X", dataframes_list)
 def test_fcmcentroidimputer_transform_imputes_missing_values(X):
     imputer = FCMCentroidImputer()
@@ -359,6 +378,27 @@ def test_fcmroughparameterimputer_fit_raises_if_too_many_clusters():
     imputer = FCMRoughParameterImputer(n_clusters=5)
     with pytest.raises(ValueError, match="n_clusters cannot be larger than the number of complete rows"):
         imputer.fit(X)
+
+
+@pytest.mark.parametrize("imputer_class", [
+    FCMCentroidImputer,
+    FCMParameterImputer,
+    FCMRoughParameterImputer,
+])
+def test_imputers_same_random_state_reproducible(imputer_class):
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0], 
+                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+
+    imputer_1 = imputer_class(random_state=99)
+    imputer_2 = imputer_class(random_state=99)
+
+    imputer_1.fit(X)
+    imputer_2.fit(X)
+
+    result_1 = imputer_1.transform(X)
+    result_2 = imputer_2.transform(X)
+
+    pd.testing.assert_frame_equal(result_1, result_2, check_exact=False, atol=1e-8)
 
 
 @pytest.mark.parametrize(

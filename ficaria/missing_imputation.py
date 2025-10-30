@@ -51,12 +51,22 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
             tol=self.tol,
             random_state=self.random_state
         )
+
+        self.feature_names_in_ = list(X.columns)
+
         return self
 
     def transform(self, X):
         """
         Impute missing values using nearest cluster centroid.
         """
+        
+        if not hasattr(self, "centers_") or not hasattr(self, "memberships_"):
+            raise AttributeError("fit must be called before transform.")
+
+        if list(X.columns) != list(self.feature_names_in_):
+            raise ValueError("Columns in transform do not match columns seen during fit")
+
         X = check_input_dataset(X, require_numeric=True)
         _, incomplete = split_complete_incomplete(X)
 
@@ -129,7 +139,8 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
             random_state=self.random_state
         )
 
-        self.feature_names_in_ = complete.columns
+        self.feature_names_in_ = list(X.columns)
+
         return self
 
     def transform(self, X):
@@ -138,6 +149,12 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         Each missing value is the weighted sum of all centroids
         based on membership values.
         """
+        if not hasattr(self, "centers_") or not hasattr(self, "memberships_"):
+            raise AttributeError("fit must be called before transform.")
+        
+        if list(X.columns) != list(self.feature_names_in_):
+            raise ValueError("Columns in transform do not match columns seen during fit")
+        
         X = check_input_dataset(X, require_numeric=True).copy()
         _, incomplete = split_complete_incomplete(X)
 
@@ -223,6 +240,8 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
                     max_iter=self.max_iter,
                     tol=self.tol
                 )
+        
+        self.feature_names_in_ = list(X.columns)
 
         return self
 
@@ -230,6 +249,13 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         Impute missing values using rough parameter-based FCM method.
         """
+        if not hasattr(self, "centers_") or not hasattr(self, "memberships_") or not hasattr(self, "clusters_"):
+            raise AttributeError("fit must be called before transform")
+
+        if list(X.columns) != list(self.feature_names_in_):
+            raise ValueError("Columns in transform do not match columns seen during fit")
+
+        
         X = check_input_dataset(X, require_numeric=True)
 
         _, incomplete = split_complete_incomplete(X)
