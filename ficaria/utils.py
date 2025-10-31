@@ -194,6 +194,26 @@ def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, 
     """
     Rough K-Means
     Applied after FCM clustering (using its centroids as initialization).
+    Each cluster is represented by a lower and an upper approximation, allowing
+    samples in boundary regions to belong to multiple clusters when uncertainty exists.
+    The algorithm starts from FCM centroids and iteratively updates cluster centers
+    using weighted means of lower and boundary regions.
+
+    Parameters:
+        X (np.ndarray): data matrix (n_samples x n_features)
+        memberships (np.ndarray): Membership matrix from FCM (n_samples, n_clusters)
+        center_init (np.ndarray): Initial cluster centers (n_clusters x n_features) - output of FCM
+        wl (float): weight for the lower approximation 
+        wb (float): weight for the boundary region 
+        tau (float): threshold controlling assignment of samples to lower or boundary regions
+        max_iter (int): maximum number of iterations for updating cluster centers
+        tol (float): Convergence tolerance; the algorithm stops if the shift in cluster centers is below this threshold.
+
+    Returns:
+        list of tuples: Each tuple represents one cluster and contains:
+            - lower (np.ndarray): Samples in the lower approximation of the cluster.
+            - upper (np.ndarray): Samples in the upper (boundary) approximation.
+            - center (np.ndarray): Final cluster center vector.
     """
 
     if isinstance(X, pd.DataFrame):

@@ -215,6 +215,7 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
     np.testing.assert_array_equal(result, result2)
 
 
+
 dataframes_list = [
     pd.DataFrame({
         "a": [1.0, 2.0, 3.0, np.nan, 5.0],
@@ -247,15 +248,14 @@ dataframes_list = [
     }),
 ]
 
+fcm_params_list = [
+    (2, 2.0, 100, 1e-3),
+    (2, 1.5, 150, 1e-5),
+    (3, 2.5, 300, 1e-6),
+    (3, 3.0, 600, 1e-4),
+]
 
-@pytest.mark.parametrize(
-    "n_clusters,m,max_iter,tol",
-    [
-        (2, 2.0, 100, 1e-3),
-        (3, 1.5, 150, 1e-5),
-        (4, 2.5, 200, 1e-4),
-    ],
-)
+@pytest.mark.parametrize("n_clusters,m,max_iter,tol", fcm_params_list)
 def test_fcmcentroidimputer_init_parametrized(n_clusters, m, max_iter, tol):
     imputer = FCMCentroidImputer(
         n_clusters=n_clusters, m=m, max_iter=max_iter, tol=tol
@@ -385,12 +385,13 @@ def test_fcmroughparameterimputer_fit_raises_if_too_many_clusters():
     FCMParameterImputer,
     FCMRoughParameterImputer,
 ])
-def test_imputers_same_random_state_reproducible(imputer_class):
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0], 
-                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+@pytest.mark.parametrize("X", dataframes_list)
+@pytest.mark.parametrize("n_clusters,m,max_iter,tol", fcm_params_list)
+@pytest.mark.parametrize("random_state", [42, 99, 120])
+def test_imputers_same_random_state_reproducible(imputer_class, X, n_clusters, m, max_iter, tol, random_state):
 
-    imputer_1 = imputer_class(random_state=99)
-    imputer_2 = imputer_class(random_state=99)
+    imputer_1 = imputer_class(n_clusters=n_clusters, m=m, max_iter=max_iter, tol=tol, random_state=random_state)
+    imputer_2 = imputer_class(n_clusters=n_clusters, m=m, max_iter=max_iter, tol=tol, random_state=random_state)
 
     imputer_1.fit(X)
     imputer_2.fit(X)
