@@ -1,10 +1,12 @@
 from sklearn.base import BaseEstimator, TransformerMixin
-
 from .utils import *
 
 
+# --------------------------------------
+# FCMCentroidImputer
+# --------------------------------------
 class FCMCentroidImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, v=2.0, max_iter=100, tol=1e-5):
+    def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, random_state=None):
         """
         Fuzzy C-Means centroid-based imputer.
 
@@ -17,31 +19,55 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
             max_iter (int): maximum number of FCM iterations
             tol (float): convergence tolerance
         """
+        validate_params({
+            'n_clusters': n_clusters,
+            'm': m,
+            'max_iter': max_iter,
+            'tol': tol,
+            'random_state': random_state
+        })
+
         self.n_clusters = n_clusters
-        self.v = v
+        self.m = m
         self.max_iter = max_iter
         self.tol = tol
+        self.random_state = random_state
+
 
     def fit(self, X, y=None):
         """
         Fit the FCM imputer on complete data only.
         """
-        X = check_input_dataset(X)
+        X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
+        if self.n_clusters > len(complete):
+            raise ValueError("n_clusters cannot be larger than the number of complete rows")
+
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
             n_clusters=self.n_clusters,
-            v=self.v,
+            m=self.m,
             max_iter=self.max_iter,
-            tol=self.tol
+            tol=self.tol,
+            random_state=self.random_state
         )
+
+        self.feature_names_in_ = list(X.columns)
+
         return self
 
     def transform(self, X):
         """
         Impute missing values using nearest cluster centroid.
         """
-        X = check_input_dataset(X)
+        
+        if not hasattr(self, "centers_") or not hasattr(self, "memberships_"):
+            raise AttributeError("fit must be called before transform.")
+
+        if list(X.columns) != list(self.feature_names_in_):
+            raise ValueError("Columns in transform do not match columns seen during fit")
+
+        X = check_input_dataset(X, require_numeric=True)
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -61,8 +87,12 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         return X_imputed
 
 
+
+# --------------------------------------
+# FCMParameterImputer
+# --------------------------------------
 class FCMParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, v=2.0, max_iter=150, tol=1e-5, random_state=None):
+    def __init__(self, n_clusters=3, m=2.0, max_iter=150, tol=1e-5, random_state=None):
         """
         Fuzzy C-Means Parameter-based Imputation.
         
@@ -75,26 +105,42 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
             max_iter (int): maximum number of FCM iterations
             tol (float): convergence tolerance
         """
+        validate_params({
+            'n_clusters': n_clusters,
+            'm': m,
+            'max_iter': max_iter,
+            'tol': tol,
+            'random_state': random_state
+        })
+
         self.n_clusters = n_clusters
-        self.v = v
+        self.m = m
         self.max_iter = max_iter
         self.tol = tol
+        self.random_state = random_state
+
 
     def fit(self, X, y=None):
         """
         Fit the FCM imputer on complete data only.
         """
-        X = check_input_dataset(X)
+        X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
+        
+        if self.n_clusters > len(complete):
+            raise ValueError("n_clusters cannot be larger than the number of complete rows")
+
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
             n_clusters=self.n_clusters,
-            v=self.v,
+            m=self.m,
             max_iter=self.max_iter,
-            tol=self.tol
+            tol=self.tol,
+            random_state=self.random_state
         )
 
-        self.feature_names_in_ = complete.columns
+        self.feature_names_in_ = list(X.columns)
+
         return self
 
     def transform(self, X):
@@ -103,7 +149,13 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         Each missing value is the weighted sum of all centroids
         based on membership values.
         """
-        X = check_input_dataset(X).copy()
+        if not hasattr(self, "centers_") or not hasattr(self, "memberships_"):
+            raise AttributeError("fit must be called before transform.")
+        
+        if list(X.columns) != list(self.feature_names_in_):
+            raise ValueError("Columns in transform do not match columns seen during fit")
+        
+        X = check_input_dataset(X, require_numeric=True).copy()
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -117,7 +169,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
             dist = np.array([euclidean_distance(obs, center) for center in self.centers_])
             dist = np.fmax(dist, 1e-10)
 
-            u = 1 / np.sum((dist[:, None] / dist[None, :]) ** (2 / (self.v - 1)), axis=1)
+            u = 1 / np.sum((dist[:, None] / dist[None, :]) ** (2 / (self.m - 1)), axis=1)
 
             missing_cols = row[row.isna()].index
             for col in missing_cols:
@@ -126,44 +178,70 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         return X_imputed
 
 
+
+# --------------------------------------
+# FCMRoughParameterImputer
+# --------------------------------------
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, v=2.0, max_iter=100, tol=1e-5, lower_threshold=0.5):
+    def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
         """
         Fuzzy C-Means Rough Parameter-based imputer.
         
         Each missing value is imputed using information from the 
         lower or upper approximation of the nearest fuzzy cluster.
         """
+        validate_params({
+            'n_clusters': n_clusters,
+            'm': m,
+            'max_iter': max_iter,
+            'tol': tol,
+            'wl': wl,
+            'wb': wb,
+            'tau': tau,
+            'random_state': random_state
+        })
+
         self.n_clusters = n_clusters
-        self.v = v
+        self.m = m
         self.max_iter = max_iter
         self.tol = tol
-        self.lower_threshold = lower_threshold
+        self.wl = wl
+        self.wb = wb
+        self.tau = tau
+        self.random_state = random_state
 
     def fit(self, X, y=None):
         """
         Fit the imputer on complete data.
         """
-        X = check_input_dataset(X)
+        X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
-        complete_array = complete.to_numpy()
+        
+        if self.n_clusters > len(complete):
+            raise ValueError("n_clusters cannot be larger than the number of complete rows")
 
+        complete_array = complete.to_numpy()
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete_array,
             n_clusters=self.n_clusters,
-            v=self.v,
+            m=self.m,
             max_iter=self.max_iter,
-            tol=self.tol
+            tol=self.tol,
+            random_state=self.random_state
         )
 
-        self.lower_upper_ = []
-        for k in range(self.n_clusters):
-            cluster_memberships = self.memberships_[:, k]
-            cluster_data = (complete_array, cluster_memberships)
-            lower, upper = compute_lower_upper_approximation(
-                cluster_data, threshold=self.lower_threshold
-            )
-            self.lower_upper_.append((lower, upper))
+        self.clusters_ = rough_kmeans_from_fcm(
+                    complete_array,
+                    self.memberships_,
+                    self.centers_,
+                    wl=self.wl,
+                    wb=self.wb,
+                    tau=self.tau,
+                    max_iter=self.max_iter,
+                    tol=self.tol
+                )
+        
+        self.feature_names_in_ = list(X.columns)
 
         return self
 
@@ -171,7 +249,15 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         Impute missing values using rough parameter-based FCM method.
         """
-        X = check_input_dataset(X)
+        if not hasattr(self, "centers_") or not hasattr(self, "memberships_") or not hasattr(self, "clusters_"):
+            raise AttributeError("fit must be called before transform")
+
+        if list(X.columns) != list(self.feature_names_in_):
+            raise ValueError("Columns in transform do not match columns seen during fit")
+
+        
+        X = check_input_dataset(X, require_numeric=True)
+
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -185,24 +271,31 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
             distances = np.array([euclidean_distance(obs, center) for center in self.centers_])
             nearest_idx = np.argmin(distances)
 
-            lower, upper = self.lower_upper_[nearest_idx]
-            approx_type = find_nearest_approximation(obs, lower, upper)
+            lower, upper, center = self.clusters_[nearest_idx]
 
-            if approx_type == 'lower' and lower.shape[0] > 0:
-                approx_data = lower
-            elif approx_type == 'upper' and upper.shape[0] > 0:
+            if len(lower) == 0:
                 approx_data = upper
+            elif len(upper) == 0:
+                approx_data = lower
             else:
-                approx_data = np.array([self.centers_[nearest_idx]])
+                dist_to_lower = np.mean([euclidean_distance(obs, x) for x in lower]) if len(lower) > 0 else np.inf
+                dist_to_upper = np.mean([euclidean_distance(obs, x) for x in upper]) if len(upper) > 0 else np.inf
+                approx_data = lower if dist_to_lower <= dist_to_upper else upper
 
             missing_cols = row[row.isna()].index
             for col in missing_cols:
                 col_idx = X.columns.get_loc(col)
+
+                approx_data = np.atleast_2d(approx_data)
                 X_imputed.at[idx, col] = np.mean(approx_data[:, col_idx])
 
         return X_imputed
 
 
+
+# --------------------------------------
+# KIImputer
+# --------------------------------------
 class KIImputer(BaseEstimator, TransformerMixin):
     """
     KIImputer: Hybrid KNN + Iterative Imputer for Missing Data.
@@ -231,6 +324,10 @@ class KIImputer(BaseEstimator, TransformerMixin):
         return X_imputed
 
 
+
+# --------------------------------------
+# FCMKIterativeImputer
+# --------------------------------------
 class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
     """
    Hybrid imputer combining fuzzy c-means clustering, k-nearest neighbors, and iterative imputation.
@@ -273,7 +370,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         self.centers_, self.u_ = fuzzy_c_means(
             X_filled.values,
             n_clusters=self.optimal_c_,
-            v=self.m,
+            m=self.m,
             random_state=self.random_state,
         )
 
