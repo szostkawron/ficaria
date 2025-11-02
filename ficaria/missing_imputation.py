@@ -38,7 +38,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
         Fit the FCM imputer on complete data only.
         """
-        X = check_input_dataset(X, require_numeric=True)
+        X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
         if self.n_clusters > len(complete):
             raise ValueError("n_clusters cannot be larger than the number of complete rows")
@@ -124,7 +124,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         """
         Fit the FCM imputer on complete data only.
         """
-        X = check_input_dataset(X, require_numeric=True)
+        X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
         
         if self.n_clusters > len(complete):
@@ -214,7 +214,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         Fit the imputer on complete data.
         """
-        X = check_input_dataset(X, require_numeric=True)
+        X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
         
         if self.n_clusters > len(complete):

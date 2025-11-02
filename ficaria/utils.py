@@ -24,7 +24,7 @@ def split_complete_incomplete(X: pd.DataFrame):
 
 
 
-def check_input_dataset(X, require_numeric=False, allow_nan=True):
+def check_input_dataset(X, require_numeric=False, allow_nan=True, require_complete_rows=False):
     """
     Convert input to DataFrame and check the validity of the dataset
 
@@ -49,7 +49,7 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True):
     X = pd.DataFrame(X)
 
     complete_rows = X.dropna(how="any")
-    if complete_rows.empty:
+    if require_complete_rows and complete_rows.empty:
         raise ValueError("No complete rows found for fitting.")
 
     if require_numeric and not all(pd.api.types.is_numeric_dtype(dt) for dt in X.dtypes):
