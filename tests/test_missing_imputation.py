@@ -4,7 +4,9 @@ import pytest
 from sklearn.exceptions import NotFittedError
 from sklearn.impute import SimpleImputer
 
-from ficaria.missing_imputation import KIImputer, FCMKIterativeImputer
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from ficaria.missing_imputation import *
 
 
 @pytest.mark.parametrize("random_state", [

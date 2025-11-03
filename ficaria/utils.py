@@ -1,5 +1,8 @@
 import numpy as np
 import pandas as pd
+import random
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer, SimpleImputer
 from kneed import KneeLocator
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
@@ -21,7 +24,8 @@ def split_complete_incomplete(X: pd.DataFrame):
     return complete, incomplete
 
 
-def check_input_dataset(X, require_numeric=False, allow_nan=True):
+
+def check_input_dataset(X, require_numeric=False, allow_nan=True, require_complete_rows=False):
     """
     Convert input to DataFrame and check the validity of the dataset
 
@@ -47,6 +51,10 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True):
 
     if X.empty:
         raise ValueError("Invalid input: Input dataset is empty")
+        
+    complete_rows = X.dropna(how="any")
+    if require_complete_rows and complete_rows.empty:
+        raise ValueError("No complete rows found for fitting.")
 
     if require_numeric and not all(pd.api.types.is_numeric_dtype(dt) for dt in X.dtypes):
         raise TypeError("Invalid input: Input dataset contains not numeric values")
@@ -55,6 +63,74 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True):
         raise ValueError("Invalid input: Input dataset contains missing values")
 
     return X
+
+
+def validate_params(params):
+    """
+    Validate parameters.
+
+    Parameters:
+        params (dict): Dictionary of parameter names and values
+
+    Raises:
+        TypeError, ValueError: If any parameter is invalid.
+    """
+
+    if 'n_clusters' in params:
+        n_clusters = params['n_clusters']
+        if not isinstance(n_clusters, int):
+            raise TypeError(f"Invalid type for n_clusters: {type(n_clusters).__name__}. Must be int.")
+        if n_clusters < 1:
+            raise ValueError(f"Invalid value for n_clusters: {n_clusters}. Must be >= 1.")
+
+    if 'max_iter' in params:
+        max_iter = params['max_iter']
+        if not isinstance(max_iter, int):
+            raise TypeError(f"Invalid type for max_iter: {type(max_iter).__name__}. Must be int.")
+        if max_iter < 1:
+            raise ValueError(f"Invalid value for max_iter: {max_iter}. Must be >= 1.")
+
+    if 'random_state' in params:
+        rs = params['random_state']
+        if rs is not None and not isinstance(rs, int):
+            raise TypeError(f"Invalid type for random_state: {type(rs).__name__}. Must be int or None.")
+
+    if 'm' in params:
+        m = params['m']
+        if not isinstance(m, (int, float)):
+            raise TypeError(f"Invalid type for m: {type(m).__name__}. Must be float.")
+        if m <= 1.0:
+            raise ValueError(f"Invalid value for m: {m}. Must be > 1.0.")
+
+    if 'tol' in params:
+        tol = params['tol']
+        if not isinstance(tol, (int, float)):
+            raise TypeError(f"Invalid type for tol: {type(tol).__name__}. Must be float.")
+        if tol <= 0:
+            raise ValueError(f"Invalid value for tol: {tol}. Must be > 0.")
+
+    if 'wl' in params:
+        wl = params['wl']
+        if not isinstance(wl, (int, float)):
+            raise TypeError(f"Invalid type for wl: {type(wl).__name__}. Must be int or float.")
+        if wl <= 0 or wl > 1:
+            raise ValueError(f"Invalid value for wl: {wl}. Must be in range (0, 1].")
+
+    if 'wb' in params:
+        wb = params['wb']
+        if not isinstance(wb, (int, float)):
+            raise TypeError(f"Invalid type for wb: {type(wb).__name__}. Must be int or float.")
+        if wb < 0 or wb > 1:
+            raise ValueError(f"Invalid value for wb: {wb}. Must be in range [0, 1].")
+
+    if 'tau' in params:
+        tau = params['tau']
+        if not isinstance(tau, (int, float)):
+            raise TypeError(f"Invalid type for tau: {type(tau).__name__}. Must be int or float.")
+        if tau < 0:
+            raise ValueError(f"Invalid value for tau: {tau}. Must be >= 0.")
+
+
 
 
 def euclidean_distance(a: np.ndarray, b: np.ndarray):
@@ -71,7 +147,8 @@ def euclidean_distance(a: np.ndarray, b: np.ndarray):
     return np.linalg.norm(a[mask] - b[mask])
 
 
-def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
+
+def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
                   random_state=None):
     """
     Fuzzy C-Means clustering algorithm.
@@ -88,6 +165,9 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
         centers (np.ndarray): cluster centers
         u (np.ndarray): membership matrix (n_samples x n_clusters)
     """
+    if isinstance(X, pd.DataFrame):
+        X = X.to_numpy()
+    
     n_samples, n_features = X.shape
 
     rng = np.random.default_rng(random_state)
@@ -97,7 +177,7 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
     for iteration in range(max_iter):
         u_old = u.copy()
 
-        uv = u ** v
+        uv = u ** m
         centers = (uv.T @ X) / np.sum(uv.T, axis=1)[:, None]
 
         dist = np.zeros((n_samples, n_clusters))
@@ -105,12 +185,111 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, v: float = 2.0, max_iter: int 
             dist[:, j] = np.linalg.norm(X - centers[j], axis=1)
         dist = np.fmax(dist, 1e-10)
 
-        u = 1 / np.sum((dist[:, :, None] / dist[:, None, :]) ** (2 / (v - 1)), axis=2)
+        u = 1 / np.sum((dist[:, :, None] / dist[:, None, :]) ** (2 / (m - 1)), axis=2)
 
         if np.linalg.norm(u - u_old) < tol:
             break
 
     return centers, u
+
+
+
+def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter=100, tol=1e-4):
+    """
+    Rough K-Means
+    Applied after FCM clustering (using its centroids as initialization).
+    Each cluster is represented by a lower and an upper approximation, allowing
+    samples in boundary regions to belong to multiple clusters when uncertainty exists.
+    The algorithm starts from FCM centroids and iteratively updates cluster centers
+    using weighted means of lower and boundary regions.
+
+    Parameters:
+        X (np.ndarray): data matrix (n_samples x n_features)
+        memberships (np.ndarray): Membership matrix from FCM (n_samples, n_clusters)
+        center_init (np.ndarray): Initial cluster centers (n_clusters x n_features) - output of FCM
+        wl (float): weight for the lower approximation 
+        wb (float): weight for the boundary region 
+        tau (float): threshold controlling assignment of samples to lower or boundary regions
+        max_iter (int): maximum number of iterations for updating cluster centers
+        tol (float): Convergence tolerance; the algorithm stops if the shift in cluster centers is below this threshold.
+
+    Returns:
+        list of tuples: Each tuple represents one cluster and contains:
+            - lower (np.ndarray): Samples in the lower approximation of the cluster.
+            - upper (np.ndarray): Samples in the upper (boundary) approximation.
+            - center (np.ndarray): Final cluster center vector.
+    """
+
+    if isinstance(X, pd.DataFrame):
+        X = X.to_numpy()
+    
+    n_samples = X.shape[0]
+    n_clusters = center_init.shape[0]
+    centers = center_init.copy()
+
+    lower_sets = [[] for _ in range(n_clusters)]
+    upper_sets = [[] for _ in range(n_clusters)]
+
+    init_labels = np.argmax(memberships, axis=1)
+    for i, lbl in enumerate(init_labels):
+        lower_sets[lbl].append(i)
+        upper_sets[lbl].append(i)
+
+    for iteration in range(max_iter):
+
+        new_centers = np.zeros_like(centers)
+        for k in range(n_clusters):
+            lower_idx = lower_sets[k]
+            upper_idx = upper_sets[k]
+            boundary_idx = list(set(upper_idx) - set(lower_idx))
+
+            if len(lower_idx) == 0:
+                new_centers[k] = centers[k]
+                continue
+
+            lower_mean = np.mean(X[lower_idx], axis=0)
+
+            if len(boundary_idx) > 0:
+                boundary_mean = np.mean(X[boundary_idx], axis=0)
+                new_centers[k] = wl * lower_mean + wb * boundary_mean
+            else:
+                new_centers[k] = lower_mean
+
+        new_lower_sets = [[] for _ in range(n_clusters)]
+        new_upper_sets = [[] for _ in range(n_clusters)]
+
+        for i, x in enumerate(X):
+            distances = np.array([euclidean_distance(x, c) for c in new_centers])
+            h = np.argmin(distances)
+            dmin = distances[h]
+
+            new_upper_sets[h].append(i)
+
+            for k in range(n_clusters):
+                if k != h and (distances[k] - dmin) <= tau:
+                    new_upper_sets[k].append(i)
+
+            count_upper = sum([i in new_upper_sets[k] for k in range(n_clusters)])
+            if count_upper == 1:
+                new_lower_sets[h].append(i)
+
+        shift = np.linalg.norm(new_centers - centers)
+
+        if shift < tol:
+            break
+
+        centers = new_centers
+        lower_sets = new_lower_sets
+        upper_sets = new_upper_sets
+
+    clusters = []
+    for k in range(n_clusters):
+        lower = X[lower_sets[k]] if len(lower_sets[k]) > 0 else np.array([])
+        upper = X[upper_sets[k]] if len(upper_sets[k]) > 0 else np.array([])
+        clusters.append((lower, upper, centers[k]))
+
+    return clusters
+
 
 
 def fcm_predict(X_new, centers, m=2.0):
@@ -135,56 +314,6 @@ def fcm_predict(X_new, centers, m=2.0):
 
     u_new = 1 / np.sum((dist[:, :, None] / dist[:, None, :]) ** (2 / (m - 1)), axis=2)
     return u_new
-
-
-def compute_lower_upper_approximation(cluster_data, threshold=0.5):
-    """
-    Compute lower and upper approximation of a cluster.
-    Objects with membership >= threshold are in lower approximation,
-    others (membership < threshold) are in upper approximation.
-    
-    Parameters:
-        cluster_data (tuple): (data, memberships) for the cluster
-        threshold (float): cutoff for lower approximation
-    
-    Returns:
-        lower (np.ndarray): rows in lower approximation
-        upper (np.ndarray): rows in upper approximation
-    """
-    X, memberships = cluster_data
-    lower_mask = memberships >= threshold
-    lower = X[lower_mask]
-    upper = X[~lower_mask]
-    return lower, upper
-
-
-def find_nearest_approximation(obs, lower, upper):
-    """
-    Determine if the object belongs to lower or upper approximation
-    based on distance to mean of each approximation.
-    
-    Parameters:
-        obs (np.ndarray): incomplete object
-        lower (np.ndarray)
-        upper (np.ndarray)
-        
-    Returns:
-        'lower' or 'upper'
-    """
-    if lower.shape[0] > 0:
-        dist_lower = np.min([euclidean_distance(obs, row) for row in lower])
-    else:
-        dist_lower = np.inf
-
-    if upper.shape[0] > 0:
-        dist_upper = np.min([euclidean_distance(obs, row) for row in upper])
-    else:
-        dist_upper = np.inf
-
-    if dist_lower <= dist_upper:
-        return 'lower'
-    else:
-        return 'upper'
 
 
 def get_neighbors(train: list[list[float]], test_row: list[float], k: int) -> list[list[float]]:
