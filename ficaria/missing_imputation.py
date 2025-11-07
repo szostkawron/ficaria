@@ -431,6 +431,9 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
     def fit(self, X, y=None):
         X = check_input_dataset(X, require_numeric=False)
         X = X.astype(object).where(pd.notna(X), np.nan)
+        for col in X.columns:
+            if pd.api.types.infer_dtype(X[col], skipna=True) in ["integer", "floating"]:
+                X[col] = X[col].astype(float)
 
         self.X_train_complete_, _ = split_complete_incomplete(X.copy())
 
