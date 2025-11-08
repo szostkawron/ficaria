@@ -430,11 +430,6 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         X = check_input_dataset(X, require_numeric=False)
-        X = X.astype(object).where(pd.notna(X), np.nan)
-        for col in X.columns:
-            if pd.api.types.infer_dtype(X[col], skipna=True) in ["integer", "floating"]:
-                X[col] = X[col].astype(float)
-
         self.X_train_complete_, _ = split_complete_incomplete(X.copy())
 
         if self.X_train_complete_.empty:
@@ -466,13 +461,10 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
             self.leaf_indices_[j] = tree.apply(X_without_j_column)
             self.trees_[j] = tree
+        return self
 
     def transform(self, X):
         X = check_input_dataset(X, require_numeric=False)
-        X = X.astype(object).where(pd.notna(X), np.nan)
-        for col in X.columns:
-            if pd.api.types.infer_dtype(X[col], skipna=True) in ["integer", "floating"]:
-                X[col] = X[col].astype(float)
         check_is_fitted(self, attributes=["X_train_complete_"])
 
         if not X.columns.equals(self.X_train_complete_.columns):
@@ -495,10 +487,10 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         incomplete_leaf_indices_dict, imputed_X = self._initial_imputation_DT(incomplete_X.copy(), cols_with_nan)
 
         AV = np.inf
-        it = 1
         old_df = imputed_X.copy()
+        count_iter = 0
 
-        while AV > self.stop_threshold:
+        while AV > self.stop_threshold and count_iter < self.max_iter:
 
             for j in cols_with_nan:
                 leaf_for_j = [(idx, leaf_number) for (idx, j_key), leaf_number in incomplete_leaf_indices_dict.items()
@@ -510,7 +502,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
                                                                   fcm_function)
             new_df = imputed_X.copy()
             AV = self._calculate_AV(new_df, old_df, mask_missing)
-            it += 1
+            count_iter += 1
             old_df = new_df
 
         combined = pd.concat([complete_X, imputed_X]).sort_index()
@@ -581,6 +573,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
             ],
             remainder='passthrough'
         )
+        preprocessor.set_output(transform="pandas")
         preprocessor.fit(X)
         return preprocessor
 
@@ -610,7 +603,13 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
                 if pd.isnull(xi[j]):
                     xi_filled = pd.DataFrame([xi.copy()], columns=incomplete_X.columns)
                     if count_missing_values > 1:
-                        xi_filled = pd.DataFrame(self.imputer_.transform(xi_filled), columns=incomplete_X.columns)
+                        for col in self.X_train_complete_.columns:
+                            xi_filled[col] = xi_filled[col].astype(self.X_train_complete_[col].dtype)
+
+                        xi_imputed = self.imputer_.transform(xi_filled)
+                        xi_imputed.columns = self.imputer_.get_feature_names_out()
+                        xi_imputed.columns = [col.split("__")[-1] for col in xi_imputed.columns]
+                        xi_filled = xi_imputed[self.X_train_complete_.columns]
                         count_missing_values -= 1
                     tree = self.trees_[j]
 
@@ -621,7 +620,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
                             val = xi_without_j[col].iloc[0]
                             if isinstance(val, np.ndarray):
                                 val = val.item() if val.size == 1 else val[0]
-                            xi_without_j[col] = enc.transform([[val]])[0, 0]
+                            val_df = pd.DataFrame({col: [val]})
+                            xi_without_j[col] = enc.transform(val_df)[0, 0]
 
                     xi[j] = tree.predict(xi_without_j)
                     leaf_idx = tree.apply(xi_without_j)

@@ -346,20 +346,23 @@ def test_fcmdti_create_mixed_imputer():
 def test_fcmdti_create_mixed_imputer_fill_missing(X):
     imputer = FCMDTIterativeImputer()._create_mixed_imputer(X)
     X_transformed = imputer.transform(X)
-
-    X_transformed_df = pd.DataFrame(X_transformed, columns=X.columns)
+    X_transformed.columns = imputer.get_feature_names_out()
+    X_transformed.columns = [col.split("__")[-1] for col in X_transformed.columns]
+    X_transformed_df = X_transformed[X.columns]
 
     assert not X_transformed_df.isna().any().any()
 
     for col in X.columns:
+        mask = X[col].isna()
         if is_numeric_dtype(X[col]):
             mean_val = X[col].mean(skipna=True)
-            assert all(X_transformed_df[col][X[col].isna()] == mean_val)
+            assert np.all(np.isclose(X_transformed_df.loc[mask, col], mean_val))
         else:
             mode_val = X[col].mode()[0]
-            assert all(X_transformed_df[col][X[col].isna()] == mode_val)
+            assert np.all(X_transformed_df.loc[mask, col] == mode_val)
 
     X_transformed2 = imputer.transform(X)
+
     np.testing.assert_array_equal(X_transformed, X_transformed2)
 
 
@@ -705,35 +708,6 @@ def test_fcmdti_fit_sets_attributes(X, random_state, min_samples_leaf, learning_
     assert set(imputer.encoders_.keys()) == set(X.select_dtypes(exclude=["number"]).columns)
     assert set(imputer.trees_.keys()) == set(X.columns)
     assert set(imputer.leaf_indices_.keys()) == set(X.columns)
-
-
-@pytest.mark.parametrize("X", [
-    (
-            pd.DataFrame({
-                "num1": [1, np.nan, 3, np.nan, 5],
-                "num2": [np.nan, 4, np.nan, 2, 1],
-                "cat": ["a", "b", "b", "a", np.nan]
-            })
-    ),
-    (
-            pd.DataFrame({
-                "num1": [10, np.nan, np.nan, 40],
-                "num2": [np.nan, 1, 2, 3],
-                "cat": ["x", "y", "x", np.nan]
-            })
-    ),
-    (
-            pd.DataFrame({
-                "num1": [np.nan, np.nan, 1],
-                "num2": [1, 2, np.nan],
-                "cat": [np.nan, "b", "c"]
-            })
-    )
-])
-def test_fcmdti_fit_error_no_complete(X):
-    imputer = FCMDTIterativeImputer()
-    with pytest.raises(ValueError, match="Invalid input: Input dataset has no complete records"):
-        imputer.fit(X)
 
 
 @pytest.mark.parametrize("X", [

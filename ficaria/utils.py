@@ -228,13 +228,9 @@ def fuzzy_c_means_categorical(X: np.ndarray, n_clusters: int, m: float = 2.0, ma
 
                     centers.at[k, col_name] = values[np.argmax(weights)]
 
-        # print("weihts\n", weights)
-        print("centers\n", centers)
-        print("u\n", u)
         combined = pd.concat([X, centers], ignore_index=True)
         dist_matrix = gower_matrix(combined)
         dist = dist_matrix[:n_samples, n_samples:]
-        print("dist\n", dist)
 
         dist = np.fmax(dist, 1e-10)
 
