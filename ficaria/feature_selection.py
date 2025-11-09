@@ -2,11 +2,14 @@ import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, pairwise_distances
 from sklearn.preprocessing import MinMaxScaler
 from typing import List, Dict, Tuple, Optional, Any
 
 
+# --------------------------------------
+# FuzzyGranularitySelector
+# --------------------------------------
 class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixin):
     def __init__(self, classifier, eps: float = 0.1, d: int = 100, sigma: int = 3):
         """
@@ -460,3 +463,360 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
                 FIE_ds = self._calculate_multi_granularity_fuzzy_implication_entropy([self.D[0]], type='conditional' , T=S)
 
         return S
+
+
+
+# --------------------------------------
+# WeightedFuzzyRoughSelector
+# --------------------------------------
+class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
+    def __init__(self, n_features=10, alpha=1.0, k=5):
+        self.n_features = n_features
+        self.alpha = alpha
+        self.k = k
+        self.W = None
+        self.selected_features_ = None
+        self.feature_importances_ = None
+        self.feature_sequence_ = None
+        self.Rw_ = None
+    
+    
+    def fit(self, X, y):
+
+        H = self._identify_high_density_region(X)
+            
+        relations_single, relations_pair = self._compute_fuzzy_similarity_relations(X, H)
+        POS, NOG = self._compute_POS_NOG(relations_single, y, H)
+        relevance = self._compute_relevance(POS, NOG)
+        redundancy = self._compute_redundancy(X, y, H, relevance, relations_pair)
+        weights = self._compute_feature_weights(relevance, redundancy)
+        self.W = self._update_weight_matrix(weights, X.shape[1])
+        
+        self.feature_sequence_, self.Rw_ = self._build_weighted_feature_sequence(POS, NOG, weights, X, y, H, relations_single, relations_pair)
+        self.selected_features_ = self.feature_sequence_[:self.n_features]
+
+
+        self.feature_importances_ = pd.DataFrame({
+            'feature': X.columns[self.feature_sequence_],
+            'importance': np.diag(self.Rw_)[:len(self.feature_sequence_)]
+        }).sort_values(by='importance', ascending=False).reset_index(drop=True)
+
+        return self
+
+
+    def transform(self, X):
+        """
+        Reduce X to the best n_features selected during fit
+        """
+        if self.selected_features_ is None:
+            raise ValueError("The selector has not been fitted yet.")
+        return X.iloc[:, self.selected_features_]
+    
+
+    def _identify_high_density_region(self, X):
+        distances = self._compute_HEC(X)
+        knn_indices = np.argsort(distances, axis=1)[:, 1:self.k+1]
+        rho = self._compute_density(distances, knn_indices)
+        LDF = self._compute_LDF(rho, knn_indices)
+
+        H_indices = np.where(LDF <= 1)[0]
+        H_neighbors = np.unique(knn_indices[H_indices].flatten())
+        return H_neighbors
+    
+
+    def _compute_HEC(self, X, W=None):
+        """
+        Compute Hybrid Mahalanobis (HM) distance.
+        Supports numerical, categorical and mixed features, including missing values.
+        
+        Parameters:
+        X (pd.DataFrame): Input data with mixed features.
+        W (np.ndarray or None): Diagonal weight matrix W_B. If None, uses identity matrix.
+        
+        Returns:
+        distances (np.ndarray) Symmetric matrix of pairwise Hybrid distances (M_B(x,y)).
+        """
+        X = X.copy()
+        n_samples, n_features = X.shape
+
+        num_cols = X.select_dtypes(include=[np.number]).columns
+        cat_cols = X.select_dtypes(exclude=[np.number]).columns
+
+        if W is None:
+            W = np.eye(n_features)
+
+        distances = np.zeros((n_samples, n_samples))
+
+        for i in range(n_samples):
+            for j in range(i, n_samples):
+
+                diff_vector = []
+
+                for idx, col in enumerate(X.columns):
+                    xi, xj = X.iloc[i][col], X.iloc[j][col]
+
+                    # Handle missing values (NaN or None)
+                    if pd.isna(xi) or pd.isna(xj):
+                        diff = 1.0
+
+                    # Numerical attribute
+                    elif col in num_cols:
+                        diff = abs(float(xi) - float(xj))
+
+                    # Categorical attribute
+                    else:
+                        diff = 0.0 if xi == xj else 1.0
+
+                    diff_vector.append(diff)
+
+                diff_vector = np.array(diff_vector)
+
+                weighted_diff = diff_vector @ W @ diff_vector.T
+
+                distances[i, j] = np.sqrt(weighted_diff)
+                distances[j, i] = distances[i, j]
+
+        return distances
+    
+    
+    def _compute_density(self, distances, knn_indices):
+        """
+        Compute local density rho(x) for each sample.
+        """
+        n_samples = distances.shape[0]
+        rho = np.zeros(n_samples)
+        for i in range(n_samples):
+            neighbors = knn_indices[i]
+            rho[i] = (1 + len(neighbors)) / (1 + np.sum(distances[i, neighbors]))
+        return rho
+    
+
+    def _compute_LDF(self, rho, knn_indices):
+        """
+        Compute Local Density Factor (LDF) for each sample.
+        """
+        n_samples = len(rho)
+        LDF = np.zeros(n_samples)
+        for i in range(n_samples):
+            neighbors = knn_indices[i]
+            LDF[i] = np.mean(rho[neighbors] / rho[i])
+        return LDF
+
+
+    def _compute_fuzzy_similarity_relations(self, X, H, W=None):
+        """
+        Compute fuzzy similarity relations RM_{B}(x, y) for B = {a} and B = {a,b}
+        """
+        n_samples, n_features = X.shape
+        feature_indices = list(range(n_features))
+        relations_single = {}   # key: a → matrix [n_samples × len(H)]
+        relations_pair = {}     # key: (a,b) → matrix [n_samples × len(H)]
+        
+        for a in feature_indices:
+            # distance for B = {a}
+            dist_a = self._compute_HEC(X.iloc[:, [a]], W=W[np.ix_([a],[a])] if W is not None else None)
+            relations_single[a] = np.exp(- (dist_a ** 2) / (2 * self.alpha ** 2))
+        
+        for i, a in enumerate(feature_indices):
+            for b in feature_indices[i+1:]:
+                # distance for B = {a,b}
+                dist_ab = self._compute_HEC(X.iloc[:, [a, b]], W=W[np.ix_([a,b],[a,b])] if W is not None else None)
+                relations_pair[(a,b)] = np.exp(- (dist_ab ** 2) / (2 * self.alpha ** 2))
+        
+        return relations_single, relations_pair
+    
+
+    def _compute_relation_for_subset(self, X, H, feature_subset, W=None):
+        """
+        Compute fuzzy relation for a given feature subset
+        """
+        # Compute hybrid Mahalanobis distance for B ∪ {a}
+        dist = self._compute_HEC(X.iloc[:, feature_subset], 
+                                W=W[np.ix_(feature_subset, feature_subset)] if W is not None else None)
+        
+        # Fuzzy relation from Definition 4 (Gaussian kernel)
+        relation = np.exp(- (dist ** 2) / (2 * self.alpha ** 2))
+        return relation
+
+
+    def _compute_POS_NOG(self, relations_single, y, H):
+        """
+        Compute fuzzy Positive (POS) and Non-negative (NOG) regions.
+
+        Parameters:
+        ----------
+        relations (np.ndarray): Fuzzy relation matrix
+        y (np.ndarray): Class labels.
+        H (list[int]): Indices of high-density samples (subset of U)
+
+        Returns:
+        POS (np.ndarray): Fuzzy positive region values for each sample.
+        NOG (np.ndarray): Fuzzy non-negative region values for each sample.
+        """
+        n_samples = len(y)
+        classes = np.unique(y)
+        POS_all = {}
+        NOG_all = {}
+
+        H_mask = np.zeros(n_samples, dtype=bool)
+        H_mask[H] = True
+
+        for a, rel_matrix in relations_single.items():
+            lower_approx = np.zeros((n_samples, len(classes)))
+            upper_approx = np.zeros((n_samples, len(classes)))
+
+            for c_idx, c in enumerate(classes):
+                # Membership function: X(y) = 1 if y ∈ class D_i
+                Xy = (y == c).astype(float)
+
+                R_H = rel_matrix[:, H] 
+                Xy_H = Xy[H]
+
+                diag_mask = np.eye(len(H), dtype=bool)
+
+                for i in range(n_samples):
+                    mask_i = H_mask.copy()
+                    mask_i[i] = False
+                    R_xy = rel_matrix[i, mask_i]
+                    Xy_masked = Xy[mask_i]
+
+                    lower_approx[i, c_idx] = np.min(np.maximum(1 - R_xy, Xy_masked))
+                    upper_approx[i, c_idx] = np.max(np.minimum(R_xy, Xy_masked))
+
+            POS_all[a] = np.max(lower_approx, axis=1) # fuzzy positive region
+            NOG_all[a] = np.max(upper_approx, axis=1) # fuzzy non-negative region
+
+        return POS_all, NOG_all
+
+
+    def _compute_relevance(self, POS_all, NOG_all):
+        """
+        Compute relevance Rel(a) for each feature
+        """
+        relevance = {}
+        for a in POS_all.keys():
+            AM = POS_all[a] + NOG_all[a]
+            relevance[a] = np.mean(AM)
+        return relevance
+    
+
+    def _compute_redundancy(self, X, y, H, relevance, relations_pair):
+        """
+        Compute redundancy Red(a, b)
+        """
+        redundancy = {}
+        features = list(relevance.keys())
+        for (a, b), rel_matrix in relations_pair.items():
+            if a in features and b in features:
+                POS_ab, NOG_ab = self._compute_POS_NOG({0: rel_matrix}, y, H)
+                AM_ab = POS_ab[0] + NOG_ab[0]
+                Rel_ab = np.mean(AM_ab)
+                redundancy[(a, b)] = relevance[a] + relevance[b] - Rel_ab
+        return redundancy
+    
+
+    def _compute_feature_weights(self, relevance, redundancy):
+        """
+        Compute feature weights w(a)        
+        """
+        features = list(relevance.keys())
+        
+        rel_values = np.array(list(relevance.values()))
+        rel_min, rel_max = rel_values.min(), rel_values.max()
+        NR = {a: (relevance[a] - rel_min) / (rel_max - rel_min + 1e-12) for a in features}
+
+        if len(redundancy) > 0:
+            red_values = np.array(list(redundancy.values()))
+            red_min, red_max = red_values.min(), red_values.max()
+            NR_red = {k: (v - red_min) / (red_max - red_min + 1e-12) for k,v in redundancy.items()}
+        else:
+            NR_red = {}
+
+        weights = {}
+        for a in features:
+            sum_NR_red = 0
+            for b in features:
+                if a != b:
+                    key = (min(a,b), max(a,b))
+                    sum_NR_red += NR_red.get(key, 0)
+            weights[a] = NR[a] - sum_NR_red / max(len(features)-1, 1)
+        
+        return weights
+    
+
+    def _update_weight_matrix(self, weights, n_total_features):
+        """
+        Update W matrix using all feature indices (original indices from X)
+        """
+        W = np.zeros((n_total_features, n_total_features))
+        for a, w_a in weights.items():
+            W[a, a] = 1 / (1 + np.exp(-w_a))
+        return W
+
+
+    def _compute_gamma(self, POS_all, NOG_all, features):
+        """
+        Compute gamma_P and gamma_N for the current subset of features B.
+        """
+        POS_mean = np.mean([POS_all[a] for a in features], axis=0)
+        NOG_mean = np.mean([NOG_all[a] for a in features], axis=0)
+        gamma_P = np.mean(POS_mean)
+        gamma_N = np.mean(NOG_mean)
+        return gamma_P, gamma_N
+
+
+    def _compute_separability(self, X, y, H, W, selected_features, remaining_features):
+        """
+        Compute separability sig(a, B, D) for each candidate feature.
+        """
+        separability = {}
+        for a in remaining_features:
+            B_union_a = selected_features + [a]
+            relation_Ba = self._compute_relation_for_subset(X, H, B_union_a, W=W)
+            POS_Ba, NOG_Ba = self._compute_POS_NOG({0: relation_Ba}, y, H)
+            gamma_P, gamma_N = self._compute_gamma(POS_Ba, NOG_Ba, [0])
+            separability[a] = gamma_P - gamma_N
+        return separability
+
+
+    def _build_weighted_feature_sequence(self, POS_all, NOG_all, weights, X, y, H, relations_single, relations_pair):
+        """
+        Build the weighted feature sequence according to steps (16–26).
+        """
+        all_features = list(POS_all.keys())
+        selected_features = []
+        remaining_features = all_features.copy()
+        sequence = []
+
+        cached_POS = {}
+        cached_NOG = {}
+        
+        while len(remaining_features) > 0:
+            separability = self._compute_separability(X, y, H, self.W, selected_features, remaining_features)
+            best_feature = max(separability, key=separability.get)
+            selected_features.append(best_feature)
+            remaining_features.remove(best_feature)
+
+            POS_current = {}
+            NOG_current = {}
+            for f in selected_features:
+                if f in cached_POS:
+                    POS_current[f] = cached_POS[f]
+                    NOG_current[f] = cached_NOG[f]
+                else:
+                    POS_f, NOG_f = self._compute_POS_NOG({f: relations_single[f]}, y, H)
+                    POS_current[f] = POS_f[f]
+                    NOG_current[f] = NOG_f[f]
+                    cached_POS[f] = POS_current[f]
+                    cached_NOG[f] = NOG_current[f]
+
+            relevance = self._compute_relevance(POS_current, NOG_current)
+            redundancy = self._compute_redundancy(X, y, H, relevance, relations_pair)
+            weights = self._compute_feature_weights(relevance, redundancy)
+            self.W = self._update_weight_matrix(weights, X.shape[1])
+
+            sequence.append(best_feature)
+        
+        logistic_weights = [1 / (1 + np.exp(-weights[a])) for a in sequence]
+        Rw = np.diag(logistic_weights)
+        return sequence, Rw
