@@ -397,7 +397,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
     to estimate and refine missing values in mixed-type datasets (numerical and categorical).
     """
 
-    def __init__(self, random_state=None, min_samples_leaf=3, learning_rate=0.1, m=2, max_iter=100, stop_threshold=1.0,
+    def __init__(self, random_state=None, min_samples_leaf=3, learning_rate=0.1, m=2, max_clusters=20, max_iter=100,
+                 stop_threshold=1.0,
                  alpha=1.0):
         if random_state is not None and not isinstance(random_state, int):
             raise TypeError('Invalid random_state: Expected an integer or None.')
@@ -410,6 +411,9 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
         if not isinstance(m, (int, float)) or m <= 1:
             raise TypeError('Invalid m value: Expected a numeric value greater than 1.')
+
+        if not isinstance(max_clusters, int) or max_iter <= 1:
+            raise TypeError('Invalid max_clusters value: Expected an integer greater than 1.')
 
         if not isinstance(max_iter, int) or max_iter <= 1:
             raise TypeError('Invalid max_iter value: Expected an integer greater than 1.')
@@ -424,6 +428,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         self.min_samples_leaf = min_samples_leaf
         self.learning_rate = learning_rate
         self.m = m
+        self.max_clusters = max_clusters
         self.max_iter = max_iter
         self.stop_threshold = stop_threshold
         self.alpha = alpha
@@ -509,7 +514,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return combined
 
     def _determine_optimal_n_clusters_FSI(self, X, fcm_function):
-        c_values = list(range(1, min(len(X), self.max_iter) + 1))
+        c_values = list(range(1, min(len(X), self.max_clusters) + 1))
 
         FSI = []
         for c in c_values:

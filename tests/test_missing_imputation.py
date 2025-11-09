@@ -271,7 +271,7 @@ def test_fcmdti_fuzzy_silhouette_zero_distance():
     assert fs == 0.0
 
 
-@pytest.mark.parametrize("X, max_iter, random_state", [
+@pytest.mark.parametrize("X, max_clusters, random_state", [
     (pd.DataFrame({
         "x1": [2.0, 2.0, 2.0],
         "x2": [5.0, 5.0, 5.0]
@@ -293,8 +293,8 @@ def test_fcmdti_fuzzy_silhouette_zero_distance():
         "cat2": ["X"]
     }), 30, 100),
 ])
-def test_fcmdti_determine_optimal_n_clusters_FSI(X, max_iter, random_state):
-    imputer = FCMDTIterativeImputer(random_state=random_state, max_iter=max_iter)
+def test_fcmdti_determine_optimal_n_clusters_FSI(X, max_clusters, random_state):
+    imputer = FCMDTIterativeImputer(random_state=random_state, max_clusters=max_clusters)
     imputer.fit(X)
     if X.select_dtypes(exclude=["number"]).empty:
         fcm_function = fuzzy_c_means
@@ -303,7 +303,7 @@ def test_fcmdti_determine_optimal_n_clusters_FSI(X, max_iter, random_state):
 
     n_clusters = imputer._determine_optimal_n_clusters_FSI(X, fcm_function)
     assert isinstance(n_clusters, int)
-    assert n_clusters > 0 and n_clusters <= min(len(X), max_iter)
+    assert n_clusters > 0 and n_clusters <= min(len(X), max_clusters)
     n_clusters2 = imputer._determine_optimal_n_clusters_FSI(X, fcm_function)
     assert n_clusters == n_clusters2
     if len(X) == 1 or (X.nunique(axis=0) == 1).all():
@@ -592,19 +592,22 @@ def test_fcmdti_improve_imputations_in_leaf(X, j, k, random_state):
     assert imputed_X_after2.equals(imputed_X)
 
 
-@pytest.mark.parametrize("random_state, min_samples_leaf, learning_rate, m, max_iter, stop_threshold, alpha", [
-    (42, 0.1, 0.1, 1.1, 10, 0, 0.1),
-    (None, 5, 1, 2.0, 100, 1, 0.5),
-    (123, 10, 0.5, 1.5, 50, 0.5, 0.9)
+@pytest.mark.parametrize(
+    "random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter, stop_threshold, alpha", [
+        (42, 0.1, 0.1, 1.1, 3, 10, 0, 0.1),
+        (None, 5, 1, 2.0, 20, 100, 1, 0.5),
+        (123, 10, 0.5, 1.5, 100, 50, 0.5, 0.9)
 
-])
-def test_fcmdti_init(random_state, min_samples_leaf, learning_rate, m, max_iter, stop_threshold, alpha):
-    imputer = FCMDTIterativeImputer(random_state, min_samples_leaf, learning_rate, m, max_iter, stop_threshold, alpha)
+    ])
+def test_fcmdti_init(random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter, stop_threshold, alpha):
+    imputer = FCMDTIterativeImputer(random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter,
+                                    stop_threshold, alpha)
 
     assert imputer.random_state == random_state
     assert imputer.min_samples_leaf == min_samples_leaf
     assert imputer.learning_rate == learning_rate
     assert imputer.m == m
+    assert imputer.max_clusters == max_clusters
     assert imputer.max_iter == max_iter
     assert imputer.stop_threshold == stop_threshold
     assert imputer.alpha == alpha
@@ -622,19 +625,15 @@ def test_fcmdti_init_errors_randomstate(random_state):
         imputer = FCMDTIterativeImputer(random_state=random_state)
 
 
-@pytest.mark.parametrize("max_iter", [
-    "txt",
-    [24],
-    [[35]],
-    3.5,
-    0,
-    -5,
-    1
-])
-def test_fcmdti_init_errors_max_iter(max_iter):
-    with pytest.raises(TypeError,
-                       match="Invalid max_iter value: Expected an integer greater than 1."):
-        imputer = FCMDTIterativeImputer(max_iter=max_iter)
+invalid_values = ["txt", [24], [[35]], 3.5, 0, -5, 1]
+params_to_test = ["max_iter", "max_clusters"]
+
+
+@pytest.mark.parametrize("param_name,value", [(p, v) for p in params_to_test for v in invalid_values])
+def test_fcmdti_init_errors(param_name, value):
+    kwargs = {param_name: value}
+    with pytest.raises(TypeError, match=f"Invalid {param_name} value: Expected an integer greater than 1."):
+        imputer = FCMDTIterativeImputer(**kwargs)
 
 
 @pytest.mark.parametrize("m", [
@@ -663,37 +662,38 @@ def test_fcmdti_init_errors(param_name, value):
         imputer = FCMDTIterativeImputer(**kwargs)
 
 
-@pytest.mark.parametrize("X, random_state,min_samples_leaf,learning_rate,m,max_iter,stop_threshold,alpha", [
-    (
-            pd.DataFrame({
-                "num1": [1, 2, 3, np.nan, 5],
-                "num2": [5, 4, np.nan, 2, 1],
-                "cat": ["a", "b", "b", "a", np.nan]
-            }),
-            42, 2, 0.1, 2, 10, 0.0, 1.0
-    ),
-    (
-            pd.DataFrame({
-                "num1": [10, 20, np.nan, 40],
-                "num2": [np.nan, 1, 2, 3],
-                "cat": ["x", "y", "x", np.nan]
-            }),
-            7, 3, 0.5, 3, 20, 0.01, 2.0
-    ),
-    (
-            pd.DataFrame({
-                "num1": [np.nan, np.nan, 1, 2, 5, 7],
-                "num2": [1, 2, np.nan, 6, 10, 4],
-                "cat": [np.nan, "b", "c", "a", "b", "c"]
-            }),
-            1, 1, 0.2, 2, 15, 0.1, 0.5
-    )
-])
-def test_fcmdti_fit_sets_attributes(X, random_state, min_samples_leaf, learning_rate, m, max_iter, stop_threshold,
-                                    alpha):
+@pytest.mark.parametrize("X, random_state,min_samples_leaf,learning_rate,m,max_clusters,max_iter,stop_threshold,alpha",
+                         [
+                             (
+                                     pd.DataFrame({
+                                         "num1": [1, 2, 3, np.nan, 5],
+                                         "num2": [5, 4, np.nan, 2, 1],
+                                         "cat": ["a", "b", "b", "a", np.nan]
+                                     }),
+                                     42, 2, 0.1, 2, 3, 10, 0.0, 1.0
+                             ),
+                             (
+                                     pd.DataFrame({
+                                         "num1": [10, 20, np.nan, 40],
+                                         "num2": [np.nan, 1, 2, 3],
+                                         "cat": ["x", "y", "x", np.nan]
+                                     }),
+                                     7, 3, 0.5, 3, 40, 20, 0.01, 2.0
+                             ),
+                             (
+                                     pd.DataFrame({
+                                         "num1": [np.nan, np.nan, 1, 2, 5, 7],
+                                         "num2": [1, 2, np.nan, 6, 10, 4],
+                                         "cat": [np.nan, "b", "c", "a", "b", "c"]
+                                     }),
+                                     1, 1, 0.2, 2, 10, 50, 0.1, 0.5
+                             )
+                         ])
+def test_fcmdti_fit_sets_attributes(X, random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter,
+                                    stop_threshold, alpha):
     imputer = FCMDTIterativeImputer(random_state=random_state, min_samples_leaf=min_samples_leaf,
-                                    learning_rate=learning_rate, m=m, max_iter=max_iter, stop_threshold=stop_threshold,
-                                    alpha=alpha)
+                                    learning_rate=learning_rate, m=m, max_clusters=max_clusters, max_iter=max_iter,
+                                    stop_threshold=stop_threshold, alpha=alpha)
     imputer.fit(X)
 
     assert hasattr(imputer, 'X_train_complete_')
@@ -762,76 +762,78 @@ def test_fcmdti_fit_error_one_column(X):
         imputer.fit(X)
 
 
-@pytest.mark.parametrize("X,X_test, random_state,min_samples_leaf,learning_rate,m,max_iter,stop_threshold,alpha", [
-    (
-            pd.DataFrame({
-                "num1": [1, 2, 3, 7, 5],
-                "num2": [5, 4, 3, 2, 1],
-                "cat": ["a", "b", "b", "a", np.nan]
-            }),
-            pd.DataFrame({
-                "num1": [np.nan, 2, 3, np.nan, 5],
-                "num2": [5, 4, np.nan, 2, 1],
-                "cat": [np.nan, "b", "b", "a", np.nan]
-            }),
-            42, 2, 0.1, 2, 10, 0.0, 1.0
-    ),
-    (
-            pd.DataFrame({
-                "num1": [10, 20, 50, 40],
-                "num2": [np.nan, 1, 2, 3],
-                "cat": ["x", "y", "x", "y"]
-            }),
-            pd.DataFrame({
-                "num1": [10, 20, np.nan, 40],
-                "num2": [np.nan, 1, np.nan, 3],
-                "cat": ["x", np.nan, "x", np.nan]
-            }),
-            7, 3, 0.5, 3, 20, 0.01, 2.0
-    ),
-    (
-            pd.DataFrame({
-                "num1": [np.nan, 10, 1, 2, 5, 7],
-                "num2": [1, 2, 5, 6, 10, 4],
-                "cat1": [np.nan, "b", "c", "a", "b", "c"],
-                "cat2": ["z", "x", "z", "x", "y", "y"]
-            }),
-            pd.DataFrame({
-                "num1": [np.nan, np.nan, 1, 2, np.nan, 7],
-                "num2": [1, 2, np.nan, 6, np.nan, 4],
-                "cat1": [np.nan, "b", "c", np.nan, "b", "c"],
-                "cat2": ["z", "x", np.nan, "x", "y", np.nan]
-            }),
-            1, 1, 0.2, 2, 15, 0.1, 0.5
-    ),
-    (
-            pd.DataFrame({
-                "num1": [np.nan, 10, 1, 2, 5, 7],
-                "num2": [1, 2, 5, 6, 10, 4],
-                "cat1": [np.nan, "b", "c", "a", "b", "c"],
-                "cat2": ["z", "x", "z", "x", "y", "y"]
-            }),
-            pd.DataFrame({
-                "num1": [1, 5, 1, 2, 8, 7],
-                "num2": [1, 2, 5, 6, 3, 4],
-                "cat1": ["a", "b", "c", "a", "b", "c"],
-                "cat2": ["z", "x", "y", "x", "y", "z"]
-            }),
-            1, 1, 0.2, 2, 15, 0.1, 0.5
-    )
-])
-def test_fcmdti_transform(X, X_test, random_state, min_samples_leaf, learning_rate, m, max_iter, stop_threshold, alpha):
+@pytest.mark.parametrize(
+    "X,X_test, random_state,min_samples_leaf,learning_rate,m,max_clusters,max_iter,stop_threshold,alpha", [
+        (
+                pd.DataFrame({
+                    "num1": [1, 2, 3, 7, 5],
+                    "num2": [5, 4, 3, 2, 1],
+                    "cat": ["a", "b", "b", "a", np.nan]
+                }),
+                pd.DataFrame({
+                    "num1": [np.nan, 2, 3, np.nan, 5],
+                    "num2": [5, 4, np.nan, 2, 1],
+                    "cat": [np.nan, "b", "b", "a", np.nan]
+                }),
+                42, 2, 0.1, 2, 5, 10, 0.0, 1.0
+        ),
+        (
+                pd.DataFrame({
+                    "num1": [10, 20, 50, 40],
+                    "num2": [np.nan, 1, 2, 3],
+                    "cat": ["x", "y", "x", "y"]
+                }),
+                pd.DataFrame({
+                    "num1": [10, 20, np.nan, 40],
+                    "num2": [np.nan, 1, np.nan, 3],
+                    "cat": ["x", np.nan, "x", np.nan]
+                }),
+                7, 3, 0.5, 3, 20, 100, 0.01, 2.0
+        ),
+        (
+                pd.DataFrame({
+                    "num1": [np.nan, 10, 1, 2, 5, 7],
+                    "num2": [1, 2, 5, 6, 10, 4],
+                    "cat1": [np.nan, "b", "c", "a", "b", "c"],
+                    "cat2": ["z", "x", "z", "x", "y", "y"]
+                }),
+                pd.DataFrame({
+                    "num1": [np.nan, np.nan, 1, 2, np.nan, 7],
+                    "num2": [1, 2, np.nan, 6, np.nan, 4],
+                    "cat1": [np.nan, "b", "c", np.nan, "b", "c"],
+                    "cat2": ["z", "x", np.nan, "x", "y", np.nan]
+                }),
+                1, 1, 0.2, 2, 3, 15, 0.1, 0.5
+        ),
+        (
+                pd.DataFrame({
+                    "num1": [np.nan, 10, 1, 2, 5, 7],
+                    "num2": [1, 2, 5, 6, 10, 4],
+                    "cat1": [np.nan, "b", "c", "a", "b", "c"],
+                    "cat2": ["z", "x", "z", "x", "y", "y"]
+                }),
+                pd.DataFrame({
+                    "num1": [1, 5, 1, 2, 8, 7],
+                    "num2": [1, 2, 5, 6, 3, 4],
+                    "cat1": ["a", "b", "c", "a", "b", "c"],
+                    "cat2": ["z", "x", "y", "x", "y", "z"]
+                }),
+                1, 1, 0.2, 2, 15, 50, 0.1, 0.5
+        )
+    ])
+def test_fcmdti_transform(X, X_test, random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter,
+                          stop_threshold, alpha):
     imputer = FCMDTIterativeImputer(random_state=random_state, min_samples_leaf=min_samples_leaf,
-                                    learning_rate=learning_rate, m=m, max_iter=max_iter, stop_threshold=stop_threshold,
-                                    alpha=alpha)
+                                    learning_rate=learning_rate, m=m, max_clusters=max_clusters, max_iter=max_iter,
+                                    stop_threshold=stop_threshold, alpha=alpha)
     imputer.fit(X)
     result = imputer.transform(X)
 
     result2 = imputer.transform(X)
 
     imputer = FCMDTIterativeImputer(random_state=random_state, min_samples_leaf=min_samples_leaf,
-                                    learning_rate=learning_rate, m=m, max_iter=max_iter, stop_threshold=stop_threshold,
-                                    alpha=alpha)
+                                    learning_rate=learning_rate, m=m, max_clusters=max_clusters, max_iter=max_iter,
+                                    stop_threshold=stop_threshold, alpha=alpha)
     imputer.fit(X)
     result3 = imputer.transform(X)
 
