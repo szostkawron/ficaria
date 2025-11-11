@@ -352,7 +352,6 @@ def test_build_weighted_feature_sequence_basic():
 
     selector = WeightedFuzzyRoughSelector(alpha=0.5)
 
-    # teraz separability zwraca dokładnie remaining_features
     selector._compute_separability = lambda X,y,H,W,selected,remaining: {f:0.1 for f in remaining}
     selector._compute_POS_NOG = lambda rels,y,H: ({f: np.zeros(3) for f in rels},{f: np.zeros(3) for f in rels})
     selector._compute_relevance = lambda POS,NOG: {0:0.2,1:0.3}
