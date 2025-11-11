@@ -444,3 +444,33 @@ def test_validate_params_errors(params, expected_exception, expected_msg):
     with pytest.raises(expected_exception) as excinfo:
         validate_params(params)
     assert expected_msg in str(excinfo.value)
+
+
+# ----- rough_kmeans_from_fcm -----------------------------------------------
+
+@pytest.mark.parametrize("X", dataframes_list)
+def test_rough_kmeans_from_fcm_shapes_and_types(X):
+    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
+    imputer = FCMRoughParameterImputer()
+    clusters = imputer._rough_kmeans_from_fcm(X, memberships, centers)
+
+    assert isinstance(clusters, list)
+    assert len(clusters) == 2
+    for lower, upper, center in clusters:
+        assert isinstance(center, np.ndarray)
+        assert center.shape == (X.shape[1],)
+
+
+def test_rough_kmeans_from_fcm_cluster_consistency():
+    X = np.vstack([
+        np.random.normal(0, 0.1, (5, 2)),
+        np.random.normal(5, 0.1, (5, 2))
+    ])
+    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
+    imputer = FCMRoughParameterImputer()
+    clusters = imputer._rough_kmeans_from_fcm(X, memberships, centers)
+
+    for lower, upper, _ in clusters:
+        assert isinstance(lower, np.ndarray)
+        assert isinstance(upper, np.ndarray)
+        assert lower.shape[1] == X.shape[1] if len(lower) > 0 else True

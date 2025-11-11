@@ -5,7 +5,7 @@ from scipy.spatial.distance import euclidean
 
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c_means, rough_kmeans_from_fcm
+from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c_means
 
 
 # ----- split_complete_incomplete ---------------------------------------
@@ -106,32 +106,3 @@ def test_fuzzy_c_means_same_random_state_reproducible():
 
     np.testing.assert_allclose(centers_1, centers_2, rtol=1e-8, atol=1e-8)
     np.testing.assert_allclose(memberships_1, memberships_2, rtol=1e-8, atol=1e-8)
-
-
-
-# ----- rough_kmeans_from_fcm -----------------------------------------------
-
-@pytest.mark.parametrize("X", dataframes_list)
-def test_rough_kmeans_from_fcm_shapes_and_types(X):
-    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
-    clusters = rough_kmeans_from_fcm(X, memberships, centers)
-
-    assert isinstance(clusters, list)
-    assert len(clusters) == 2
-    for lower, upper, center in clusters:
-        assert isinstance(center, np.ndarray)
-        assert center.shape == (X.shape[1],)
-
-
-def test_rough_kmeans_from_fcm_cluster_consistency():
-    X = np.vstack([
-        np.random.normal(0, 0.1, (5, 2)),
-        np.random.normal(5, 0.1, (5, 2))
-    ])
-    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
-    clusters = rough_kmeans_from_fcm(X, memberships, centers, max_iter=10)
-
-    for lower, upper, _ in clusters:
-        assert isinstance(lower, np.ndarray)
-        assert isinstance(upper, np.ndarray)
-        assert lower.shape[1] == X.shape[1] if len(lower) > 0 else True

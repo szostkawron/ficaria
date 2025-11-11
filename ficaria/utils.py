@@ -125,7 +125,20 @@ def validate_params(params):
             raise TypeError(f"Invalid type for tau: {type(tau).__name__}. Must be int or float.")
         if tau < 0:
             raise ValueError(f"Invalid value for tau: {tau}. Must be >= 0.")
+        
+    if 'k' in params:
+        k = params['k']
+        if not isinstance(k, int):
+            raise TypeError(f"Invalid type for k: {type(k).__name__}. Must be int.")
+        if k < 1:
+            raise ValueError(f"Invalid value for k: {k}. Must be >= 1.")
 
+    if 'alpha' in params:
+        alpha = params['alpha']
+        if not isinstance(alpha, (int, float)):
+            raise TypeError(f"Invalid type for alpha: {type(alpha).__name__}. Must be int or float.")
+        if not (0 < alpha <= 1):
+            raise ValueError(f"Invalid value for alpha: {alpha}. Must be in range (0, 1].")
 
 
 
@@ -187,105 +200,6 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int 
             break
 
     return centers, u
-
-
-
-def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter=100, tol=1e-4):
-    """
-    Rough K-Means
-    Applied after FCM clustering (using its centroids as initialization).
-    Each cluster is represented by a lower and an upper approximation, allowing
-    samples in boundary regions to belong to multiple clusters when uncertainty exists.
-    The algorithm starts from FCM centroids and iteratively updates cluster centers
-    using weighted means of lower and boundary regions.
-
-    Parameters:
-        X (np.ndarray): data matrix (n_samples x n_features)
-        memberships (np.ndarray): Membership matrix from FCM (n_samples, n_clusters)
-        center_init (np.ndarray): Initial cluster centers (n_clusters x n_features) - output of FCM
-        wl (float): weight for the lower approximation 
-        wb (float): weight for the boundary region 
-        tau (float): threshold controlling assignment of samples to lower or boundary regions
-        max_iter (int): maximum number of iterations for updating cluster centers
-        tol (float): Convergence tolerance; the algorithm stops if the shift in cluster centers is below this threshold.
-
-    Returns:
-        list of tuples: Each tuple represents one cluster and contains:
-            - lower (np.ndarray): Samples in the lower approximation of the cluster.
-            - upper (np.ndarray): Samples in the upper (boundary) approximation.
-            - center (np.ndarray): Final cluster center vector.
-    """
-
-    if isinstance(X, pd.DataFrame):
-        X = X.to_numpy()
-    
-    n_samples = X.shape[0]
-    n_clusters = center_init.shape[0]
-    centers = center_init.copy()
-
-    lower_sets = [[] for _ in range(n_clusters)]
-    upper_sets = [[] for _ in range(n_clusters)]
-
-    init_labels = np.argmax(memberships, axis=1)
-    for i, lbl in enumerate(init_labels):
-        lower_sets[lbl].append(i)
-        upper_sets[lbl].append(i)
-
-    for iteration in range(max_iter):
-
-        new_centers = np.zeros_like(centers)
-        for k in range(n_clusters):
-            lower_idx = lower_sets[k]
-            upper_idx = upper_sets[k]
-            boundary_idx = list(set(upper_idx) - set(lower_idx))
-
-            if len(lower_idx) == 0:
-                new_centers[k] = centers[k]
-                continue
-
-            lower_mean = np.mean(X[lower_idx], axis=0)
-
-            if len(boundary_idx) > 0:
-                boundary_mean = np.mean(X[boundary_idx], axis=0)
-                new_centers[k] = wl * lower_mean + wb * boundary_mean
-            else:
-                new_centers[k] = lower_mean
-
-        new_lower_sets = [[] for _ in range(n_clusters)]
-        new_upper_sets = [[] for _ in range(n_clusters)]
-
-        for i, x in enumerate(X):
-            distances = np.array([euclidean_distance(x, c) for c in new_centers])
-            h = np.argmin(distances)
-            dmin = distances[h]
-
-            new_upper_sets[h].append(i)
-
-            for k in range(n_clusters):
-                if k != h and (distances[k] - dmin) <= tau:
-                    new_upper_sets[k].append(i)
-
-            count_upper = sum([i in new_upper_sets[k] for k in range(n_clusters)])
-            if count_upper == 1:
-                new_lower_sets[h].append(i)
-
-        shift = np.linalg.norm(new_centers - centers)
-
-        if shift < tol:
-            break
-
-        centers = new_centers
-        lower_sets = new_lower_sets
-        upper_sets = new_upper_sets
-
-    clusters = []
-    for k in range(n_clusters):
-        lower = X[lower_sets[k]] if len(lower_sets[k]) > 0 else np.array([])
-        upper = X[upper_sets[k]] if len(upper_sets[k]) > 0 else np.array([])
-        clusters.append((lower, upper, centers[k]))
-
-    return clusters
-
 
 
 def fcm_predict(X_new, centers, m=2.0):
