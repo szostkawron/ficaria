@@ -255,6 +255,9 @@ fcm_params_list = [
     (3, 3.0, 600, 1e-4),
 ]
 
+
+# ----- FCMCentroidImputer -----------------------------------------------
+
 @pytest.mark.parametrize("n_clusters,m,max_iter,tol", fcm_params_list)
 def test_fcmcentroidimputer_init_parametrized(n_clusters, m, max_iter, tol):
     imputer = FCMCentroidImputer(
@@ -324,6 +327,8 @@ def test_fcmcentroidimputer_fit_no_complete_rows():
         imputer.fit(X)
 
 
+# ----- FCMParameterImputer -----------------------------------------------
+
 def test_fcmparameterimputer_fit_creates_attributes():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
     imputer = FCMParameterImputer()
@@ -355,6 +360,8 @@ def test_fcmparameterimputer_feature_names_in_assigned():
     imputer.fit(X)
     assert list(imputer.feature_names_in_) == list(X.columns)
 
+
+# ----- FCMRoughParameterImputer -----------------------------------------------
 
 def test_fcmroughparameterimputer_fit_creates_clusters():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
@@ -402,51 +409,7 @@ def test_imputers_same_random_state_reproducible(imputer_class, X, n_clusters, m
     pd.testing.assert_frame_equal(result_1, result_2, check_exact=False, atol=1e-8)
 
 
-@pytest.mark.parametrize(
-    "params, expected_exception, expected_msg",
-    [
-        # n_clusters
-        ({"n_clusters": "3"}, TypeError, "Invalid type for n_clusters"),
-        ({"n_clusters": -1}, ValueError, "Invalid value for n_clusters"),
-        ({"n_clusters": 0}, ValueError, "Invalid value for n_clusters"),
-        
-        # max_iter
-        ({"max_iter": "100"}, TypeError, "Invalid type for max_iter"),
-        ({"max_iter": 0}, ValueError, "Invalid value for max_iter"),
-        
-        # random_state
-        ({"random_state": "abc"}, TypeError, "Invalid type for random_state"),
-        
-        # m (fuzziness)
-        ({"m": "2.0"}, TypeError, "Invalid type for m"),
-        ({"m": 1.0}, ValueError, "Invalid value for m"),
-        
-        # tol
-        ({"tol": "1e-5"}, TypeError, "Invalid type for tol"),
-        ({"tol": 0}, ValueError, "Invalid value for tol"),
-        
-        # wl
-        ({"wl": "0.5"}, TypeError, "Invalid type for wl"),
-        ({"wl": -0.1}, ValueError, "Invalid value for wl"),
-        ({"wl": 1.5}, ValueError, "Invalid value for wl"),
-        
-        # wb
-        ({"wb": "0.2"}, TypeError, "Invalid type for wb"),
-        ({"wb": -0.1}, ValueError, "Invalid value for wb"),
-        ({"wb": 1.5}, ValueError, "Invalid value for wb"),
-        
-        # tau
-        ({"tau": "0.5"}, TypeError, "Invalid type for tau"),
-        ({"tau": -0.1}, ValueError, "Invalid value for tau"),
-    ]
-)
-def test_validate_params_errors(params, expected_exception, expected_msg):
-    with pytest.raises(expected_exception) as excinfo:
-        validate_params(params)
-    assert expected_msg in str(excinfo.value)
-
-
-# ----- rough_kmeans_from_fcm -----------------------------------------------
+# ----- _rough_kmeans_from_fcm -----------------------------------------------
 
 @pytest.mark.parametrize("X", dataframes_list)
 def test_rough_kmeans_from_fcm_shapes_and_types(X):

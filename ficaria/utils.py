@@ -23,7 +23,6 @@ def split_complete_incomplete(X: pd.DataFrame):
     return complete, incomplete
 
 
-
 def check_input_dataset(X, require_numeric=False, allow_nan=True, require_complete_rows=False):
     """
     Convert input to DataFrame and check the validity of the dataset
@@ -130,8 +129,8 @@ def validate_params(params):
         k = params['k']
         if not isinstance(k, int):
             raise TypeError(f"Invalid type for k: {type(k).__name__}. Must be int.")
-        if k < 1:
-            raise ValueError(f"Invalid value for k: {k}. Must be >= 1.")
+        if k <= 1:
+            raise ValueError(f"Invalid value for k: {k}. Must be > 1.")
 
     if 'alpha' in params:
         alpha = params['alpha']
@@ -139,7 +138,6 @@ def validate_params(params):
             raise TypeError(f"Invalid type for alpha: {type(alpha).__name__}. Must be int or float.")
         if not (0 < alpha <= 1):
             raise ValueError(f"Invalid value for alpha: {alpha}. Must be in range (0, 1].")
-
 
 
 def euclidean_distance(a: np.ndarray, b: np.ndarray):
@@ -154,7 +152,6 @@ def euclidean_distance(a: np.ndarray, b: np.ndarray):
     """
     mask = ~np.isnan(a) & ~np.isnan(b)
     return np.linalg.norm(a[mask] - b[mask])
-
 
 
 def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int = 100, tol: float = 1e-5,

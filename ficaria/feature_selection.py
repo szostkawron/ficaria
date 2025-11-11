@@ -496,12 +496,22 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         X = check_input_dataset(X)
         self.feature_names_in_ = list(X.columns)
 
+        if not isinstance(y, (pd.Series, np.ndarray, list)):
+            raise TypeError(f"Invalid type for y: {type(y).__name__}. Must be pandas Series, numpy array, or list.")
+        y = pd.Series(y)
+
+        if y.isna().any():
+            raise ValueError("Target variable y contains missing values. Remove or impute them before fitting.")
+
+        if len(y) != len(X):
+            raise ValueError(f"Length mismatch: X has {len(X)} samples but y has {len(y)} entries.")
+
         H = self._identify_high_density_region(X)
             
         relations_single, relations_pair = self._compute_fuzzy_similarity_relations(X, H)
         POS, NOG = self._compute_POS_NOG(relations_single, y, H)
         relevance = self._compute_relevance(POS, NOG)
-        redundancy = self._compute_redundancy(X, y, H, relevance, relations_pair)
+        redundancy = self._compute_redundancy(y, H, relevance, relations_pair)
         weights = self._compute_feature_weights(relevance, redundancy)
         self.W = self._update_weight_matrix(weights, X.shape[1])
         
@@ -730,6 +740,7 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
         redundancy = {}
         features = list(relevance.keys())
+
         for (a, b), rel_matrix in relations_pair.items():
             if a in features and b in features:
                 key = (a, b)
@@ -825,7 +836,7 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         return separability
 
 
-    def _build_weighted_feature_sequence(self, POS_all, weights, X, y, H, relations_single, relations_pair):
+    def _build_weighted_feature_sequence(self, POS_all, NOG_all, weights, X, y, H, relations_single, relations_pair):
         """
         Build the weighted feature sequence
         """
@@ -858,7 +869,7 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
                     cached_NOG[f] = NOG_current[f]
 
             relevance = self._compute_relevance(POS_current, NOG_current)
-            redundancy = self._compute_redundancy(X, y, H, relevance, relations_pair, cached_POS_NOG=cached_POS_NOG_pairs)
+            redundancy = self._compute_redundancy(y, H, relevance, relations_pair, cached_POS_NOG=cached_POS_NOG_pairs)
             weights = self._compute_feature_weights(relevance, redundancy)
             self.W = self._update_weight_matrix(weights, X.shape[1])
 

@@ -5,7 +5,62 @@ from scipy.spatial.distance import euclidean
 
 import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c_means
+from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c_means, validate_params
+
+
+# ----- validate_params ---------------------------------------
+
+@pytest.mark.parametrize(
+    "params, expected_exception, expected_msg",
+    [
+        # n_clusters
+        ({"n_clusters": "3"}, TypeError, "Invalid type for n_clusters"),
+        ({"n_clusters": -1}, ValueError, "Invalid value for n_clusters"),
+        ({"n_clusters": 0}, ValueError, "Invalid value for n_clusters"),
+        
+        # max_iter
+        ({"max_iter": "100"}, TypeError, "Invalid type for max_iter"),
+        ({"max_iter": 0}, ValueError, "Invalid value for max_iter"),
+        
+        # random_state
+        ({"random_state": "abc"}, TypeError, "Invalid type for random_state"),
+        
+        # m (fuzziness)
+        ({"m": "2.0"}, TypeError, "Invalid type for m"),
+        ({"m": 1.0}, ValueError, "Invalid value for m"),
+        
+        # tol
+        ({"tol": "1e-5"}, TypeError, "Invalid type for tol"),
+        ({"tol": 0}, ValueError, "Invalid value for tol"),
+        
+        # wl
+        ({"wl": "0.5"}, TypeError, "Invalid type for wl"),
+        ({"wl": -0.1}, ValueError, "Invalid value for wl"),
+        ({"wl": 1.5}, ValueError, "Invalid value for wl"),
+        
+        # wb
+        ({"wb": "0.2"}, TypeError, "Invalid type for wb"),
+        ({"wb": -0.1}, ValueError, "Invalid value for wb"),
+        ({"wb": 1.5}, ValueError, "Invalid value for wb"),
+        
+        # tau
+        ({"tau": "0.5"}, TypeError, "Invalid type for tau"),
+        ({"tau": -0.1}, ValueError, "Invalid value for tau"),
+
+        # k
+        ({"k": "ABC"}, TypeError, "Invalid type for k"),
+        ({"k": 0}, ValueError, "Invalid value for k"),
+        ({"k": -3}, ValueError, "Invalid value for k"),
+
+        # alpha
+        ({"alpha": "xyz"}, TypeError, "Invalid type for alpha"),
+        ({"alpha": -0.1}, ValueError, "Invalid value for alpha"),
+    ]
+)
+def test_validate_params_errors(params, expected_exception, expected_msg):
+    with pytest.raises(expected_exception) as excinfo:
+        validate_params(params)
+    assert expected_msg in str(excinfo.value)
 
 
 # ----- split_complete_incomplete ---------------------------------------
