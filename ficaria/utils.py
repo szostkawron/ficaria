@@ -1,8 +1,5 @@
 import numpy as np
 import pandas as pd
-import random
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer, SimpleImputer
 from kneed import KneeLocator
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
@@ -24,8 +21,7 @@ def split_complete_incomplete(X: pd.DataFrame):
     return complete, incomplete
 
 
-
-def check_input_dataset(X, require_numeric=False, allow_nan=True, require_complete_rows=False):
+def check_input_dataset(X, require_numeric=False, allow_nan=True, require_complete_rows=False, no_nan_rows=False):
     """
     Convert input to DataFrame and check the validity of the dataset
 
@@ -33,6 +29,8 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True, require_comple
         X (pd.DataFrame): input data
         require_numeric (bool): check if only numeric columns are present
         allow_nan (bool): allow nan values
+        require_complete_rows (bool): check if complete rows are present
+        no_nan_rows (bool): check if there are no nan rows are present
 
     Returns:
         pd.DataFrame: converted data
@@ -51,16 +49,21 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True, require_comple
 
     if X.empty:
         raise ValueError("Invalid input: Input dataset is empty")
-        
+
     complete_rows = X.dropna(how="any")
     if require_complete_rows and complete_rows.empty:
-        raise ValueError("No complete rows found for fitting.")
+        raise ValueError("Invalid input: Input dataset contains no complete rows.")
 
     if require_numeric and not all(pd.api.types.is_numeric_dtype(dt) for dt in X.dtypes):
         raise TypeError("Invalid input: Input dataset contains not numeric values")
 
     if not allow_nan and X.isnull().values.any():
         raise ValueError("Invalid input: Input dataset contains missing values")
+
+    if no_nan_rows:
+        rows_all_nan = X.isnull().all(axis=1)
+        if rows_all_nan.any():
+            raise ValueError("Invalid input: Input dataset contains a row with only NaN values")
 
     return X
 
@@ -131,8 +134,6 @@ def validate_params(params):
             raise ValueError(f"Invalid value for tau: {tau}. Must be >= 0.")
 
 
-
-
 def euclidean_distance(a: np.ndarray, b: np.ndarray):
     """
     Compute Euclidean distance between two vectors, ignoring NaNs.
@@ -145,7 +146,6 @@ def euclidean_distance(a: np.ndarray, b: np.ndarray):
     """
     mask = ~np.isnan(a) & ~np.isnan(b)
     return np.linalg.norm(a[mask] - b[mask])
-
 
 
 def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
@@ -167,7 +167,7 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int 
     """
     if isinstance(X, pd.DataFrame):
         X = X.to_numpy()
-    
+
     n_samples, n_features = X.shape
 
     rng = np.random.default_rng(random_state)
@@ -191,7 +191,6 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int 
             break
 
     return centers, u
-
 
 
 def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter=100, tol=1e-4):
@@ -222,7 +221,7 @@ def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, 
 
     if isinstance(X, pd.DataFrame):
         X = X.to_numpy()
-    
+
     n_samples = X.shape[0]
     n_clusters = center_init.shape[0]
     centers = center_init.copy()
@@ -289,7 +288,6 @@ def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, 
         clusters.append((lower, upper, centers[k]))
 
     return clusters
-
 
 
 def fcm_predict(X_new, centers, m=2.0):
@@ -386,7 +384,7 @@ def find_best_k(St: pd.DataFrame, random_col: int, original_value: float, max_it
 
 
 def impute_KI(X: pd.DataFrame, X_train: Optional[pd.DataFrame] = None, np_rng: Optional[np.random.RandomState] = None,
-              random_state: int = 42, max_iter: int = 30) -> np.ndarray:
+              random_state: int = 42, max_iter: int = 30) -> pd.DataFrame:
     """
     Impute missing values using the KI method (KNN + Iterative Imputation).
 
@@ -398,73 +396,72 @@ def impute_KI(X: pd.DataFrame, X_train: Optional[pd.DataFrame] = None, np_rng: O
         max_iter (int): Maximum number of iterations (default is 30).
 
     Returns:
-        np.ndarray: Imputed dataset.
+        pd.DataFrame: Imputed dataset (same shape and index as X).
     """
     if np_rng is None:
         np_rng = np.random.RandomState()
-    X_incomplete_rows = X.copy()
 
+    X_incomplete_rows = X.copy()
     X_mis = X_incomplete_rows[X_incomplete_rows.isnull().any(axis=1)]
 
     if X_train is not None and not X.equals(X_train):
+        X_safe = X.copy()
         X_train_safe = X_train.copy()
-        X_train_safe.index = pd.RangeIndex(
-            start=X.index.max() + 1 if len(X.index) > 0 else 0,
-            stop=(X.index.max() + 1 if len(X.index) > 0 else 0) + len(X_train)
-        )
-        all_data = pd.concat([X, X_train_safe], axis=0)
+
+        X_safe_reset = X_safe.reset_index(drop=True)
+        X_train_safe_reset = X_train_safe.reset_index(drop=True)
+
+        all_data = pd.concat([X_safe_reset, X_train_safe_reset], axis=0, ignore_index=True)
+        index_map = dict(zip(X.index, range(len(X))))
     else:
-        all_data = X.copy()
+        all_data = X.reset_index(drop=True).copy()
+        index_map = dict(zip(X.index, range(len(X))))
 
-    imputed_rows = []
+    mis_idx = X_mis.index.to_numpy()
+    imputed_values = []
 
-    for idx, xi in X_mis.iterrows():
-        col_index_missing = []
-        A_mis = []
-        for j in range(len(X_incomplete_rows.columns)):
-            if pd.isnull(xi.iloc[j]):
-                col_index_missing.append(j)
-                A_mis.append(X_incomplete_rows.columns[j])
+    for idx in mis_idx:
+        xi = X_incomplete_rows.loc[idx]
 
-        P = all_data.dropna(inplace=False, axis=0, subset=A_mis)
+        A_mis = [col for col in X.columns if pd.isnull(xi[col])]
+
+        P = all_data.dropna(subset=A_mis)
         if P.empty:
             raise ValueError(f"Invalid input: No rows with valid values found in columns: {A_mis}")
-        P = pd.concat([P, pd.DataFrame([xi], index=[idx])], axis=0)
 
-        St = P.copy()
+        P_ext = np.vstack([P.to_numpy(), xi.to_numpy()])
+
+        St = P_ext.copy()
         St_Complete_Temp = St.copy()
-        if St_Complete_Temp.iloc[-1].isnull().all():
-            raise ValueError("Invalid input: Data contains a row with only NaN values")
 
         A_r = np_rng.randint(0, St_Complete_Temp.shape[1])
-        AV = St_Complete_Temp.iloc[len(St.index) - 1, A_r]
-        while pd.isnull(AV):
+        AV = St_Complete_Temp[-1, A_r]
+        while np.isnan(AV):
             A_r = np_rng.randint(0, St_Complete_Temp.shape[1])
-            AV = St_Complete_Temp.iloc[len(St.index) - 1, A_r]
-        St.iloc[len(St.index) - 1, A_r] = np.NaN
+            AV = St_Complete_Temp[-1, A_r]
+        St[-1, A_r] = np.NaN
 
-        k = find_best_k(St, A_r, AV, max_iter)
+        k = find_best_k(pd.DataFrame(St, columns=X.columns), A_r, AV, max_iter)
 
-        xi_from_Pt = P.iloc[-1].values.tolist()
-        Pt_without_xi = P.iloc[:-1].values.tolist()
+        xi_from_Pt = P_ext[-1, :].tolist()
+        Pt_without_xi = P_ext[:-1, :].tolist()
 
         neighbors_xi = get_neighbors(Pt_without_xi, xi_from_Pt, k)
+        S = np.vstack([neighbors_xi, xi.to_numpy()])
 
-        df_neighbors_xi = pd.DataFrame(data=neighbors_xi, columns=P.columns)
+        imputer = IterativeImputer(random_state=random_state, max_iter=max_iter)
+        S_filled_EM = imputer.fit_transform(S)
 
-        S = pd.concat([df_neighbors_xi, pd.DataFrame([xi], index=[idx])], axis=0)
+        xi_imputed = S_filled_EM[-1, :]
+        imputed_values.append(xi_imputed)
 
-        S_filled_EM = IterativeImputer(random_state=random_state, max_iter=max_iter).fit_transform(S.values)
+        if idx in index_map:
+            all_data.iloc[index_map[idx]] = xi_imputed
 
-        S_filled_EM = pd.DataFrame(data=S_filled_EM, columns=P.columns)
-        xi_imputed = S_filled_EM.iloc[len(S_filled_EM.index) - 1]
-        imputed_rows.append((idx, xi_imputed))
+    if imputed_values:
+        X_incomplete_rows.loc[mis_idx, :] = np.vstack(imputed_values)
 
-        all_data.loc[idx] = xi_imputed
-        X_incomplete_rows.loc[idx] = xi_imputed
-
-    all_dataset_imputed = X_incomplete_rows.loc[X.index]
-    return all_dataset_imputed.to_numpy()
+    return X_incomplete_rows
 
 
 def compute_fcm_objective(X: np.ndarray, centers: np.ndarray, u: np.ndarray, m: float = 2):
@@ -511,11 +508,10 @@ def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters: int = 2, max_clus
     k_values = list(range(min_clusters, max_clusters + 1))
 
     sample_size = min(len(X), 10000)
-    X_sampled = X.sample(n=sample_size, random_state=42)
+    X_sampled = X.sample(n=sample_size, random_state=random_state)
 
     for k in k_values:
-        np.random.seed(random_state)
-        centers, u = fuzzy_c_means(X_sampled.values, n_clusters=k, v=m, random_state=random_state)
+        centers, u = fuzzy_c_means(X_sampled.values, n_clusters=k, m=m, random_state=random_state)
 
         obj = compute_fcm_objective(X_sampled.to_numpy(), centers, u, m)
         objective_values.append(obj)
@@ -530,7 +526,7 @@ def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters: int = 2, max_clus
 
 def impute_FCKI(X: pd.DataFrame, X_train: pd.DataFrame, centers: np.ndarray, u_train: np.ndarray, c: int,
                 imputer: SimpleImputer, m: float = 2, np_rng: Optional[np.random.RandomState] = None,
-                random_state: int = 42, max_iter: int = 30) -> np.ndarray:
+                random_state: Optional[int] = None, max_iter: int = 30) -> pd.DataFrame:
     """
     Impute missing values using the FCKI method (FCM + KNN + Iterative Imputation).
 
@@ -571,4 +567,4 @@ def impute_FCKI(X: pd.DataFrame, X_train: pd.DataFrame, centers: np.ndarray, u_t
 
     all_clusters.sort_index(inplace=True)
 
-    return all_clusters.to_numpy()
+    return all_clusters

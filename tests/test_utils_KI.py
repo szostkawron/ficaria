@@ -144,6 +144,34 @@ def test_check_input_dataset_check_allow_nan_false(X, require_numeric, allow_nan
         check_input_dataset(X, require_numeric=require_numeric, allow_nan=allow_nan)
 
 
+@pytest.mark.parametrize("X, require_complete_rows", [
+    ([[1, np.nan, 3], [3, 7, np.nan]], True),
+    (pd.DataFrame({
+        'height_cm': [165, 170, np.nan, 180],
+        'weight_kg': [np.nan, 65, 70, np.nan],
+        'bmi': [22.0, np.nan, 24.2, 26.5]
+    }), True),
+])
+def test_check_input_dataset_check_require_complete(X, require_complete_rows):
+    with pytest.raises(ValueError,
+                       match="Invalid input: Input dataset contains no complete rows"):
+        check_input_dataset(X, require_complete_rows=require_complete_rows)
+
+
+@pytest.mark.parametrize("X, no_nan_rows", [
+    ([[np.nan, np.nan, np.nan], [3, 7, 4]], True),
+    (pd.DataFrame({
+        'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, np.nan],
+        'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
+        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]
+    }), True),
+])
+def test_check_input_dataset_check_no_nan_rows(X, no_nan_rows):
+    with pytest.raises(ValueError,
+                       match="Invalid input: Input dataset contains a row with only NaN values"):
+        check_input_dataset(X, no_nan_rows=no_nan_rows)
+
+
 @pytest.mark.parametrize("X", [
     (pd.DataFrame({
         'height_cm': [165, 170, 175, 180, 175, 160, 175, 190],
@@ -166,9 +194,9 @@ def test_check_input_dataset_check_allow_nan_false(X, require_numeric, allow_nan
 ])
 def test_impute_KI(X):
     result = impute_KI(X)
-    assert isinstance(result, np.ndarray)
+    assert isinstance(result, pd.DataFrame)
     assert len(result) == len(X)
-    assert not np.isnan(result).any()
+    assert result.isna().sum().sum() == 0
 
 
 @pytest.mark.parametrize("X", [
@@ -180,18 +208,6 @@ def test_impute_KI(X):
 def test_impute_KI_error_no_complete(X):
     with pytest.raises(ValueError,
                        match="Invalid input: No rows with valid values found in columns:"):
-        impute_KI(X)
-
-
-@pytest.mark.parametrize("X", [
-    (pd.DataFrame({
-        'height_cm': [165, 170, 175, 180, 175, 160, 175, np.nan],
-        'weight_kg': [60, 65, 70, 75, 80, 55, 68, np.nan],
-        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]})),
-])
-def test_impute_KI_error_no_complete(X):
-    with pytest.raises(ValueError,
-                       match="Invalid input: Data contains a row with only NaN values"):
         impute_KI(X)
 
 
@@ -235,9 +251,9 @@ def test_impute_KI_error_no_complete(X):
 def test_impute_KI_with_parameters(X, X_train, random_state, max_iter):
     np_rng_1 = np.random.RandomState(random_state)
     result = impute_KI(X, X_train=X_train, np_rng=np_rng_1, max_iter=max_iter)
-    assert isinstance(result, np.ndarray)
+    assert isinstance(result, pd.DataFrame)
     assert result.shape == X.shape
-    assert not np.isnan(result).any()
+    assert result.isna().sum().sum() == 0
     np_rng_2 = np.random.RandomState(random_state)
     result_repeat = impute_KI(X, X_train=X_train, np_rng=np_rng_2, max_iter=max_iter)
     np.testing.assert_array_almost_equal(result, result_repeat)
@@ -384,6 +400,6 @@ def test_impute_FCKI(X, X_train, n_clusters, random_state, m, max_iter):
         random_state=random_state,
     )
     result = impute_FCKI(X, X_train, centers, u, n_clusters, imputer, m, np_rng, random_state, max_iter)
-    assert isinstance(result, np.ndarray)
+    assert isinstance(result, pd.DataFrame)
     assert result.shape == X.shape
-    assert not np.isnan(result).any()
+    assert result.isna().sum().sum() == 0

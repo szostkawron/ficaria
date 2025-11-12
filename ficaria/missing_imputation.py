@@ -1,5 +1,4 @@
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.exceptions import NotFittedError
 from sklearn.utils.validation import check_is_fitted
 
 from .utils import *
@@ -36,7 +35,6 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         self.tol = tol
         self.random_state = random_state
 
-
     def fit(self, X, y=None):
         """
         Fit the FCM imputer on complete data only.
@@ -63,7 +61,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
         Impute missing values using nearest cluster centroid.
         """
-        
+
         if not hasattr(self, "centers_") or not hasattr(self, "memberships_"):
             raise AttributeError("fit must be called before transform.")
 
@@ -88,7 +86,6 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
                 X_imputed.at[idx, col] = nearest_center[X.columns.get_loc(col)]
 
         return X_imputed
-
 
 
 # --------------------------------------
@@ -122,14 +119,13 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         self.tol = tol
         self.random_state = random_state
 
-
     def fit(self, X, y=None):
         """
         Fit the FCM imputer on complete data only.
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
-        
+
         if self.n_clusters > len(complete):
             raise ValueError("n_clusters cannot be larger than the number of complete rows")
 
@@ -154,10 +150,10 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         """
         if not hasattr(self, "centers_") or not hasattr(self, "memberships_"):
             raise AttributeError("fit must be called before transform.")
-        
+
         if list(X.columns) != list(self.feature_names_in_):
             raise ValueError("Columns in transform do not match columns seen during fit")
-        
+
         X = check_input_dataset(X, require_numeric=True).copy()
         _, incomplete = split_complete_incomplete(X)
 
@@ -179,7 +175,6 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
                 X_imputed.at[idx, col] = np.sum(u * self.centers_[:, X.columns.get_loc(col)])
 
         return X_imputed
-
 
 
 # --------------------------------------
@@ -219,7 +214,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
-        
+
         if self.n_clusters > len(complete):
             raise ValueError("n_clusters cannot be larger than the number of complete rows")
 
@@ -234,16 +229,16 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         )
 
         self.clusters_ = rough_kmeans_from_fcm(
-                    complete_array,
-                    self.memberships_,
-                    self.centers_,
-                    wl=self.wl,
-                    wb=self.wb,
-                    tau=self.tau,
-                    max_iter=self.max_iter,
-                    tol=self.tol
-                )
-        
+            complete_array,
+            self.memberships_,
+            self.centers_,
+            wl=self.wl,
+            wb=self.wb,
+            tau=self.tau,
+            max_iter=self.max_iter,
+            tol=self.tol
+        )
+
         self.feature_names_in_ = list(X.columns)
 
         return self
@@ -258,7 +253,6 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         if list(X.columns) != list(self.feature_names_in_):
             raise ValueError("Columns in transform do not match columns seen during fit")
 
-        
         X = check_input_dataset(X, require_numeric=True)
 
         _, incomplete = split_complete_incomplete(X)
@@ -293,7 +287,6 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
                 X_imputed.at[idx, col] = np.mean(approx_data[:, col_idx])
 
         return X_imputed
-
 
 
 # --------------------------------------
@@ -337,7 +330,6 @@ class KIImputer(BaseEstimator, TransformerMixin):
         return X_imputed
 
 
-
 # --------------------------------------
 # FCMKIterativeImputer
 # --------------------------------------
@@ -361,7 +353,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         if not isinstance(m, (int, float)) or m <= 1:
             raise TypeError('Invalid m value: Expected a numeric value greater than 1')
 
-        if max_iter is not None and not isinstance(max_iter, int) or max_iter <= 1:
+        if not isinstance(max_iter, int) or max_iter <= 1:
             raise TypeError('Invalid max_iter: Expected a positive integer greater than 1')
 
         self.random_state = random_state
@@ -393,7 +385,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
-        X = check_input_dataset(X, require_numeric=True)
+        X = check_input_dataset(X, require_numeric=True, no_nan_rows=True)
         check_is_fitted(self, attributes=["X_train_", "imputer_", "centers_", "u_", "optimal_c_", "np_rng_"])
 
         if not X.columns.equals(self.X_train_.columns):

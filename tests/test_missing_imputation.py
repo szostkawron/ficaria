@@ -1,10 +1,8 @@
-import numpy as np
-import pandas as pd
-import pytest
-from sklearn.exceptions import NotFittedError
-from sklearn.impute import SimpleImputer
+import os
+import sys
 
-import os, sys
+import pytest
+
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ficaria.missing_imputation import *
 
@@ -95,10 +93,10 @@ def test_kiimputer_transform(X, X_test, random_state):
     imputer2.fit(X)
     result2 = imputer2.transform(X_test)
 
-    assert isinstance(result, np.ndarray)
+    assert isinstance(result, pd.DataFrame)
     assert result.shape == X_test.shape
-    assert not np.isnan(result).any()
-    np.testing.assert_array_equal(result, result2)
+    assert result.isna().sum().sum() == 0
+    assert result.equals(result2)
 
 
 @pytest.mark.parametrize("X", [
@@ -133,16 +131,17 @@ def test_kiimputer_transform_column_mismatch(X_fit, X_transform):
         imputer.transform(X_transform)
 
 
-@pytest.mark.parametrize("random_state, max_clusters, m", [
-    (42, 5, 1.1),
-    (None, 8, 25),
-    (123, 20, 3.1)
+@pytest.mark.parametrize("random_state, max_clusters, m, max_iter", [
+    (42, 5, 1.1, 30),
+    (None, 8, 25, 10),
+    (123, 20, 3.1, 20)
 ])
-def test_fcmkiimputer_init(random_state, max_clusters, m):
-    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m)
+def test_fcmkiimputer_init(random_state, max_clusters, m, max_iter):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_iter=max_iter)
     assert imputer.random_state == random_state
     assert imputer.max_clusters == max_clusters
     assert imputer.m == m
+    assert max_iter == imputer.max_iter
 
 
 @pytest.mark.parametrize("random_state", [
@@ -164,7 +163,8 @@ def test_fcmkiimputer_init_errors_randomstate(random_state):
     3.5,
     0,
     -5,
-    1
+    1,
+    None
 ])
 def test_fcmkiimputer_init_errors_maxclusters(max_clusters):
     with pytest.raises(TypeError,
@@ -179,7 +179,8 @@ def test_fcmkiimputer_init_errors_maxclusters(max_clusters):
     0,
     0.5,
     -5,
-    1
+    1,
+    None
 ])
 def test_fcmkiimputer_init_errors_m(m):
     with pytest.raises(TypeError,
@@ -191,7 +192,8 @@ def test_fcmkiimputer_init_errors_m(m):
     "txt",
     [24],
     [[35]],
-    3.5
+    3.5,
+    None
 ])
 def test_fcmkiimputer_init_errors_maxiter(max_iter):
     with pytest.raises(TypeError,
@@ -199,18 +201,18 @@ def test_fcmkiimputer_init_errors_maxiter(max_iter):
         imputer = FCMKIterativeImputer(max_iter=max_iter)
 
 
-@pytest.mark.parametrize("X, random_state, max_clusters, m", [
+@pytest.mark.parametrize("X, random_state, max_clusters, m, max_iter", [
     (pd.DataFrame({
         'a': [np.nan, 2.0, 3.0],
         'b': [4.0, 5.0, np.nan]
-    }), 42, 5, 1.5),
+    }), 42, 5, 1.5, 100),
     (pd.DataFrame({
         'a': [1.0, 2.0],
         'b': [np.nan, 6.0]
-    }), 42, 10, 2)
+    }), 42, 10, 2, 30)
 ])
-def test_fcmkiimputer_fit(X, random_state, max_clusters, m):
-    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m)
+def test_fcmkiimputer_fit(X, random_state, max_clusters, m, max_iter):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_iter=max_iter)
     imputer.fit(X)
 
     assert hasattr(imputer, "X_train_")
@@ -266,10 +268,10 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
     imputer2.fit(X)
     result2 = imputer2.transform(X_test)
 
-    assert isinstance(result, np.ndarray)
+    assert isinstance(result, pd.DataFrame)
     assert result.shape == X_test.shape
-    assert not np.isnan(result).any()
-    np.testing.assert_array_equal(result, result2)
+    assert result.isna().sum().sum() == 0
+    assert result.equals(result2)
 
 
 @pytest.mark.parametrize("X", [
