@@ -10,7 +10,7 @@ from sklearn.metrics import accuracy_score
 from .utils import check_input_dataset
 
 
-class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixin):
+class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
     """
     Fuzzy Implication Granularity Feature Selection (FIGFS).
 
@@ -99,7 +99,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         y: Optional[Union[pd.Series, np.ndarray, pd.DataFrame]] = None,
     ):
         """
-        Fit the FIGFS algorithm on the dataset.
+        Fit the FIGFS algorithm on the dataset and determine the optimal feature subset.
 
         Parameters
         ----------
@@ -111,7 +111,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         Returns
         -------
         self : object
-            Fitted instance with feature ordering in self.S.
+            Fitted instance with selected optimal features in self.S_opt.
         """
         X = check_input_dataset(X, allow_nan=False)
 
@@ -133,6 +133,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         }
         self.m = len(self.C)
 
+        # --- Obliczanie promienia sąsiedztwa fuzzy ---
         self.fuzzy_adaptive_neighbourhood_radius = {}
         for col_idx, (col_name, col_type) in self.C.items():
             if col_type == "numeric":
@@ -141,6 +142,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
             else:
                 self.fuzzy_adaptive_neighbourhood_radius[col_idx] = None
 
+        # --- Dane wewnętrzne ---
         self.U = X.copy()
         self.U[self.target_name] = y_ser.values
         self.n = len(self.U)
@@ -152,48 +154,19 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
 
         self._delta_cache = {}
         self._entropy_cache = {}
-        self.D = (len(X.columns), self.target_name) 
+        self.D = (len(X.columns), self.target_name)
         self.D_partition = self._create_partitions()
 
-        return self
-    
-    def transform(self, X: Union[pd.DataFrame, np.ndarray, List[List[Any]]]) -> pd.DataFrame:
-        """
-        Transform input dataset using selected optimal feature subset.
-
-        Parameters
-        ----------
-        X : DataFrame, ndarray, or list of lists
-            Input data with same structure as used in fit().
-
-        Returns
-        -------
-        DataFrame
-            Reduced dataset with optimal features.
-        """
-        
-        if self.S is None:
-            raise RuntimeError("You must call fit() before transform().")
-
-        X = check_input_dataset(X, allow_nan=False)
-
-        if self._fitted_columns is None:
-            raise RuntimeError("fit() must be called before transform().")
-        if list(X.columns) != self._fitted_columns:
-            raise ValueError("Input X columns differ from those used in fit().")
-
-        X_transformed = X.copy()
-
+        # --- Label encoders dla nominalnych cech ---
+        self._label_encoders = {}
+        X_encoded = X.copy()
         for _, (col, col_type) in self.C.items():
             if col_type == "nominal":
-                le = self._label_encoders.get(col)
-                if le is None:
-                    le = LabelEncoder()
-                    X_transformed[col] = le.fit_transform(X_transformed[col])
-                    self._label_encoders[col] = le
-                else:
-                    X_transformed[col] = le.transform(X_transformed[col])
+                le = LabelEncoder()
+                X_encoded[col] = le.fit_transform(X_encoded[col])
+                self._label_encoders[col] = le
 
+        # --- Wybór optymalnego podzbioru cech (logika przeniesiona z transform) ---
         self.acc_list = []
         best_acc = -np.inf
         S_opt: Optional[List[int]] = None
@@ -209,7 +182,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
                 except Exception:
                     pass
 
-            X_sub = X_transformed[cols]
+            X_sub = X_encoded[cols]
             y_sub = self.U[self.target_name]
 
             stratify_y = y_sub if len(np.unique(y_sub)) > 1 else None
@@ -238,27 +211,75 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
                 S_opt = subset
 
         self.S_opt = S_opt if S_opt is not None else list(self.S)
-        final_cols = [self.C[idx][0] for idx in self.S_opt]
+
+        return self
+
+
+    def transform(self, X: Union[pd.DataFrame, np.ndarray, List[List[Any]]]) -> pd.DataFrame:
+        """
+        Transform input dataset using selected optimal feature subset.
+
+        Parameters
+        ----------
+        X : DataFrame, ndarray, or list of lists
+            Input data with same structure as used in fit().
+
+        Returns
+        -------
+        DataFrame
+            Reduced dataset with optimal features.
+        """
+
+        if self.S is None:
+            raise RuntimeError("You must call fit() before transform().")
+
+        X = check_input_dataset(X, allow_nan=False)
+
+        if self._fitted_columns is None:
+            raise RuntimeError("fit() must be called before transform().")
+        if list(X.columns) != self._fitted_columns:
+            raise ValueError("Input X columns differ from those used in fit().")
+
+        X_transformed = X.copy()
+        for _, (col, col_type) in self.C.items():
+            if col_type == "nominal":
+                le = self._label_encoders.get(col)
+                if le is None:
+                    raise RuntimeError(f"Label encoder for column '{col}' not found. Ensure fit() was called first.")
+                X_transformed[col] = le.transform(X_transformed[col])
+
+        selected_indices = self.S_opt if hasattr(self, "S_opt") and self.S_opt is not None else self.S
+        final_cols = [self.C[idx][0] for idx in selected_indices]
+
         return X_transformed[final_cols].copy()
+
 
 
     def _calculate_similarity_matrix_for_df(self, col_index: int, df: pd.DataFrame) -> np.ndarray:
         """
-        Compute fuzzy similarity matrix for a single column
+        Compute fuzzy similarity matrix for a single column (numeric or categorical),
+        working correctly in both global and local contexts.
 
         Parameters
         ----------
         col_index : int
-            Column index in self.C.
+            Column index (can refer to position in df or in self.C).
         df : pd.DataFrame
-            DataFrame containing values.
+            DataFrame containing the data (global or local context).
 
         Returns
         -------
         np.ndarray
-            Similarity matrix (n x n) for the given column.
+            n x n fuzzy similarity matrix.
         """
-        col_name, col_type = self.C[col_index]
+        # Pobierz nazwę i typ kolumny
+        if isinstance(self.C, list) and col_index < len(self.C):
+            col_name, col_type = self.C[col_index]
+        else:
+            col_name = df.columns[col_index]
+            dtype = df[col_name].dtype
+            col_type = 'numeric' if np.issubdtype(dtype, np.number) else 'categorical'
+
         vals = df[col_name].values
         n = len(df)
         mat = np.zeros((n, n), dtype=float)
@@ -266,23 +287,27 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         if col_type == 'numeric':
             sd = float(df[col_name].std(ddof=0)) if n > 1 else 0.0
             denom = 1.0 + sd
-            radius = self.fuzzy_adaptive_neighbourhood_radius.get(col_index, 0.0)
+
+            radius = getattr(self, "fuzzy_adaptive_neighbourhood_radius", {}).get(col_index, None)
+
             for i in range(n):
                 diff = np.abs(vals[i] - vals)
                 sim = 1.0 - (diff / denom)
+                sim = np.clip(sim, 0.0, 1.0)
+
                 if radius is None:
                     mat[i, :] = sim
                 else:
                     thresh = 1.0 - radius
-                    row = np.where(sim >= thresh, sim, 0.0)
-                    mat[i, :] = row
-        else:
+                    mat[i, :] = np.where(sim >= thresh, sim, 0.0)
+        else:  # categorical
             for i in range(n):
                 mat[i, :] = (vals[i] == vals).astype(float)
 
         return mat
+    
 
-    def _calculate_delta_for_column_subset(self,row_index: int,B: List[int],df: Optional[pd.DataFrame] = None)-> Tuple[np.ndarray, float]:
+    def _calculate_delta_for_column_subset(self, row_index: int, B: List[int], df: Optional[pd.DataFrame] = None) -> Tuple[np.ndarray, float]:
         """
         Calculate granule membership vector and size for a given row and subset of features.
 
@@ -312,20 +337,25 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
             return self._delta_cache[key]
 
         mats = []
+
         for col_index in B:
-            if col_index == self.D[0]:
+            if df.columns[col_index] == self.D[0]:
                 y_vals = self.U[self.target_name].values
                 current_class = y_vals[row_index]
                 vec = (y_vals == current_class).astype(float)
             else:
+                col_name = df.columns[col_index]
                 if use_global:
-                    mat = self.similarity_matrices[col_index]
-                    vec = mat[row_index, :].astype(float)
+                    mat = self.similarity_matrices.get(col_name)
+                    if mat is None:
+                        mat = self._calculate_similarity_matrix_for_df(col_index, df)
+                        self.similarity_matrices[col_name] = mat
                 else:
-                    local_mat = self._calculate_similarity_matrix_for_df(col_index, df)
-                    vec = local_mat[row_index, :].astype(float)
-            mats.append(vec)
+                    mat = self._calculate_similarity_matrix_for_df(col_index, df)
 
+                vec = mat[row_index, :].astype(float)
+
+            mats.append(vec)
 
         if len(mats) == 0:
             granule = np.zeros(len(df), dtype=float)
@@ -334,7 +364,9 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
 
         size = float(np.sum(granule))
         self._delta_cache[key] = (granule, size)
-        return (granule, size)
+        return granule, size
+
+
 
     def _calculate_multi_granularity_fuzzy_implication_entropy(self, B: List[int], type: str = 'basic', T: Optional[List[int]] = None)-> float:
         """
@@ -388,7 +420,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         self._entropy_cache[key] = out
         return out
     
-    def _granual_consistency_of_B_subset(self, B: list) -> float:
+    def _granular_consistency_of_B_subset(self, B: list) -> float:
         """
         Measure how well a subset of features B preserves the structure of the target variable D in terms of fuzzy information granules.
 
@@ -498,7 +530,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
         S = []
         cor_list = []
         for col_index in B:
-            cor = self._granual_consistency_of_B_subset([col_index]) + self._local_granularity_consistency_of_B_subset([col_index])
+            cor = self._granular_consistency_of_B_subset([col_index]) + self._local_granularity_consistency_of_B_subset([col_index])
             cor_list.append(cor)
 
         cor_arr = np.asarray(cor_list, dtype=float)
@@ -522,7 +554,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
 
                     l = S + [col_index]
                     W =  1 + (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self.D[0]]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=l)) / (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self.D[0]]) + 0.01)
-                    cor = self._granual_consistency_of_B_subset([col_index]) + self._local_granularity_consistency_of_B_subset([col_index])
+                    cor = self._granular_consistency_of_B_subset([col_index]) + self._local_granularity_consistency_of_B_subset([col_index])
                     j = W * cor - sim
                     J_list.append(j)
 
@@ -550,7 +582,7 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
 
                     l = S + [col_index]
                     W =  1 + (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self.D[0]]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=l)) / (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self.D[0]]) + 0.01)
-                    cor = self._granual_consistency_of_B_subset([col_index]) + self._local_granularity_consistency_of_B_subset([col_index])
+                    cor = self._granular_consistency_of_B_subset([col_index]) + self._local_granularity_consistency_of_B_subset([col_index])
                     j = W * cor - sim
                     J_list.append(j)
                     W_list.append(W)

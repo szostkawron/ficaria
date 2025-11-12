@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 from kneed import KneeLocator
+from sklearn.experimental import enable_iterative_imputer  # noqa: F401
 from sklearn.impute import IterativeImputer
+
 
 
 def split_complete_incomplete(X: pd.DataFrame):
