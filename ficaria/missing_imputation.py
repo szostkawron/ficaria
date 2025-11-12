@@ -388,7 +388,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         return X_imputed
 
 
-class LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(BaseEstimator, TransformerMixin):
+class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
     def __init__(self,n_clusters: int = 3,m: float = 2.0,alpha: float = 2.0,max_iter: int = 100,tol: float = 1e-5,max_outer_iter: int = 20,stop_criteria: float = 0.01,sigma: bool = False,random_state: Optional[int] = None,):
         
@@ -445,7 +445,7 @@ class LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans(BaseEstimator, 
         self.sigma = sigma
         self.random_state = random_state
 
-    def fit(self, X: pd.DataFrame, y: Optional[np.ndarray] = None) -> "LinearInterpolationBasedIterativeIntuitionisticFuzzyCMeans":
+    def fit(self, X: pd.DataFrame, y: Optional[np.ndarray] = None) -> "FCMInterpolationIterativeImputer":
         """
         Fit the LI-IIFCM model on input data.
 
