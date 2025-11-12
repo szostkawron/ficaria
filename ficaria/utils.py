@@ -4,7 +4,7 @@ from kneed import KneeLocator
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
 from typing import Optional
-
+from gower import gower_matrix
 
 def split_complete_incomplete(X: pd.DataFrame):
     """
@@ -206,8 +206,8 @@ def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, 
         X (np.ndarray): data matrix (n_samples x n_features)
         memberships (np.ndarray): Membership matrix from FCM (n_samples, n_clusters)
         center_init (np.ndarray): Initial cluster centers (n_clusters x n_features) - output of FCM
-        wl (float): weight for the lower approximation 
-        wb (float): weight for the boundary region 
+        wl (float): weight for the lower approximation
+        wb (float): weight for the boundary region
         tau (float): threshold controlling assignment of samples to lower or boundary regions
         max_iter (int): maximum number of iterations for updating cluster centers
         tol (float): Convergence tolerance; the algorithm stops if the shift in cluster centers is below this threshold.
@@ -288,6 +288,63 @@ def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, 
         clusters.append((lower, upper, centers[k]))
 
     return clusters
+  
+  def fuzzy_c_means_categorical(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
+                              random_state=None):
+    """
+    Fuzzy C-Means clustering algorithm for data that contains categorical variables.
+
+    Parameters:
+        X (np.ndarray): data matrix (n_samples x n_features)
+        n_clusters (int): number of clusters
+        m (float): fuzziness parameter (>1)
+        max_iter (int): maximum number of iterations
+        tol (float): convergence tolerance
+        random_state (int): random seed
+
+    Returns:
+        centers (np.ndarray): cluster centers
+        u (np.ndarray): membership matrix (n_samples x n_clusters)
+    """
+    X = pd.DataFrame(X)
+
+    n_samples, n_features = X.shape
+
+    rng = np.random.default_rng(random_state)
+    u = rng.random((n_samples, n_clusters))
+    u = u / np.sum(u, axis=1, keepdims=True)
+
+    is_numeric = X.apply(pd.api.types.is_numeric_dtype)
+
+    for iteration in range(max_iter):
+        u_old = u.copy()
+        uv = u ** m
+        centers = pd.DataFrame(index=range(n_clusters), columns=X.columns)
+
+        for col_name in X.columns:
+            col = X[col_name]
+            if is_numeric[col_name]:
+                for k in range(n_clusters):
+                    centers.at[k, col_name] = np.sum(uv[:, k] * col.values) / np.sum(uv[:, k])
+            else:
+                values, counts = np.unique(col, return_counts=True)
+                for k in range(n_clusters):
+                    weights = np.array([np.sum(uv[col == val, k]) for val in values])
+
+                    centers.at[k, col_name] = values[np.argmax(weights)]
+
+        combined = pd.concat([X, centers], ignore_index=True)
+        dist_matrix = gower_matrix(combined)
+        dist = dist_matrix[:n_samples, n_samples:]
+
+        dist = np.fmax(dist, 1e-10)
+
+        u = 1 / np.sum((dist[:, :, None] / dist[:, None, :]) ** (2 / (m - 1)), axis=2)
+
+        if np.linalg.norm(u - u_old) < tol:
+            break
+
+    return centers, u
 
 
 def fcm_predict(X_new, centers, m=2.0):
