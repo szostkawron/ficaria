@@ -1,11 +1,9 @@
 import numpy as np
 import pandas as pd
-import random
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer, SimpleImputer
+from gower import gower_matrix
 from kneed import KneeLocator
-from fuzzycmeans import FCM
-
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer
 
 
 def split_complete_incomplete(X: pd.DataFrame):
@@ -31,6 +29,7 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True, require_comple
         X (pd.DataFrame): input data
         require_numeric (bool): check if only numeric columns are present
         allow_nan (bool): allow nan values
+        require_complete_rows (bool): check if there are complete records present
 
     Returns:
         pd.DataFrame: converted data
@@ -158,7 +157,7 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int 
                   random_state=None):
     """
     Fuzzy C-Means clustering algorithm.
-    
+
     Parameters:
         X (np.ndarray): data matrix (n_samples x n_features)
         n_clusters (int): number of clusters
@@ -166,14 +165,14 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int 
         max_iter (int): maximum number of iterations
         tol (float): convergence tolerance
         random_state (int): random seed
-    
+
     Returns:
         centers (np.ndarray): cluster centers
         u (np.ndarray): membership matrix (n_samples x n_clusters)
     """
     if isinstance(X, pd.DataFrame):
         X = X.to_numpy()
-    
+
     n_samples, n_features = X.shape
 
     rng = np.random.default_rng(random_state)
@@ -189,6 +188,64 @@ def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int 
         dist = np.zeros((n_samples, n_clusters))
         for j in range(n_clusters):
             dist[:, j] = np.linalg.norm(X - centers[j], axis=1)
+        dist = np.fmax(dist, 1e-10)
+
+        u = 1 / np.sum((dist[:, :, None] / dist[:, None, :]) ** (2 / (m - 1)), axis=2)
+
+        if np.linalg.norm(u - u_old) < tol:
+            break
+
+    return centers, u
+
+
+def fuzzy_c_means_categorical(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
+                              random_state=None):
+    """
+    Fuzzy C-Means clustering algorithm for data that contains categorical variables.
+
+    Parameters:
+        X (np.ndarray): data matrix (n_samples x n_features)
+        n_clusters (int): number of clusters
+        m (float): fuzziness parameter (>1)
+        max_iter (int): maximum number of iterations
+        tol (float): convergence tolerance
+        random_state (int): random seed
+
+    Returns:
+        centers (np.ndarray): cluster centers
+        u (np.ndarray): membership matrix (n_samples x n_clusters)
+    """
+    X = pd.DataFrame(X)
+
+    n_samples, n_features = X.shape
+
+    rng = np.random.default_rng(random_state)
+    u = rng.random((n_samples, n_clusters))
+    u = u / np.sum(u, axis=1, keepdims=True)
+
+    is_numeric = X.apply(pd.api.types.is_numeric_dtype)
+
+    for iteration in range(max_iter):
+        u_old = u.copy()
+        uv = u ** m
+        centers = pd.DataFrame(index=range(n_clusters), columns=X.columns)
+
+        for col_name in X.columns:
+            col = X[col_name]
+            if is_numeric[col_name]:
+                for k in range(n_clusters):
+                    centers.at[k, col_name] = np.sum(uv[:, k] * col.values) / np.sum(uv[:, k])
+            else:
+                values, counts = np.unique(col, return_counts=True)
+                for k in range(n_clusters):
+                    weights = np.array([np.sum(uv[col == val, k]) for val in values])
+
+                    centers.at[k, col_name] = values[np.argmax(weights)]
+
+        combined = pd.concat([X, centers], ignore_index=True)
+        dist_matrix = gower_matrix(combined)
+        dist = dist_matrix[:n_samples, n_samples:]
+
         dist = np.fmax(dist, 1e-10)
 
         u = 1 / np.sum((dist[:, :, None] / dist[:, None, :]) ** (2 / (m - 1)), axis=2)
@@ -223,6 +280,103 @@ def fcm_predict(X_new, centers, m=2.0):
     return u_new
 
 
+def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter=100, tol=1e-4):
+    """
+    Rough K-Means
+    Applied after FCM clustering (using its centroids as initialization).
+    Each cluster is represented by a lower and an upper approximation, allowing
+    samples in boundary regions to belong to multiple clusters when uncertainty exists.
+    The algorithm starts from FCM centroids and iteratively updates cluster centers
+    using weighted means of lower and boundary regions.
+
+    Parameters:
+        X (np.ndarray): data matrix (n_samples x n_features)
+        memberships (np.ndarray): Membership matrix from FCM (n_samples, n_clusters)
+        center_init (np.ndarray): Initial cluster centers (n_clusters x n_features) - output of FCM
+        wl (float): weight for the lower approximation
+        wb (float): weight for the boundary region
+        tau (float): threshold controlling assignment of samples to lower or boundary regions
+        max_iter (int): maximum number of iterations for updating cluster centers
+        tol (float): Convergence tolerance; the algorithm stops if the shift in cluster centers is below this threshold.
+
+    Returns:
+        list of tuples: Each tuple represents one cluster and contains:
+            - lower (np.ndarray): Samples in the lower approximation of the cluster.
+            - upper (np.ndarray): Samples in the upper (boundary) approximation.
+            - center (np.ndarray): Final cluster center vector.
+    """
+
+    if isinstance(X, pd.DataFrame):
+        X = X.to_numpy()
+
+    n_samples = X.shape[0]
+    n_clusters = center_init.shape[0]
+    centers = center_init.copy()
+
+    lower_sets = [[] for _ in range(n_clusters)]
+    upper_sets = [[] for _ in range(n_clusters)]
+
+    init_labels = np.argmax(memberships, axis=1)
+    for i, lbl in enumerate(init_labels):
+        lower_sets[lbl].append(i)
+        upper_sets[lbl].append(i)
+
+    for iteration in range(max_iter):
+
+        new_centers = np.zeros_like(centers)
+        for k in range(n_clusters):
+            lower_idx = lower_sets[k]
+            upper_idx = upper_sets[k]
+            boundary_idx = list(set(upper_idx) - set(lower_idx))
+
+            if len(lower_idx) == 0:
+                new_centers[k] = centers[k]
+                continue
+
+            lower_mean = np.mean(X[lower_idx], axis=0)
+
+            if len(boundary_idx) > 0:
+                boundary_mean = np.mean(X[boundary_idx], axis=0)
+                new_centers[k] = wl * lower_mean + wb * boundary_mean
+            else:
+                new_centers[k] = lower_mean
+
+        new_lower_sets = [[] for _ in range(n_clusters)]
+        new_upper_sets = [[] for _ in range(n_clusters)]
+
+        for i, x in enumerate(X):
+            distances = np.array([euclidean_distance(x, c) for c in new_centers])
+            h = np.argmin(distances)
+            dmin = distances[h]
+
+            new_upper_sets[h].append(i)
+
+            for k in range(n_clusters):
+                if k != h and (distances[k] - dmin) <= tau:
+                    new_upper_sets[k].append(i)
+
+            count_upper = sum([i in new_upper_sets[k] for k in range(n_clusters)])
+            if count_upper == 1:
+                new_lower_sets[h].append(i)
+
+        shift = np.linalg.norm(new_centers - centers)
+
+        if shift < tol:
+            break
+
+        centers = new_centers
+        lower_sets = new_lower_sets
+        upper_sets = new_upper_sets
+
+    clusters = []
+    for k in range(n_clusters):
+        lower = X[lower_sets[k]] if len(lower_sets[k]) > 0 else np.array([])
+        upper = X[upper_sets[k]] if len(upper_sets[k]) > 0 else np.array([])
+        clusters.append((lower, upper, centers[k]))
+
+    return clusters
+
+
 def get_neighbors(train: list[list[float]], test_row: list[float], k: int) -> list[list[float]]:
     """
     Returns the k closest rows in `train` to `test_row`
@@ -245,7 +399,6 @@ def get_neighbors(train: list[list[float]], test_row: list[float], k: int) -> li
     for i in range(k):
         neighbors.append(distances[i][0])
     return neighbors
-
 
 
 def find_best_k(St: pd.DataFrame, random_col: int, original_value: float) -> int:
@@ -278,7 +431,6 @@ def find_best_k(St: pd.DataFrame, random_col: int, original_value: float) -> int
 
     best_k = K_List[np.argmin(RMSE_List)]
     return best_k
-
 
 
 def impute_KI(X: pd.DataFrame, X_train=None, np_rng=None, random_state=42) -> np.ndarray:
@@ -366,7 +518,6 @@ def impute_KI(X: pd.DataFrame, X_train=None, np_rng=None, random_state=42) -> np
     return all_dataset_imputed.to_numpy()
 
 
-
 def compute_fcm_objective(X, centers, U, m=2):
     """
     Compute the fuzzy c-means objective function value.
@@ -389,7 +540,6 @@ def compute_fcm_objective(X, centers, U, m=2):
 
     obj = np.sum((U ** m) * dist_sq)
     return obj
-
 
 
 def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters=2, max_clusters=10, random_state=None, m=2):
@@ -423,7 +573,6 @@ def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters=2, max_clusters=10
         return int((max_clusters + min_clusters) // 2)
 
     return int(optimal_k)
-
 
 
 def impute_FCKI(X, X_train, centers, u_train, c, imputer, m, np_rng=None, random_state=42) -> np.ndarray:
