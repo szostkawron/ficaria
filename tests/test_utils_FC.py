@@ -55,6 +55,11 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         # alpha
         ({"alpha": "xyz"}, TypeError, "Invalid type for alpha"),
         ({"alpha": -0.1}, ValueError, "Invalid value for alpha"),
+
+        # n_features
+        ({"n_features": "ABC"}, TypeError, "Invalid type for n_features"),
+        ({"n_features": 0}, ValueError, "Invalid value for n_features"),
+        ({"n_features": -3}, ValueError, "Invalid value for n_features"),
     ]
 )
 def test_validate_params_errors(params, expected_exception, expected_msg):
