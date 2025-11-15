@@ -6,6 +6,7 @@ from sklearn.impute import IterativeImputer, SimpleImputer
 from typing import Optional
 from gower import gower_matrix
 
+
 def split_complete_incomplete(X: pd.DataFrame):
     """
     Split the dataset into complete (no missing values) and incomplete (with missing values) objects.
