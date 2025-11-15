@@ -1188,6 +1188,8 @@ fcm_params_list = [
 ]
 
 
+# ----- FCMCentroidImputer -----------------------------------------------
+
 @pytest.mark.parametrize("n_clusters,m,max_iter,tol", fcm_params_list)
 def test_fcmcentroidimputer_init_parametrized(n_clusters, m, max_iter, tol):
     imputer = FCMCentroidImputer(
@@ -1257,6 +1259,8 @@ def test_fcmcentroidimputer_fit_no_complete_rows():
         imputer.fit(X)
 
 
+# ----- FCMParameterImputer -----------------------------------------------
+
 def test_fcmparameterimputer_fit_creates_attributes():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
     imputer = FCMParameterImputer()
@@ -1288,6 +1292,8 @@ def test_fcmparameterimputer_feature_names_in_assigned():
     imputer.fit(X)
     assert list(imputer.feature_names_in_) == list(X.columns)
 
+
+# ----- FCMRoughParameterImputer -----------------------------------------------
 
 def test_fcmroughparameterimputer_fit_creates_clusters():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
@@ -1334,6 +1340,34 @@ def test_imputers_same_random_state_reproducible(imputer_class, X, n_clusters, m
     pd.testing.assert_frame_equal(result_1, result_2, check_exact=False, atol=1e-8)
 
 
+# ----- _rough_kmeans_from_fcm -----------------------------------------------
+
+@pytest.mark.parametrize("X", dataframes_list)
+def test_rough_kmeans_from_fcm_shapes_and_types(X):
+    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
+    imputer = FCMRoughParameterImputer()
+    clusters = imputer._rough_kmeans_from_fcm(X, memberships, centers)
+
+    assert isinstance(clusters, list)
+    assert len(clusters) == 2
+    for lower, upper, center in clusters:
+        assert isinstance(center, np.ndarray)
+        assert center.shape == (X.shape[1],)
+
+
+def test_rough_kmeans_from_fcm_cluster_consistency():
+    X = np.vstack([
+        np.random.normal(0, 0.1, (5, 2)),
+        np.random.normal(5, 0.1, (5, 2))
+    ])
+    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
+    imputer = FCMRoughParameterImputer()
+    clusters = imputer._rough_kmeans_from_fcm(X, memberships, centers)
+
+    for lower, upper, _ in clusters:
+        assert isinstance(lower, np.ndarray)
+        assert isinstance(upper, np.ndarray)
+        assert lower.shape[1] == X.shape[1] if len(lower) > 0 else True
 @pytest.mark.parametrize(
     "params, expected_exception, expected_msg",
     [
