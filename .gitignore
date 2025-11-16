@@ -27,3 +27,5 @@ __pycache__/
 # Pliki systemowe
 .DS_Store
 Thumbs.db
+
+.feature_sel.py
