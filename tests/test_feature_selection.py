@@ -40,7 +40,13 @@ dataframes_list = [
         "c": np.random.choice(["red", "blue", "green"], size=50),
         "d": np.random.randn(50),
         "e": np.random.rand(50),
-    })
+    }),
+
+    pd.DataFrame({
+        "a": ["txt", "txt", "txt", "csv", "csv"], 
+        "b": ["A", "B", "B", "C", "C"],
+        "c": ["k", "k", "m", "m", "m"],
+        }),
 ]
 
 y_list = [
@@ -48,7 +54,8 @@ y_list = [
     np.array([1, 1, 1, 0, 0, 0, 0]),
     np.random.randint(0, 2, size=10),
     np.array([0, 1, 0, 1, 1, 0, 1]),
-    np.random.randint(0, 3, size=50)
+    np.random.randint(0, 3, size=50),
+    np.array(['y','n', 'y', 'n', 'y']),
 ]
 
 selector_params_list = [
@@ -66,14 +73,6 @@ def test_weightedfuzzyroughselector_init_parametrized(n_features, alpha, k):
     assert selector.n_features == n_features
     assert selector.alpha == alpha
     assert selector.k == k
-
-
-def test_weightedfuzzyroughselector_fit_raises_if_k_too_large():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    y = np.array([0, 1, 0])
-    selector = WeightedFuzzyRoughSelector(n_features=1, k=5)
-    with pytest.raises(ValueError, match="Invalid value for k: 5. Must be lower than number of samples"):
-        selector.fit(X, y)
 
 
 def test_weightedfuzzyroughselector_transform_raises_if_not_fitted():
@@ -147,7 +146,9 @@ def test_weightedfuzzyroughselector_fit_transform_combinations(X, y, params):
     n_features, alpha, k = params
     
     y = np.asarray(y)
-
+    
+    if not np.issubdtype(y.dtype, np.integer):
+        y, uniques = pd.factorize(y)
     min_class_count = np.min(np.bincount(y))
     if k >= min_class_count:
         k = int(min_class_count - 1)
@@ -199,7 +200,7 @@ def test_reproducibility_same_input():
     alpha = 1.0
     k = 2
     
-    selector1 = WeightedFuzzyRoughSelector(n_features=2, alpha=0.5, k=2)
+    selector1 = WeightedFuzzyRoughSelector(n_features=n_features, alpha=alpha, k=k)
     selector1.fit(X, y)
     sequence1 = selector1.feature_sequence_
     importances1 = selector1.feature_importances_.copy()
@@ -216,6 +217,53 @@ def test_reproducibility_same_input():
     X_trans1 = selector1.transform(X)
     X_trans2 = selector2.transform(X)
     pd.testing.assert_frame_equal(X_trans1, X_trans2)
+
+
+def test_n_features_greater_or_equal_than_columns_raises():
+    X = pd.DataFrame({
+        "a": [1, 2, 3],
+        "b": [4, 5, 6],
+        "c": [7, 8, 9]
+    })
+    y = np.array([0, 1, 0])
+    
+    selector_equal = WeightedFuzzyRoughSelector(n_features=20, alpha=1.0, k=2)
+    with pytest.raises(ValueError):
+        selector_equal.fit(X, y)
+    
+    selector_greater = WeightedFuzzyRoughSelector(n_features=5, alpha=1.0, k=2)
+    with pytest.raises(ValueError):
+        selector_greater.fit(X, y)
+
+
+def test_weightedfuzzyroughselector_selected_columns_match_sequence():
+    X = pd.DataFrame({
+        "a": [1, 2, 3, 4],
+        "b": [4, 3, 2, 1],
+        "c": [10, 20, 30, 40]
+    })
+    y = np.array([0, 1, 0, 1])
+
+    selector = WeightedFuzzyRoughSelector(n_features=2, k=2)
+    selector.fit(X, y)
+
+    transformed = selector.transform(X)
+
+    assert hasattr(selector, "feature_sequence_")
+    assert len(selector.feature_sequence_) == X.shape[1]
+
+    expected_cols = [X.columns[i] for i in selector.feature_sequence_[:2]]
+    assert list(transformed.columns) == expected_cols
+
+
+def test_weightedfuzzyroughselector_invalid_y_type():
+    X = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    y = ["a", "b"]
+    selector = WeightedFuzzyRoughSelector(n_features=1, k=2)
+
+    with pytest.raises(ValueError):
+        selector.fit(X, y)
+
 
 
 

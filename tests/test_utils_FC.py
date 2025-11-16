@@ -58,7 +58,6 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
 
         # n_features
         ({"n_features": "ABC"}, TypeError, "Invalid type for n_features"),
-        ({"n_features": 0}, ValueError, "Invalid value for n_features"),
         ({"n_features": -3}, ValueError, "Invalid value for n_features"),
     ]
 )

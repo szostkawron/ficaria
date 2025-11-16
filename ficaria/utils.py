@@ -142,7 +142,7 @@ def validate_params(params):
         n_features = params['n_features']
         if not isinstance(n_features, int):
             raise TypeError(f"Invalid type for n_features: {type(n_features).__name__}. Must be int.")
-        if n_features <= 1:
+        if n_features < 1:
             raise ValueError(f"Invalid value for n_features: {n_features}. Must be > n_features.")
 
 

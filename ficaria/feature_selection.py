@@ -471,6 +471,14 @@ class FuzzyImplicationGranularityFeatureSelection(BaseEstimator, TransformerMixi
 # WeightedFuzzyRoughSelector
 # --------------------------------------
 class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
+    """
+        Initialize the WeightedFuzzyRoughSelector with selection and similarity parameters.
+
+        Parameters:
+            n_features (int): number of features to retain after selection
+            alpha (float): smoothing parameter used in the fuzzy similarity kernel
+            k (int): number of nearest neighbors used in the density estimation process
+        """
     def __init__(self, n_features, alpha=0.5, k=5):
         self.n_features = n_features
         self.alpha = alpha
@@ -491,9 +499,16 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
     
     
     def fit(self, X, y):
+        """
+        Fit the feature selector by computing relevance, redundancy, and weighted feature ranking.
 
-        if self.n_features >= X.shape[1]:
-            raise ValueError(f"Invalid value for n_features: {self.n_features}. Must be lower than number of columns ({X.shape[1]}).")
+        Parameters:
+            X (pd.DataFrame): input dataset containing all features
+            y (array-like): target labels corresponding to each sample in X
+        """
+
+        if self.n_features > X.shape[1]:
+            raise ValueError(f"Invalid value for n_features: {self.n_features}. Must be lower than or equal number of columns ({X.shape[1]}).")
 
         if self.k >= len(X):
             self.k = len(X) - 1
@@ -534,7 +549,10 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """
-        Reduce X to the best n_features selected during fit
+        Transform X by retaining only the top-ranked n_features selected during fitting.
+
+        Parameters:
+            X (pd.DataFrame): input dataset with the same columns as seen during fit
         """
         if self.feature_sequence_ is None:
             raise AttributeError("fit must be called before transform.")
@@ -554,7 +572,7 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         n_samples = len(X)
         y = np.asarray(y)
 
-        knn_indices = np.zeros((n_samples, self.k), dtype=int)
+        knn_indices = np.full((n_samples, self.k), -1, dtype=int)
 
         for i in range(n_samples):
                 same_class_idx = np.where(y == y[i])[0]
@@ -565,12 +583,9 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
                 ordered = same_class_idx[np.argsort(distances[i, same_class_idx])]
 
-                if len(ordered) >= self.k:
-                    knn_indices[i] = ordered[:self.k]
-                else:
-                    padded = np.full(self.k, -1)
-                    padded[:len(ordered)] = ordered
-                    knn_indices[i] = padded
+                take = min(len(ordered), self.k)
+                if take > 0:
+                    knn_indices[i, :take] = ordered[:take]
 
 
         rho = self._compute_density(distances, knn_indices)
@@ -583,15 +598,12 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_HEC(self, X1, X2=None, W=None):
         """
-        Compute Hybrid Mahalanobis (HM) distance.
-        Supports numerical, categorical and mixed features, including missing values.
-        
+        Compute Hybrid Mahalanobis (HM) distance supporting numerical, categorical and mixed features including missing values
+
         Parameters:
-        X (pd.DataFrame): Input data with mixed features.
-        W (np.ndarray or None): Diagonal weight matrix W_B. If None, uses identity matrix.
-        
-        Returns:
-        distances (np.ndarray) Symmetric matrix of pairwise Hybrid distances (M_B(x,y)).
+            X1 (pd.DataFrame): input data frame containing mixed feature types
+            X2 (pd.DataFrame or None): optional second data frame; if None, X1 is used
+            W (np.ndarray or None): diagonal weight matrix applied to features; if None, identity matrix is used
         """
 
         if X2 is None:
@@ -651,7 +663,11 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
     
     def _compute_density(self, distances, knn_indices):
         """
-        Compute local density rho(x) for each sample.
+        Compute local density rho(x) for each sample based on distances and k-nearest neighbors
+
+        Parameters:
+            distances (np.ndarray): pairwise distance matrix between all samples
+            knn_indices (np.ndarray): matrix of neighbor indices for each sample
         """
         n_samples = distances.shape[0]
         rho = np.zeros(n_samples)
@@ -667,8 +683,13 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_LDF(self, rho, knn_indices):
         """
-        Compute Local Density Factor (LDF) for each sample.
+        Compute Local Density Factor (LDF) for each sample using density ratios of neighbors
+
+        Parameters:
+            rho (np.ndarray): density values for all samples
+            knn_indices (np.ndarray): matrix with k-nearest neighbor indices
         """
+
         n_samples = len(rho)
         LDF = np.zeros(n_samples)
         for i in range(n_samples):
@@ -684,8 +705,14 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_fuzzy_similarity_relations(self, X, H, W=None):
         """
-        Compute fuzzy similarity relations RM_{B}(x, y) for B = {a} and B = {a,b}, but only for (x ∈ U, y ∈ H).
+        Compute fuzzy similarity relations RM_B(x,y) for single features and feature pairs with respect to region H
+
+        Parameters:
+            X (pd.DataFrame): input dataset with mixed features
+            H (array-like): indices of high-density samples
+            W (np.ndarray or None): diagonal weight matrix used for weighted distances
         """
+
         n_samples, n_features = X.shape
         feature_indices = list(range(n_features))
         relations_single = {}
@@ -711,8 +738,15 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_relation_for_subset(self, X, H, feature_subset, W=None):
         """
-        Compute fuzzy relation for a given feature subset
+        Compute fuzzy relation for an arbitrary subset of features
+
+        Parameters:
+            X (pd.DataFrame): input dataset
+            H (array-like): indices of high-density samples
+            feature_subset (list): selected feature indices
+            W (np.ndarray or None): weight matrix corresponding to the subset
         """
+
         X_H = X.iloc[H, feature_subset]
         X_sub = X.iloc[:, feature_subset]
         dist = self._compute_HEC(X_sub, X_H, W=W)
@@ -726,13 +760,12 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_POS_NOG_B(self, R_B, y, H):
         """
-        Compute POS^B and NOG^B for an entire relation R_B (n × |H|),
+        Compute POS^B and NOG^B for a fuzzy relation matrix R_B
 
-        R_B : numpy array (n × |H|)
-            Fuzzy similarity relation for the whole subset B.
-        y   : numpy array (n,)
-            Class labels.
-        H   : list or array of indices belonging to high-density region.
+        Parameters:
+            R_B (np.ndarray): fuzzy relation matrix of shape (n × |H|)
+            y (array-like): class labels for samples
+            H (array-like): indices of high-density region samples
         """
 
         n = len(y)
@@ -775,8 +808,14 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
     
     def _compute_relevance_B(self, R_B, y, H):
         """
-        Compute Rel(B) and return POS_B, NOG_B.
+        Compute relevance Rel(B) for a feature subset using POS and NOG distributions
+
+        Parameters:
+            R_B (np.ndarray): fuzzy relation matrix for subset B
+            y (array-like): class labels
+            H (array-like): indices of high-density samples
         """
+
         POS_B, NOG_B = self._compute_POS_NOG_B(R_B, y, H)
         RelB = float(np.mean(POS_B + NOG_B))
         return RelB, POS_B, NOG_B
@@ -784,15 +823,14 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_relevance(self, relations_single, y, H):
         """
-        Compute relevance Rel(a) for each single feature a using the correct
-        POS^ { {a} } and NOG^{ {a} } computed from the single-feature relation matrix.
+        Compute relevance Rel(a) for each individual feature
 
-        relations_single : dict {a_index: relation_matrix (n x |H|)}
-        y : array-like labels
-        H : indices of high-density samples
-        Returns:
-            relevance : dict {a_index: Rel({a})}
+        Parameters:
+            relations_single (dict): mapping {feature_index: relation_matrix}
+            y (array-like): class labels
+            H (array-like): indices of high-density samples
         """
+
         relevance = {}
 
         for a, R_a in relations_single.items():
@@ -809,10 +847,16 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_redundancy(self, y, H, relevance, relations_pair, cached_REL_pairs=None):
         """
-        Compute redundancy Red(a,b) = Rel(a) + Rel(b) - Rel({a,b})
-        Uses relations_pair[(a,b)] which should be the relation matrix for subset {a,b}
-        (shape n x |H|).
+        Compute redundancy Red(a,b) between feature pairs
+
+        Parameters:
+            y (array-like): class labels
+            H (array-like): indices of high-density samples
+            relevance (dict): relevance values for single features
+            relations_pair (dict): fuzzy relations for feature pairs
+            cached_REL_pairs (dict or None): optional cache for Rel({a,b})
         """
+
         if cached_REL_pairs is None:
             cached_REL_pairs = {}
 
@@ -834,10 +878,13 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_feature_weights(self, relevance, redundancy):
         """
-        Compute feature weights w(a) according to Eq. (13).
-        relevance : dict {a: Rel({a})}
-        redundancy : dict {(a,b): Red(a,b)} with keys stored as (min(a,b), max(a,b))
+        Compute feature weights using normalized relevance and redundancy
+
+        Parameters:
+            relevance (dict): relevance scores Rel(a)
+            redundancy (dict): redundancy values Red(a,b)
         """
+
         features = sorted(list(relevance.keys()))
         m = len(features)
 
@@ -870,8 +917,13 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _update_weight_matrix(self, weights, n_total_features):
         """
-        Update W matrix using all feature indices (original indices from X)
+        Update diagonal weight matrix W for all original features
+
+        Parameters:
+            weights (dict): feature weights w(a)
+            n_total_features (int): number of total features in X
         """
+
         W = np.zeros((n_total_features, n_total_features))
         for a, w_a in weights.items():
             W[a, a] = 1 / (1 + np.exp(-w_a)) ** 2
@@ -880,8 +932,14 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_gamma(self, POS_all, NOG_all, features):
         """
-        Compute gamma_P and gamma_N for the current subset of features B.
+        Compute gamma_P and gamma_N for the current subset of features
+
+        Parameters:
+            POS_all (dict): mapping from feature to POS distributions
+            NOG_all (dict): mapping from feature to NOG distributions
+            features (list): selected feature indices
         """
+
         POS_mean = np.mean([POS_all[a] for a in features], axis=0)
         NOG_mean = np.mean([NOG_all[a] for a in features], axis=0)
         gamma_P = np.mean(POS_mean)
@@ -891,9 +949,17 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_separability(self, X, y, H, W, selected_features, remaining_features):
         """
-        Compute separability sig(a, B, D) = Rel(B ∪ {a}) - Rel(B),
-        using the weighting submatrices from W for HM distance.
+        Compute separability measure sig(a, B, D) for each candidate feature
+
+        Parameters:
+            X (pd.DataFrame): input dataset
+            y (array-like): class labels
+            H (array-like): indices of high-density samples
+            W (np.ndarray): global weight matrix
+            selected_features (list): features already selected
+            remaining_features (list): features remaining to evaluate
         """
+
         if len(selected_features) == 0:
             Rel_B = 0.0
         else:
@@ -915,7 +981,14 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _build_weighted_feature_sequence(self, relations_single, relations_pair, X, y, H):
         """
-        Build feature ranking sequence by greedy addition using separability sig(a,B).
+        Build weighted feature ranking using greedy selection based on separability
+
+        Parameters:
+            relations_single (dict): fuzzy relations for single features
+            relations_pair (dict): fuzzy relations for feature pairs
+            X (pd.DataFrame): input dataset
+            y (array-like): class labels
+            H (array-like): high-density region indices
         """
 
         n_features = X.shape[1]
@@ -937,8 +1010,6 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
             selected_features.append(best_feature)
             remaining.remove(best_feature)
             sequence.append(best_feature)
-
-            print(len(sequence), "/", n_features, " features selected.", end="\r")
 
         logistic_weights = [self.W_[f, f] for f in sequence]
         Rw = np.diag(logistic_weights)
