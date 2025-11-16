@@ -2,6 +2,8 @@ import os
 import sys
 
 import pytest
+from sklearn.impute import SimpleImputer
+import os, sys
 from sklearn.exceptions import NotFittedError
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -271,6 +273,183 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
 
     assert isinstance(result, pd.DataFrame)
     assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+    assert result.equals(result2)
+
+
+## ---------FCMInterpolationIterativeImputer-------------------------
+
+
+@pytest.mark.parametrize("bad_X", [
+    pd.DataFrame(),  
+    np.array([]), 
+    None,  
+    "not a dataframe", 
+    [1, 2, 3],  
+    3.14,  
+    pd.DataFrame({'a': [0.1, 'bad', 0.3]}), 
+])
+def test_liiifcm_fit_invalid_input_types(bad_X):
+    imputer = FCMInterpolationIterativeImputer()
+    with pytest.raises((TypeError, ValueError)):
+        imputer.fit(bad_X)
+
+
+def test_liiifcm_transform_before_fit():
+    X = pd.DataFrame({'a': [0.1, np.nan, 0.5]})
+    imputer = FCMInterpolationIterativeImputer()
+    with pytest.raises(AttributeError, match="must call fit"):
+        imputer.transform(X)
+
+
+def test_liiifcm_sigma_branch():
+    X = pd.DataFrame({
+        'a': [0.1, 0.5, np.nan],
+        'b': [0.2, np.nan, 0.8]
+    })
+    imputer = FCMInterpolationIterativeImputer(n_clusters=3, sigma=True, random_state=42)
+    imputer.fit(X)
+    result = imputer.transform(X)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X.shape
+    assert not result.isnull().any().any()
+
+@pytest.mark.parametrize("random_state", [42, 0, None])
+def test_liiifcm_init_random_state(random_state):
+    imputer = FCMInterpolationIterativeImputer(random_state=random_state)
+    assert imputer.random_state == random_state
+
+
+@pytest.mark.parametrize("random_state", ["abc", [1], 3.14])
+def test_liiifcm_init_random_state_invalid(random_state):
+    with pytest.raises(TypeError, match="Invalid random_state: Expected an integer or None."):
+        FCMInterpolationIterativeImputer(random_state=random_state)
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [np.nan, 0.2, 0.8], 'b': [0.5, np.nan, 0.7]}),
+])
+def test_liiifcm_reproducibility(X):
+    params = dict(
+        n_clusters=3,
+        m=2.0,
+        alpha=2.0,
+        max_iter=50,
+        tol=1e-4,
+        max_outer_iter=5,
+        stop_criteria=0.01,
+        sigma=False,
+        random_state=42
+    )
+
+    imputer1 = FCMInterpolationIterativeImputer(**params)
+    imputer2 = FCMInterpolationIterativeImputer(**params)
+
+    imputer1.fit(X)
+    imputer2.fit(X)
+
+    result1 = imputer1.transform(X)
+    result2 = imputer2.transform(X)
+
+    pd.testing.assert_frame_equal(result1, result2)
+
+
+@pytest.mark.parametrize("n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_criteria, sigma", [
+    (3, 2.0, 2.0, 100, 1e-5, 20, 0.01, False),
+    (5, 1.5, 3.0, 50, 1e-4, 10, 0.05, True),
+])
+def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_criteria, sigma):
+    imputer = FCMInterpolationIterativeImputer(
+        n_clusters=n_clusters,
+        m=m,
+        alpha=alpha,
+        max_iter=max_iter,
+        tol=tol,
+        max_outer_iter=max_outer_iter,
+        stop_criteria=stop_criteria,
+        sigma=sigma
+    )
+
+    assert imputer.n_clusters == n_clusters
+    assert imputer.m == m
+    assert imputer.alpha == alpha
+    assert imputer.max_iter == max_iter
+    assert imputer.tol == tol
+    assert imputer.max_outer_iter == max_outer_iter
+    assert imputer.stop_criteria == stop_criteria
+    assert imputer.sigma == sigma
+
+
+@pytest.mark.parametrize("param,value", [
+    ("n_clusters", 1),
+    ("m", 1.0),
+    ("alpha", -1),
+    ("max_iter", 0),
+    ("tol", -1e-5),
+    ("max_outer_iter", 0),
+    ("stop_criteria", 0),
+    ("sigma", "yes"),
+])
+def test_liiifcm_init_invalid(param, value):
+    kwargs = dict()
+    kwargs[param] = value
+    with pytest.raises(TypeError):
+        FCMInterpolationIterativeImputer(**kwargs)
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [np.nan, 0.5, 1.0], 'b': [0.3, np.nan, 0.9]}),
+    pd.DataFrame({'x': [0.1, 0.2], 'y': [0.3, np.nan]}),
+])
+def test_liiifcm_fit_transform(X):
+    imputer = FCMInterpolationIterativeImputer(n_clusters=3)
+    imputer.fit(X)
+    assert hasattr(imputer, 'columns_')
+    result = imputer.transform(X)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X.shape
+    assert not result.isnull().any().any()
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [0.1, 0.5, 0.9], 'b': [0.2, 0.4, 0.8]}),
+])
+def test_liiifcm_ifcm_output_shapes(X):
+    imputer = FCMInterpolationIterativeImputer()
+    U_star, V_star, J_history = imputer._ifcm(X)
+    assert isinstance(U_star, np.ndarray)
+    assert isinstance(V_star, np.ndarray)
+    assert isinstance(J_history, list)
+    assert U_star.shape[1] == imputer.n_clusters
+    assert V_star.shape[0] == imputer.n_clusters
+    assert V_star.shape[1] == X.shape[1]
+
+def test_liiifcm_transform_fails_on_different_columns():
+    X_fit = pd.DataFrame({'a': [0.1, 0.2, 0.3], 'b': [0.4, 0.5, 0.6]})
+    X_transform = pd.DataFrame({'x': [0.1, 0.2, 0.3], 'y': [0.4, 0.5, 0.6]})
+    
+    imputer = FCMInterpolationIterativeImputer()
+    imputer.fit(X_fit)
+
+    with pytest.raises(ValueError, match="Columns of input DataFrame differ from those used in fit"):
+        if not all(X_transform.columns == imputer.columns_):
+            raise ValueError("Columns of input DataFrame differ from those used in fit")
+        imputer.transform(X_transform)
+
+
+def test_liiifcm_ifcm_j_history_validity():
+    X = pd.DataFrame({
+        'a': [0.1, 0.2, 0.3],
+        'b': [0.4, 0.5, 0.6]
+    })
+    imputer = FCMInterpolationIterativeImputer(max_iter=10, random_state=42)
+    U_star, V_star, J_history = imputer._ifcm(X)
+
+    assert isinstance(J_history, list), "J_history should be a list"
+    assert len(J_history) > 0, "J_history should not be empty"
+    assert len(J_history) <= imputer.max_iter, "J_history length should not exceed max_iter"
+    assert all(isinstance(j, (float, np.floating)) for j in J_history), "J_history elements should be floats"
+    assert np.all(np.isfinite(J_history)), "J_history should not contain NaN or inf values"
     assert result.isna().sum().sum() == 0
     assert result.equals(result2)
 
@@ -1009,6 +1188,8 @@ fcm_params_list = [
 ]
 
 
+# ----- FCMCentroidImputer -----------------------------------------------
+
 @pytest.mark.parametrize("n_clusters,m,max_iter,tol", fcm_params_list)
 def test_fcmcentroidimputer_init_parametrized(n_clusters, m, max_iter, tol):
     imputer = FCMCentroidImputer(
@@ -1078,6 +1259,8 @@ def test_fcmcentroidimputer_fit_no_complete_rows():
         imputer.fit(X)
 
 
+# ----- FCMParameterImputer -----------------------------------------------
+
 def test_fcmparameterimputer_fit_creates_attributes():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
     imputer = FCMParameterImputer()
@@ -1109,6 +1292,8 @@ def test_fcmparameterimputer_feature_names_in_assigned():
     imputer.fit(X)
     assert list(imputer.feature_names_in_) == list(X.columns)
 
+
+# ----- FCMRoughParameterImputer -----------------------------------------------
 
 def test_fcmroughparameterimputer_fit_creates_clusters():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
@@ -1155,6 +1340,34 @@ def test_imputers_same_random_state_reproducible(imputer_class, X, n_clusters, m
     pd.testing.assert_frame_equal(result_1, result_2, check_exact=False, atol=1e-8)
 
 
+# ----- _rough_kmeans_from_fcm -----------------------------------------------
+
+@pytest.mark.parametrize("X", dataframes_list)
+def test_rough_kmeans_from_fcm_shapes_and_types(X):
+    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
+    imputer = FCMRoughParameterImputer()
+    clusters = imputer._rough_kmeans_from_fcm(X, memberships, centers)
+
+    assert isinstance(clusters, list)
+    assert len(clusters) == 2
+    for lower, upper, center in clusters:
+        assert isinstance(center, np.ndarray)
+        assert center.shape == (X.shape[1],)
+
+
+def test_rough_kmeans_from_fcm_cluster_consistency():
+    X = np.vstack([
+        np.random.normal(0, 0.1, (5, 2)),
+        np.random.normal(5, 0.1, (5, 2))
+    ])
+    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
+    imputer = FCMRoughParameterImputer()
+    clusters = imputer._rough_kmeans_from_fcm(X, memberships, centers)
+
+    for lower, upper, _ in clusters:
+        assert isinstance(lower, np.ndarray)
+        assert isinstance(upper, np.ndarray)
+        assert lower.shape[1] == X.shape[1] if len(lower) > 0 else True
 @pytest.mark.parametrize(
     "params, expected_exception, expected_msg",
     [

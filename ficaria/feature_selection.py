@@ -6,8 +6,7 @@ from sklearn.base import BaseEstimator, TransformerMixin, clone
 from sklearn.preprocessing import LabelEncoder, MinMaxScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score
-
-from .utils import check_input_dataset
+from .utils import *
 
 
 class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
@@ -600,3 +599,554 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
                 FIE_ds = self._calculate_multi_granularity_fuzzy_implication_entropy([self.D[0]], type='conditional' , T=S)
 
         return S
+
+
+
+# --------------------------------------
+# WeightedFuzzyRoughSelector
+# --------------------------------------
+class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
+    """
+        Initialize the WeightedFuzzyRoughSelector with selection and similarity parameters.
+
+        Parameters:
+            n_features (int): number of features to retain after selection
+            alpha (float): smoothing parameter used in the fuzzy similarity kernel
+            k (int): number of nearest neighbors used in the density estimation process
+        """
+    def __init__(self, n_features, alpha=0.5, k=5):
+        self.n_features = n_features
+        self.alpha = alpha
+        self.k = k
+        
+        validate_params({
+            'n_features': n_features,
+            'alpha': alpha,
+            'k': k
+        })
+
+        self.W_ = None
+        self.selected_features_ = None
+        self.feature_importances_ = None
+        self.feature_sequence_ = None
+        self.distance_cache_ = {}
+        self.Rw_ = None
+    
+    
+    def fit(self, X, y):
+        """
+        Fit the feature selector by computing relevance, redundancy, and weighted feature ranking.
+
+        Parameters:
+            X (pd.DataFrame): input dataset containing all features
+            y (array-like): target labels corresponding to each sample in X
+        """
+
+        if self.n_features > X.shape[1]:
+            raise ValueError(f"Invalid value for n_features: {self.n_features}. Must be lower than or equal number of columns ({X.shape[1]}).")
+
+        if self.k >= len(X):
+            self.k = len(X) - 1
+
+        X = check_input_dataset(X)
+        self.feature_names_in_ = list(X.columns)
+
+        if not isinstance(y, (pd.Series, np.ndarray, list)):
+            raise TypeError(f"Invalid type for y: {type(y).__name__}. Must be pandas Series, numpy array, or list.")
+        
+        y = pd.Series(y)
+        y = y.reset_index(drop=True)
+
+        if y.isna().any():
+            raise ValueError("Target variable y contains missing values. Remove or impute them before fitting.")
+
+        if len(y) != len(X):
+            raise ValueError(f"Length mismatch: X has {len(X)} samples but y has {len(y)} entries.")
+        
+
+        H = self._identify_high_density_region(X, y)
+            
+        relations_single, relations_pair = self._compute_fuzzy_similarity_relations(X, H)
+        relevance = self._compute_relevance(relations_single, y, H)
+        redundancy = self._compute_redundancy(y, H, relevance, relations_pair)
+        weights = self._compute_feature_weights(relevance, redundancy)
+        self.W_ = self._update_weight_matrix(weights, X.shape[1])
+        
+        self.feature_sequence_, self.Rw_ = self._build_weighted_feature_sequence(relations_single, relations_pair, X, y, H)
+
+        self.feature_importances_ = pd.DataFrame({
+            'feature': X.columns[self.feature_sequence_],
+            'importance': np.diag(self.Rw_)[:len(self.feature_sequence_)]
+        }).sort_values(by='importance', ascending=False).reset_index(drop=True)
+
+        return self
+
+
+    def transform(self, X):
+        """
+        Transform X by retaining only the top-ranked n_features selected during fitting.
+
+        Parameters:
+            X (pd.DataFrame): input dataset with the same columns as seen during fit
+        """
+        if self.feature_sequence_ is None:
+            raise AttributeError("fit must be called before transform.")
+
+        if list(X.columns) != list(self.feature_names_in_):
+            raise ValueError("Columns in transform do not match columns seen during fit")
+
+        X = check_input_dataset(X)
+        
+        selected_idx = self.feature_sequence_[:self.n_features]
+        return X.iloc[:, selected_idx]
+    
+
+    def _identify_high_density_region(self, X, y):
+        distances = self._compute_HEC(X)
+        
+        n_samples = len(X)
+        y = np.asarray(y)
+
+        knn_indices = np.full((n_samples, self.k), -1, dtype=int)
+
+        for i in range(n_samples):
+                same_class_idx = np.where(y == y[i])[0]
+                same_class_idx = same_class_idx[same_class_idx != i]
+
+                if len(same_class_idx) == 0:
+                    continue  
+
+                ordered = same_class_idx[np.argsort(distances[i, same_class_idx])]
+
+                take = min(len(ordered), self.k)
+                if take > 0:
+                    knn_indices[i, :take] = ordered[:take]
+
+
+        rho = self._compute_density(distances, knn_indices)
+        LDF = self._compute_LDF(rho, knn_indices)
+
+        H_indices = np.where(LDF <= 1)[0]
+        H_neighbors = np.unique(knn_indices[H_indices].flatten())
+        return H_neighbors
+    
+
+    def _compute_HEC(self, X1, X2=None, W=None):
+        """
+        Compute Hybrid Mahalanobis (HM) distance supporting numerical, categorical and mixed features including missing values
+
+        Parameters:
+            X1 (pd.DataFrame): input data frame containing mixed feature types
+            X2 (pd.DataFrame or None): optional second data frame; if None, X1 is used
+            W (np.ndarray or None): diagonal weight matrix applied to features; if None, identity matrix is used
+        """
+
+        if X2 is None:
+            X2 = X1
+
+        key = (tuple(X1.columns), tuple(X2.columns))
+        if key in self.distance_cache_:
+            return self.distance_cache_[key]
+
+        num_cols = X1.select_dtypes(include=[np.number]).columns
+        cat_cols = X1.select_dtypes(exclude=[np.number]).columns
+
+        X1_num = X1[num_cols].to_numpy(dtype=float, copy=False)
+        X2_num = X2[num_cols].to_numpy(dtype=float, copy=False)
+
+        mask1_num = np.isnan(X1_num)
+        mask2_num = np.isnan(X2_num)
+
+        n_features = X1.shape[1]
+        if W is None:
+            W = np.eye(n_features)
+        else:
+            W = np.asarray(W)
+
+        n1, n2 = X1.shape[0], X2.shape[0]
+        distances = np.zeros((n1, n2), dtype=float)
+
+        if len(num_cols) > 0:
+            diff_num = np.abs(X1_num[:, None, :] - X2_num[None, :, :])
+            missing_mask = mask1_num[:, None, :] | mask2_num[None, :, :]
+            diff_num[missing_mask] = 1.0
+
+        if len(cat_cols) > 0:
+            X1_cat = X1[cat_cols].astype(str).to_numpy(copy=False)
+            X2_cat = X2[cat_cols].astype(str).to_numpy(copy=False)
+            diff_cat = (X1_cat[:, None, :] != X2_cat[None, :, :]).astype(float)
+            mask_cat_missing = np.logical_or(pd.isna(X1[cat_cols].values[:, None, :]), pd.isna(X2[cat_cols].values[None, :, :]))
+            diff_cat[mask_cat_missing] = 1.0
+
+        else:
+            diff_cat = np.zeros((n1, n2, 0))
+
+        diff = np.concatenate([diff_num if len(num_cols) > 0 else np.zeros((n1, n2, 0)),
+                            diff_cat], axis=2)
+
+        if np.allclose(W, np.diag(np.diag(W))):
+            weights = np.diag(W)
+            distances = np.sqrt(np.tensordot(diff**2, weights, axes=(2, 0)))
+        else:
+            tmp = np.tensordot(diff, W, axes=(2, 0))
+            distances = np.sqrt(np.sum(tmp * diff, axis=2))
+
+        self.distance_cache_[key] = distances
+        
+        return distances
+
+    
+    def _compute_density(self, distances, knn_indices):
+        """
+        Compute local density rho(x) for each sample based on distances and k-nearest neighbors
+
+        Parameters:
+            distances (np.ndarray): pairwise distance matrix between all samples
+            knn_indices (np.ndarray): matrix of neighbor indices for each sample
+        """
+        n_samples = distances.shape[0]
+        rho = np.zeros(n_samples)
+        for i in range(n_samples):
+            neighbors = knn_indices[i]
+            neighbors = neighbors[neighbors != -1]
+            if len(neighbors) == 0:
+                rho[i] = 0
+            else:
+                rho[i] = (1 + len(neighbors)) / (1 + np.sum(distances[i, neighbors]))
+        return rho
+    
+
+    def _compute_LDF(self, rho, knn_indices):
+        """
+        Compute Local Density Factor (LDF) for each sample using density ratios of neighbors
+
+        Parameters:
+            rho (np.ndarray): density values for all samples
+            knn_indices (np.ndarray): matrix with k-nearest neighbor indices
+        """
+
+        n_samples = len(rho)
+        LDF = np.zeros(n_samples)
+        for i in range(n_samples):
+            neighbors = knn_indices[i]
+            neighbors = neighbors[neighbors != -1]
+
+            if len(neighbors) == 0:
+                LDF[i] = np.inf
+            else:
+                LDF[i] = np.mean(rho[neighbors] / rho[i])
+        return LDF
+
+
+    def _compute_fuzzy_similarity_relations(self, X, H, W=None):
+        """
+        Compute fuzzy similarity relations RM_B(x,y) for single features and feature pairs with respect to region H
+
+        Parameters:
+            X (pd.DataFrame): input dataset with mixed features
+            H (array-like): indices of high-density samples
+            W (np.ndarray or None): diagonal weight matrix used for weighted distances
+        """
+
+        n_samples, n_features = X.shape
+        feature_indices = list(range(n_features))
+        relations_single = {}
+        relations_pair = {}
+
+        X_H = X.iloc[H]
+        
+        for a in feature_indices:
+            X_a = X.iloc[:, [a]]
+            X_H_a = X_H.iloc[:, [a]]
+            dist_a = self._compute_HEC(X_a, X_H_a, W=W[np.ix_([a],[a])] if W is not None else None)
+            relations_single[a] = np.exp(- (dist_a ** 2) / (2 * self.alpha ** 2))
+        
+        for i, a in enumerate(feature_indices):
+            for b in feature_indices[i+1:]:
+                X_ab = X.iloc[:, [a, b]]
+                X_H_ab = X_H.iloc[:, [a, b]]
+                dist_ab = self._compute_HEC(X_ab, X_H_ab, W=W[np.ix_([a,b],[a,b])] if W is not None else None)                
+                relations_pair[(a,b)] = np.exp(- (dist_ab ** 2) / (2 * self.alpha ** 2))
+        
+        return relations_single, relations_pair
+    
+
+    def _compute_relation_for_subset(self, X, H, feature_subset, W=None):
+        """
+        Compute fuzzy relation for an arbitrary subset of features
+
+        Parameters:
+            X (pd.DataFrame): input dataset
+            H (array-like): indices of high-density samples
+            feature_subset (list): selected feature indices
+            W (np.ndarray or None): weight matrix corresponding to the subset
+        """
+
+        X_H = X.iloc[H, feature_subset]
+        X_sub = X.iloc[:, feature_subset]
+        dist = self._compute_HEC(X_sub, X_H, W=W)
+
+        if dist.ndim == 1:
+            dist = dist[:, np.newaxis]
+
+        relation = np.exp(- (dist ** 2) / (2 * self.alpha ** 2))
+        return relation
+
+
+    def _compute_POS_NOG_B(self, R_B, y, H):
+        """
+        Compute POS^B and NOG^B for a fuzzy relation matrix R_B
+
+        Parameters:
+            R_B (np.ndarray): fuzzy relation matrix of shape (n × |H|)
+            y (array-like): class labels for samples
+            H (array-like): indices of high-density region samples
+        """
+
+        n = len(y)
+        classes = np.unique(y)
+        
+        y_arr = np.asarray(y)
+        H = np.asarray(H, dtype=int)
+
+        if R_B.shape[1] != len(H):
+            R_B = R_B[:, H]
+
+        # Fuzzy decision memberships for all classes (hard labels -> crisp membership)
+        # D_i(y) = 1 if y==class_i else 0
+        DI = {c: (y_arr[H] == c).astype(float) for c in classes}
+
+        POS = np.zeros(n)
+        NOG = np.zeros(n)
+
+        for idx_x in range(n):
+            R_xH = R_B[idx_x]
+
+            lower_vals = []
+            upper_vals = []
+
+            for c in classes:
+
+                D_i = DI[c]   
+
+                lower = np.min(np.maximum(1 - R_xH, D_i))
+                upper = np.max(np.minimum(R_xH, D_i))
+
+                lower_vals.append(lower)
+                upper_vals.append(upper)
+
+            POS[idx_x] = np.max(lower_vals)
+            NOG[idx_x] = np.max(upper_vals)
+
+        return POS, NOG
+    
+    
+    def _compute_relevance_B(self, R_B, y, H):
+        """
+        Compute relevance Rel(B) for a feature subset using POS and NOG distributions
+
+        Parameters:
+            R_B (np.ndarray): fuzzy relation matrix for subset B
+            y (array-like): class labels
+            H (array-like): indices of high-density samples
+        """
+
+        POS_B, NOG_B = self._compute_POS_NOG_B(R_B, y, H)
+        RelB = float(np.mean(POS_B + NOG_B))
+        return RelB, POS_B, NOG_B
+
+
+    def _compute_relevance(self, relations_single, y, H):
+        """
+        Compute relevance Rel(a) for each individual feature
+
+        Parameters:
+            relations_single (dict): mapping {feature_index: relation_matrix}
+            y (array-like): class labels
+            H (array-like): indices of high-density samples
+        """
+
+        relevance = {}
+
+        for a, R_a in relations_single.items():
+
+            POS_a, NOG_a = self._compute_POS_NOG_B(R_a, y, H)
+
+            gamma_P = POS_a.mean()
+            gamma_N = NOG_a.mean()
+
+            relevance[a] = gamma_P + gamma_N
+
+        return relevance
+
+
+    def _compute_redundancy(self, y, H, relevance, relations_pair, cached_REL_pairs=None):
+        """
+        Compute redundancy Red(a,b) between feature pairs
+
+        Parameters:
+            y (array-like): class labels
+            H (array-like): indices of high-density samples
+            relevance (dict): relevance values for single features
+            relations_pair (dict): fuzzy relations for feature pairs
+            cached_REL_pairs (dict or None): optional cache for Rel({a,b})
+        """
+
+        if cached_REL_pairs is None:
+            cached_REL_pairs = {}
+
+        redundancy = {}
+        features = list(relevance.keys())
+
+        for (a, b), rel_matrix in relations_pair.items():
+            if a in features and b in features:
+                key = (min(a, b), max(a, b))
+                if key in cached_REL_pairs:
+                    Rel_ab = cached_REL_pairs[key]
+                else:
+                    Rel_ab, _, _ = self._compute_relevance_B(rel_matrix, y, H)
+                    cached_REL_pairs[key] = Rel_ab
+                redundancy[(min(a, b), max(a, b))] = relevance[a] + relevance[b] - Rel_ab
+
+        return redundancy
+
+
+    def _compute_feature_weights(self, relevance, redundancy):
+        """
+        Compute feature weights using normalized relevance and redundancy
+
+        Parameters:
+            relevance (dict): relevance scores Rel(a)
+            redundancy (dict): redundancy values Red(a,b)
+        """
+
+        features = sorted(list(relevance.keys()))
+        m = len(features)
+
+        rel_vals = np.array([relevance[a] for a in features], dtype=float)
+        rel_min, rel_max = rel_vals.min(), rel_vals.max()
+        denom_rel = (rel_max - rel_min) if (rel_max - rel_min) > 0 else 1.0
+        NRel = {a: (relevance[a] - rel_min) / denom_rel for a in features}
+
+        if len(redundancy) > 0:
+            red_vals = np.array(list(redundancy.values()), dtype=float)
+            red_min, red_max = red_vals.min(), red_vals.max()
+            denom_red = (red_max - red_min) if (red_max - red_min) > 0 else 1.0
+            NRed = {k: (v - red_min) / denom_red for k, v in redundancy.items()}
+        else:
+            NRed = {}
+
+        weights = {}
+        for a in features:
+            sum_NRred = 0.0
+            for b in features:
+                if b == a:
+                    continue
+                key = (min(a, b), max(a, b))
+                sum_NRred += NRed.get(key, 0.0)
+            denom = max(m - 1, 1)
+            weights[a] = NRel[a] - (sum_NRred / denom)
+
+        return weights
+
+
+    def _update_weight_matrix(self, weights, n_total_features):
+        """
+        Update diagonal weight matrix W for all original features
+
+        Parameters:
+            weights (dict): feature weights w(a)
+            n_total_features (int): number of total features in X
+        """
+
+        W = np.zeros((n_total_features, n_total_features))
+        for a, w_a in weights.items():
+            W[a, a] = 1 / (1 + np.exp(-w_a)) ** 2
+        return W
+
+
+    def _compute_gamma(self, POS_all, NOG_all, features):
+        """
+        Compute gamma_P and gamma_N for the current subset of features
+
+        Parameters:
+            POS_all (dict): mapping from feature to POS distributions
+            NOG_all (dict): mapping from feature to NOG distributions
+            features (list): selected feature indices
+        """
+
+        POS_mean = np.mean([POS_all[a] for a in features], axis=0)
+        NOG_mean = np.mean([NOG_all[a] for a in features], axis=0)
+        gamma_P = np.mean(POS_mean)
+        gamma_N = np.mean(NOG_mean)
+        return gamma_P, gamma_N
+
+
+    def _compute_separability(self, X, y, H, W, selected_features, remaining_features):
+        """
+        Compute separability measure sig(a, B, D) for each candidate feature
+
+        Parameters:
+            X (pd.DataFrame): input dataset
+            y (array-like): class labels
+            H (array-like): indices of high-density samples
+            W (np.ndarray): global weight matrix
+            selected_features (list): features already selected
+            remaining_features (list): features remaining to evaluate
+        """
+
+        if len(selected_features) == 0:
+            Rel_B = 0.0
+        else:
+            W_sub = self.W_[np.ix_(selected_features, selected_features)]
+            R_B = self._compute_relation_for_subset(X, H, selected_features, W=W_sub)
+            Rel_B, _, _ = self._compute_relevance_B(R_B, y, H)
+
+        separability = {}
+        for a in remaining_features:
+            B_union_a = selected_features + [a]
+            W_sub_a = self.W_[np.ix_(B_union_a, B_union_a)]
+            R_Ba = self._compute_relation_for_subset(X, H, B_union_a, W=W_sub_a)
+            Rel_Ba, _, _ = self._compute_relevance_B(R_Ba, y, H)
+            separability[a] = Rel_Ba - Rel_B
+
+        return separability
+
+
+
+    def _build_weighted_feature_sequence(self, relations_single, relations_pair, X, y, H):
+        """
+        Build weighted feature ranking using greedy selection based on separability
+
+        Parameters:
+            relations_single (dict): fuzzy relations for single features
+            relations_pair (dict): fuzzy relations for feature pairs
+            X (pd.DataFrame): input dataset
+            y (array-like): class labels
+            H (array-like): high-density region indices
+        """
+
+        n_features = X.shape[1]
+        selected_features = []
+        remaining = list(range(n_features))
+        sequence = []
+
+        while len(remaining) > 0:
+            separability = self._compute_separability(
+                X=X,
+                y=y,
+                H=H,
+                W=self.W_,
+                selected_features=selected_features,
+                remaining_features=remaining
+            )
+
+            best_feature = max(separability, key=separability.get)
+            selected_features.append(best_feature)
+            remaining.remove(best_feature)
+            sequence.append(best_feature)
+
+        logistic_weights = [self.W_[f, f] for f in sequence]
+        Rw = np.diag(logistic_weights)
+
+        return sequence, Rw

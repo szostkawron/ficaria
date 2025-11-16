@@ -3,6 +3,9 @@ from collections import defaultdict
 from pandas.api.types import is_numeric_dtype
 from scipy.spatial.distance import cdist
 from sklearn.base import BaseEstimator, TransformerMixin
+import numpy as np
+import pandas as pd
+from typing import Optional, Tuple, List
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OrdinalEncoder
@@ -236,17 +239,17 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
             random_state=self.random_state
         )
 
-        self.clusters_ = rough_kmeans_from_fcm(
-            complete_array,
-            self.memberships_,
-            self.centers_,
-            wl=self.wl,
-            wb=self.wb,
-            tau=self.tau,
-            max_iter=self.max_iter,
-            tol=self.tol
-        )
-
+        self.clusters_ = self._rough_kmeans_from_fcm(
+                    complete_array,
+                    self.memberships_,
+                    self.centers_,
+                    wl=self.wl,
+                    wb=self.wb,
+                    tau=self.tau,
+                    max_iter=self.max_iter,
+                    tol=self.tol
+                )
+        
         self.feature_names_in_ = list(X.columns)
 
         return self
@@ -295,6 +298,103 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
                 X_imputed.at[idx, col] = np.mean(approx_data[:, col_idx])
 
         return X_imputed
+    
+
+    def _rough_kmeans_from_fcm(self, X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter=100, tol=1e-4):
+        """
+        Rough K-Means
+        Applied after FCM clustering (using its centroids as initialization).
+        Each cluster is represented by a lower and an upper approximation, allowing
+        samples in boundary regions to belong to multiple clusters when uncertainty exists.
+        The algorithm starts from FCM centroids and iteratively updates cluster centers
+        using weighted means of lower and boundary regions.
+
+        Parameters:
+            X (np.ndarray): data matrix (n_samples x n_features)
+            memberships (np.ndarray): Membership matrix from FCM (n_samples, n_clusters)
+            center_init (np.ndarray): Initial cluster centers (n_clusters x n_features) - output of FCM
+            wl (float): weight for the lower approximation 
+            wb (float): weight for the boundary region 
+            tau (float): threshold controlling assignment of samples to lower or boundary regions
+            max_iter (int): maximum number of iterations for updating cluster centers
+            tol (float): Convergence tolerance; the algorithm stops if the shift in cluster centers is below this threshold.
+
+        Returns:
+            list of tuples: Each tuple represents one cluster and contains:
+                - lower (np.ndarray): Samples in the lower approximation of the cluster.
+                - upper (np.ndarray): Samples in the upper (boundary) approximation.
+                - center (np.ndarray): Final cluster center vector.
+        """
+
+        if isinstance(X, pd.DataFrame):
+            X = X.to_numpy()
+        
+        n_samples = X.shape[0]
+        n_clusters = center_init.shape[0]
+        centers = center_init.copy()
+
+        lower_sets = [[] for _ in range(n_clusters)]
+        upper_sets = [[] for _ in range(n_clusters)]
+
+        init_labels = np.argmax(memberships, axis=1)
+        for i, lbl in enumerate(init_labels):
+            lower_sets[lbl].append(i)
+            upper_sets[lbl].append(i)
+
+        for iteration in range(max_iter):
+
+            new_centers = np.zeros_like(centers)
+            for k in range(n_clusters):
+                lower_idx = lower_sets[k]
+                upper_idx = upper_sets[k]
+                boundary_idx = list(set(upper_idx) - set(lower_idx))
+
+                if len(lower_idx) == 0:
+                    new_centers[k] = centers[k]
+                    continue
+
+                lower_mean = np.mean(X[lower_idx], axis=0)
+
+                if len(boundary_idx) > 0:
+                    boundary_mean = np.mean(X[boundary_idx], axis=0)
+                    new_centers[k] = wl * lower_mean + wb * boundary_mean
+                else:
+                    new_centers[k] = lower_mean
+
+            new_lower_sets = [[] for _ in range(n_clusters)]
+            new_upper_sets = [[] for _ in range(n_clusters)]
+
+            for i, x in enumerate(X):
+                distances = np.array([euclidean_distance(x, c) for c in new_centers])
+                h = np.argmin(distances)
+                dmin = distances[h]
+
+                new_upper_sets[h].append(i)
+
+                for k in range(n_clusters):
+                    if k != h and (distances[k] - dmin) <= tau:
+                        new_upper_sets[k].append(i)
+
+                count_upper = sum([i in new_upper_sets[k] for k in range(n_clusters)])
+                if count_upper == 1:
+                    new_lower_sets[h].append(i)
+
+            shift = np.linalg.norm(new_centers - centers)
+
+            if shift < tol:
+                break
+
+            centers = new_centers
+            lower_sets = new_lower_sets
+            upper_sets = new_upper_sets
+
+        clusters = []
+        for k in range(n_clusters):
+            lower = X[lower_sets[k]] if len(lower_sets[k]) > 0 else np.array([])
+            upper = X[upper_sets[k]] if len(upper_sets[k]) > 0 else np.array([])
+            clusters.append((lower, upper, centers[k]))
+
+        return clusters
 
 
 # --------------------------------------
@@ -404,6 +504,213 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
                                 self.np_rng_, self.random_state, max_iter=self.max_iter)
         return X_imputed
 
+
+class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
+
+    def __init__(self,n_clusters: int = 3,m: float = 2.0,alpha: float = 2.0,max_iter: int = 100,tol: float = 1e-5,max_outer_iter: int = 20,stop_criteria: float = 0.01,sigma: bool = False,random_state: Optional[int] = None,):
+        
+        """
+        Initialize Linear Interpolation Based Iterative Intuitionistic Fuzzy C-Means (LI-IIFCM).
+        Parameters
+        ----------
+        n_clusters : int, default=3
+            Number of fuzzy clusters.
+        m : float, default=2.0
+            Fuzzification parameter controlling the level of fuzziness.
+        alpha : float, default=2.0
+            Parameter influencing hesitation degree.
+        max_iter : int, default=100
+            Maximum number of iterations for the internal IIFCM optimization loop.
+        tol : float, default=1e-5
+            Tolerance value for convergence during IIFCM iterations.
+        max_outer_iter : int, default=20
+            Maximum number of iterations for the imputation process.
+        stop_criteria : float, default=0.01
+            Threshold for average relative change in missing values used to stop iteration early.
+        sigma : bool, default=False
+            If True, applies weighted IFCM-σ distance metric instead of standard Euclidean distance.
+        random_state int, Optional
+            Controls randomness.
+        """
+
+        if not isinstance(n_clusters, int) or n_clusters < 2:
+            raise TypeError("Invalid n_clusters: Expected an integer greater than 1.")
+        if not isinstance(m, (int, float)) or m <= 1:
+            raise TypeError("Invalid m value: Expected a numeric value greater than 1.")
+        if not isinstance(alpha, (int, float)) or alpha <= 0:
+            raise TypeError("Invalid alpha value: Expected a positive number.")
+        if not isinstance(max_iter, int) or max_iter <= 0:
+            raise TypeError("Invalid max_iter: Expected a positive integer.")
+        if not isinstance(tol, (int, float)) or tol <= 0:
+            raise TypeError("Invalid tol: Expected a positive float.")
+        if not isinstance(max_outer_iter, int) or max_outer_iter <= 0:
+            raise TypeError("Invalid max_outer_iter: Expected a positive integer.")
+        if not isinstance(stop_criteria, (int, float)) or stop_criteria <= 0:
+            raise TypeError("Invalid stop_criteria: Expected a positive float.")
+        if not isinstance(sigma, bool):
+            raise TypeError("Invalid sigma: Expected a boolean value.")
+        if random_state is not None and not isinstance(random_state, int):
+            raise TypeError("Invalid random_state: Expected an integer or None.")
+
+        self.n_clusters = n_clusters
+        self.m = m
+        self.alpha = alpha
+        self.max_iter = max_iter
+        self.tol = tol
+        self.max_outer_iter = max_outer_iter
+        self.stop_criteria = stop_criteria
+        self.sigma = sigma
+        self.random_state = random_state
+
+    def fit(self, X: pd.DataFrame, y: Optional[np.ndarray] = None) -> "FCMInterpolationIterativeImputer":
+        """
+        Fit the LI-IIFCM model on input data.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input dataset with missing values.
+        y : None, optional
+            Present for compatibility with sklearn interface.
+
+        Returns
+        -------
+        self : object
+            Fitted instance.
+        """
+
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("Input must be a pandas DataFrame")
+        if X.empty:
+            raise ValueError("Input DataFrame is empty")
+        if not all(np.issubdtype(dt, np.number) for dt in X.dtypes):
+            raise TypeError("All columns must be numeric")
+
+        X = check_input_dataset(X)
+        self.columns_ = X.columns
+        return self
+
+    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        Impute missing values using Linear Interpolation and Iterative Intuitionistic Fuzzy C-Means.
+
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input dataset with missing values.
+
+        Returns
+        -------
+        pd.DataFrame
+            Dataset with missing values filled using LI-IIFCM algorithm.
+        """
+        if not isinstance(X, pd.DataFrame):
+            raise TypeError("Input must be a pandas DataFrame")
+        if X.empty:
+            raise ValueError("Input DataFrame is empty")
+        if not hasattr(self, "columns_"):
+            raise AttributeError("You must call fit before transform")
+        if list(X.columns) != list(self.columns_):
+            raise ValueError("Columns of input DataFrame differ from those used in fit")
+
+
+
+        X = check_input_dataset(X)
+        missing_mask = X.isnull().reset_index(drop=True)
+        X_filled = X.interpolate(method='linear', limit_direction='both').reset_index(drop=True)
+
+        for _ in range(1, self.max_outer_iter + 1):
+            U_star, V_star, _ = self._ifcm(X_filled)
+
+            X_new = X_filled.copy()
+            for i in range(X_filled.shape[0]):
+                for j in range(X_filled.shape[1]):
+                    if missing_mask.iloc[i, j]:
+                        X_new.iloc[i, j] = np.sum(U_star[i, :] * V_star[:, j])
+
+            X_new = X_new.clip(0, 1)
+
+            diff = np.abs(X_new - X_filled)
+            rel_diff = diff / (np.abs(X_filled) + 1e-10)
+            if missing_mask.values.any():
+                AvgV = rel_diff[missing_mask].mean().mean()
+            else:
+                AvgV = 0
+
+            if AvgV <= self.stop_criteria:
+                X_filled = X_new
+                break
+
+            X_filled = X_new.copy()
+
+        return X_filled
+
+    def _ifcm(self, data: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, List[float]]:
+        """
+        Method implementing Intuitionistic Fuzzy C-Means clustering.
+        Optionally applies weighted distance metric (IFCM-σ) if sigma=True.
+
+        Parameters
+        ----------
+        data : np.ndarray or pd.DataFrame
+            Numeric data without missing values.
+
+        Returns
+        -------
+        U_star : np.ndarray
+            Adjusted membership matrix after applying intuitionistic correction.
+        V_star : np.ndarray
+            Cluster prototype (centroid) matrix after optimization.
+        J_history : list of float
+            Objective function values for each iteration of the clustering process.
+        """
+        data = data.to_numpy()
+        N, F = data.shape
+
+        rng = np.random.RandomState(self.random_state)
+        U = rng.rand(N, self.n_clusters)
+        U = U / np.sum(U, axis=1, keepdims=True)
+        J_history = []
+
+        for _ in range(self.max_iter):
+            eta = 1 - U - (1 - U ** self.alpha) ** (1 / self.alpha)
+            U_star = U + eta
+
+            V_star = np.zeros((self.n_clusters, F))
+            for j in range(self.n_clusters):
+                numerator = np.sum(U_star[:, j][:, None] * data, axis=0)
+                denominator = np.sum(U_star[:, j])
+                V_star[j] = numerator / (denominator + 1e-10)
+
+            dist = np.zeros((N, self.n_clusters))
+            for i in range(N):
+                for j in range(self.n_clusters):
+                    diff = np.linalg.norm(data[i] - V_star[j])
+                    if self.sigma:
+                        numerator = np.sum((U_star[:, j][:, None] ** self.m) * (data - V_star[j]) ** 2, axis=0)
+                        denominator = np.sum(U_star[:, j] ** self.m)
+                        sigma_j = np.sqrt(np.sum(numerator) / (denominator + 1e-10))
+                        diff = diff / (sigma_j + 1e-10)
+                    dist[i, j] = diff
+            dist = np.fmax(dist, 1e-10)
+
+            new_U = np.zeros_like(U)
+            for i in range(N):
+                for j in range(self.n_clusters):
+                    denom = np.sum((dist[i, j] / dist[i, :]) ** (2 / (self.m - 1)))
+                    new_U[i, j] = 1.0 / denom if denom != 0 else 0
+
+            J1 = np.sum((U_star ** self.m) * (dist ** 2))
+            J2 = np.sum(np.mean(eta, axis=0) * np.exp(1 - np.mean(eta, axis=0)))
+            J_ifcm = J1 + J2
+            J_history.append(J_ifcm)
+
+            if np.linalg.norm(new_U - U) < self.tol:
+                break
+
+            U = new_U.copy()
+
+        return U_star, V_star, J_history
 
 # --------------------------------------
 # FCMDTIterativeImputer

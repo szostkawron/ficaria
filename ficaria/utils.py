@@ -133,6 +133,27 @@ def validate_params(params):
             raise TypeError(f"Invalid type for tau: {type(tau).__name__}. Must be int or float.")
         if tau < 0:
             raise ValueError(f"Invalid value for tau: {tau}. Must be >= 0.")
+        
+    if 'k' in params:
+        k = params['k']
+        if not isinstance(k, int):
+            raise TypeError(f"Invalid type for k: {type(k).__name__}. Must be int.")
+        if k <= 1:
+            raise ValueError(f"Invalid value for k: {k}. Must be > 1.")
+
+    if 'alpha' in params:
+        alpha = params['alpha']
+        if not isinstance(alpha, (int, float)):
+            raise TypeError(f"Invalid type for alpha: {type(alpha).__name__}. Must be int or float.")
+        if not (0 < alpha <= 1):
+            raise ValueError(f"Invalid value for alpha: {alpha}. Must be in range (0, 1].")
+        
+    if 'n_features' in params:
+        n_features = params['n_features']
+        if not isinstance(n_features, int):
+            raise TypeError(f"Invalid type for n_features: {type(n_features).__name__}. Must be int.")
+        if n_features < 1:
+            raise ValueError(f"Invalid value for n_features: {n_features}. Must be > n_features.")
 
 
 def euclidean_distance(a: np.ndarray, b: np.ndarray):
