@@ -19,6 +19,22 @@ def sample_data():
     y = pd.Series([0, 1, 0, 1, 0])
     return X, y
 
+def test_transform_single_row(sample_data):
+    X, y = sample_data
+    clf = DecisionTreeClassifier()
+    selector = FuzzyGranularitySelector(clf)
+
+    selector.fit(X, y)
+
+    single_row = X.iloc[[0]]
+
+    X_trans = selector.transform(single_row)
+
+    assert X_trans.shape[0] == 1, "Transforming a single row should return exactly one row"
+    assert X_trans.shape[1] > 0, "Transform result should contain at least one column"
+    assert not X_trans.isnull().values.any(), "Transform result should not contain any NaN values"
+
+
 
 def test_init_invalid_classifier():
     with pytest.raises(ValueError):
@@ -41,11 +57,15 @@ def test_transform_without_fit(sample_data):
     X, y = sample_data
     clf = DecisionTreeClassifier()
     selector = FuzzyGranularitySelector(clf)
-
     with pytest.raises(AttributeError):
-        check_is_fitted(selector, attributes=[
-            "X_train_", "imputer_", "centers_", "u_", "optimal_c_", "np_rng_"
-        ])
+        check_is_fitted(
+            selector,
+            attributes=[
+                "delta_cache_",
+                "entropy_cache_",
+            ]
+        )
+
 
 
 def test_init_valid(sample_data):

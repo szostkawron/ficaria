@@ -132,7 +132,6 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         }
         self.m = len(self.C)
 
-        # --- Obliczanie promienia sąsiedztwa fuzzy ---
         self.fuzzy_adaptive_neighbourhood_radius = {}
         for col_idx, (col_name, col_type) in self.C.items():
             if col_type == "numeric":
@@ -141,7 +140,6 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             else:
                 self.fuzzy_adaptive_neighbourhood_radius[col_idx] = None
 
-        # --- Dane wewnętrzne ---
         self.U = X.copy()
         self.U[self.target_name] = y_ser.values
         self.n = len(self.U)
@@ -156,7 +154,6 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         self.D = (len(X.columns), self.target_name)
         self.D_partition = self._create_partitions()
 
-        # --- Label encoders dla nominalnych cech ---
         self._label_encoders = {}
         X_encoded = X.copy()
         for _, (col, col_type) in self.C.items():
@@ -165,7 +162,6 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
                 X_encoded[col] = le.fit_transform(X_encoded[col])
                 self._label_encoders[col] = le
 
-        # --- Wybór optymalnego podzbioru cech (logika przeniesiona z transform) ---
         self.acc_list = []
         best_acc = -np.inf
         S_opt: Optional[List[int]] = None
@@ -271,7 +267,6 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         np.ndarray
             n x n fuzzy similarity matrix.
         """
-        # Pobierz nazwę i typ kolumny
         if isinstance(self.C, list) and col_index < len(self.C):
             col_name, col_type = self.C[col_index]
         else:
@@ -299,7 +294,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
                 else:
                     thresh = 1.0 - radius
                     mat[i, :] = np.where(sim >= thresh, sim, 0.0)
-        else:  # categorical
+        else: 
             for i in range(n):
                 mat[i, :] = (vals[i] == vals).astype(float)
 
