@@ -59,17 +59,18 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         self.sigma = int(sigma)
         self.random_state = random_state
 
-        self.S: Optional[List[int]] = None
+        self.S_: Optional[List[str]] = None
 
-        self._U: Optional[pd.DataFrame] = None
-        self._delta_cache: Dict[Any, Any] = {}
-        self._D: Tuple[str, str] = ()
-        self._n: int = 0
-        self._m: int = 0
-        self._target_name: str = "target"
-        self._fuzzy_adaptive_neighbourhood_radius: Dict[str, Optional[float]] = {}
-        self._similarity_matrices: Dict[str, np.ndarray] = {}
-        self._D_partition: Dict[Any, pd.DataFrame] = {}
+        self.U_: Optional[pd.DataFrame] = None
+        self.delta_cache_: Dict[Any, Any] = {}
+        self.D_: Tuple[str, str] = ()
+        self.n_: int = 0
+        self.m_: int = 0
+        self.target_name_: str = "target"
+        self.fuzzy_adaptive_neighbourhood_radius_: Dict[str, Optional[float]] = {}
+        self.similarity_matrices_: Dict[str, np.ndarray] = {}
+        self.D_partition_: Dict[Any, pd.DataFrame] = {}
+        self.C_: Dict[str, str] = {}
 
 
     def fit(self, X: Union[pd.DataFrame, np.ndarray, List[List[Any]]], y: Optional[Union[pd.Series, np.ndarray, pd.DataFrame]] = None):
@@ -96,43 +97,43 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         
 
         i = 1
-        while self._target_name in X.columns:
-            self._target_name = f"target_{i}"
+        while self.target_name_ in X.columns:
+            self.target_name_ = f"target_{i}"
             i += 1
 
         if y is None:
-            y_ser = pd.Series(np.zeros(len(X), dtype=int), name=self._target_name)
+            y_ser = pd.Series(np.zeros(len(X), dtype=int), name=self.target_name_)
         elif isinstance(y, pd.DataFrame):
             y_ser = y.iloc[:, 0]
         else:
             y_ser = pd.Series(y).reset_index(drop=True)
-            y_ser.name = self._target_name
+            y_ser.name = self.target_name_
 
-        self._U = X.copy()
-        self._U[self._target_name] = y_ser.values
-        self._n = len(self._U)
+        self.U_ = X.copy()
+        self.U_[self.target_name_] = y_ser.values
+        self.n_ = len(self.U_)
 
-        self._C = { col: "numeric" if pd.api.types.is_numeric_dtype(X[col]) else "nominal" for col in X.columns}
-        self._m = len(self._C)
+        self.C_ = { col: "numeric" if pd.api.types.is_numeric_dtype(X[col]) else "nominal" for col in X.columns}
+        self.m_ = len(self.C_)
 
-        self._D = { self._target_name: "numeric" if pd.api.types.is_numeric_dtype(self._U[self._target_name]) else "nominal"}
+        self.D_ = { self.target_name_: "numeric" if pd.api.types.is_numeric_dtype(self.U_[self.target_name_]) else "nominal"}
 
-        self._fuzzy_adaptive_neighbourhood_radius = {}
-        for col_name, col_type in {**self._C, **self._D}.items():
+        self.fuzzy_adaptive_neighbourhood_radius_ = {}
+        for col_name, col_type in {**self.C_, **self.D_}.items():
             if col_type == "numeric":
-                std_val = float(self._U[col_name].std(ddof=0))
-                self._fuzzy_adaptive_neighbourhood_radius[col_name] = std_val / self.eps if self.eps != 0 else 0.0
+                std_val = float(self.U_[col_name].std(ddof=0))
+                self.fuzzy_adaptive_neighbourhood_radius_[col_name] = std_val / self.eps if self.eps != 0 else 0.0
             else:
-                self._fuzzy_adaptive_neighbourhood_radius[col_name] = None
+                self.fuzzy_adaptive_neighbourhood_radius_[col_name] = None
 
-        self._delta_cache = {}
-        self._entropy_cache = {}
-        self._D_partition = self._create_partitions()
+        self.delta_cache_ = {}
+        self.entropy_cache_ = {}
+        self.D_partition_ = self._create_partitions()
 
-        for col in self._U.columns:
-            self._similarity_matrices[col] = self._calculate_similarity_matrix_for_df(col, self._U)
+        for col in self.U_.columns:
+            self.similarity_matrices_[col] = self._calculate_similarity_matrix_for_df(col, self.U_)
 
-        self.S = self._FIGFS_algorithm()
+        self.S_ = self._FIGFS_algorithm()
         return self
     
     def transform(self, X: Union[pd.DataFrame, np.ndarray, List[List[Any]]]) -> pd.DataFrame:
@@ -152,13 +153,13 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
         X = check_input_dataset(X, allow_nan=False)
 
-        if self._C is None:
+        if self.C_ is None:
             raise RuntimeError("fit() must be called before transform().")
-        if list(X.columns) != list(self._C.keys()):
+        if list(X.columns) != list(self.C_.keys()):
             raise ValueError("Input X columns differ from those used in fit().")
 
         X_transformed = X.copy()
-        final_cols = self.S[:self.k]
+        final_cols = self.S_[:self.k]
 
         return X_transformed[final_cols].copy()
 
@@ -180,11 +181,11 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         np.ndarray
             n x n fuzzy similarity matrix.
         """
-        if colname in self._C:
-            col_type = self._C[colname]
+        if colname in self.C_:
+            col_type = self.C_[colname]
 
-        elif colname in self._D:
-            col_type = self._D[colname]
+        elif colname in self.D_:
+            col_type = self.D_[colname]
 
         vals = df[colname].values
         n = len(df)
@@ -194,7 +195,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             sd = float(df[colname].std(ddof=0)) if n > 1 else 0.0
             denom = 1.0 + sd
 
-            radius = self._fuzzy_adaptive_neighbourhood_radius[colname]
+            radius = self.fuzzy_adaptive_neighbourhood_radius_[colname]
 
             for i in range(n):
                 diff = np.abs(vals[i] - vals)
@@ -232,28 +233,28 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             Tuple containing granule_vector and size
         """
         if df is None:
-            df = self._U.copy()
+            df = self.U_.copy()
             use_global = True
         else:
             df = df.reset_index(drop=True).copy()
             use_global = False
 
-        if use_global and row_index in self._delta_cache:
-            return self._delta_cache[row_index]
+        if use_global and row_index in self.delta_cache_:
+            return self.delta_cache_[row_index]
 
         mats = []
 
         for colname in B:
-            if colname == self._target_name:
+            if colname == self.target_name_:
                 y_vals = df[colname].values
                 current_class = y_vals[row_index]
                 vec = (y_vals == current_class).astype(float)
             else:
                 if use_global:
-                    mat = self._similarity_matrices[colname]
+                    mat = self.similarity_matrices_[colname]
                     if mat is None:
                         mat = self._calculate_similarity_matrix_for_df(colname, df)
-                        self._similarity_matrices[colname] = mat
+                        self.similarity_matrices_[colname] = mat
                 else:
                     mat = self._calculate_similarity_matrix_for_df(colname, df)
 
@@ -268,7 +269,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
         size = float(np.sum(granule))
         if use_global:
-            self._delta_cache[row_index] = (granule, size)
+            self.delta_cache_[row_index] = (granule, size)
         
         return granule, size
 
@@ -302,23 +303,23 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         if len(B_tuple) == 0:
             return 0.0
 
-        for i in range(self._n):
+        for i in range(self.n_):
             delta_B_size = self._calculate_delta_for_column_subset(i, B_tuple)[1]
             delta_T_size = self._calculate_delta_for_column_subset(i, T_tuple)[1] if len(T_tuple) > 0 else 0.0
 
             if type == 'basic':
-                res += (1.0 - delta_B_size / max(self._n, 1.0))
+                res += (1.0 - delta_B_size / max(self.n_, 1.0))
             elif type == 'conditional':
                 res += max(delta_B_size, delta_T_size) - delta_B_size
             elif type == 'joint':
-                res += 1.0 + max(delta_B_size, delta_T_size) / max(self._n,1.0) - (delta_B_size + delta_T_size) / max(self._n,1.0)
+                res += 1.0 + max(delta_B_size, delta_T_size) / max(self.n_,1.0) - (delta_B_size + delta_T_size) / max(self.n_,1.0)
             else:
-                res += 1.0 - max(delta_B_size, delta_T_size) / max(self._n,1.0)
+                res += 1.0 - max(delta_B_size, delta_T_size) / max(self.n_,1.0)
 
         if type == 'conditional':
-            out = res / (self._n ** 2 if self._n > 0 else 1.0)
+            out = res / (self.n_ ** 2 if self.n_ > 0 else 1.0)
         else:
-            out = res / max(self._n, 1.0)
+            out = res / max(self.n_, 1.0)
 
         return out
     
@@ -340,9 +341,9 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         """
 
         total = 0.0
-        y_vals = self._U[self._target_name].values
+        y_vals = self.U_[self.target_name_].values
         
-        for i in range(self._n):
+        for i in range(self.n_):
             delta_b_vec = np.array(self._calculate_delta_for_column_subset(i, B)[0])
             
             target_vec = (y_vals == y_vals[i]).astype(float)
@@ -350,12 +351,12 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             delta_B_minus_D = np.maximum(0, delta_b_vec - target_vec)
             D_minus_delta_B = np.maximum(0, target_vec - delta_b_vec)
             
-            diff_norm = np.sum(delta_B_minus_D + D_minus_delta_B) / self._n
+            diff_norm = np.sum(delta_B_minus_D + D_minus_delta_B) / self.n_
             score_i = 1.0 - diff_norm
             
             total += score_i
         
-        return total / self._n
+        return total / self.n_
 
 
     def _local_granularity_consistency_of_B_subset(self, B: List[str]) -> float:
@@ -377,14 +378,14 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
         total = 0.0
 
-        for key, df_part in self._D_partition.items():
+        for key, df_part in self.D_partition_.items():
             df_local = df_part.reset_index(drop=True)
             part_n = len(df_local)
             res = 0.0
             for i_local in range(part_n):
                 _, delta_df_size = self._calculate_delta_for_column_subset(i_local, B, df=df_local)
                 row_series = df_local.iloc[i_local]
-                mask = np.all(self._U[df_local.columns].values == row_series.values, axis=1)
+                mask = np.all(self.U_[df_local.columns].values == row_series.values, axis=1)
                 if not np.any(mask):
                     ratio = 1.0
                 else:
@@ -393,7 +394,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
                     ratio = delta_df_size / delta_U_size
                 res += ratio
             total += (res / part_n)
-        return total / len(self._D_partition)
+        return total / len(self.D_partition_)
 
     def _create_partitions(self) -> Dict[Any, pd.DataFrame]:
         """
@@ -406,9 +407,9 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             containing only the objects belonging to that class.
         """
         partitions = {}
-        vals = self._U[self._target_name].unique()
+        vals = self.U_[self.target_name_].unique()
         for v in vals:
-            partitions[v] = self._U[self._U[self._target_name] == v].reset_index(drop=True).copy()
+            partitions[v] = self.U_[self.U_[self.target_name_] == v].reset_index(drop=True).copy()
         return partitions
 
 
@@ -426,7 +427,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             The order reflects the importance of the features.
         """
 
-        B = list(self._C.keys())
+        B = list(self.C_.keys())
         S = []
         cor_list = []
         for colname in B:
@@ -438,20 +439,20 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         S.append(c1)
         B.remove(c1)
 
-        if self._m < self.d:
+        if self.m_ < self.d:
             while len(B) > 0:
                 J_list = []
                 for colname in B:
                     sim = 0
                     for s_colname in S:
-                        fimi_d_cv = self._calculate_multi_granularity_fuzzy_implication_entropy([self._target_name], type='mutual' , T=[colname])
+                        fimi_d_cv = self._calculate_multi_granularity_fuzzy_implication_entropy([self.target_name_], type='mutual' , T=[colname])
                         fimi_cv_cu = self._calculate_multi_granularity_fuzzy_implication_entropy([colname], type='mutual' , T=[s_colname])
-                        fimi_cd = self._calculate_multi_granularity_fuzzy_implication_entropy([colname], type='mutual' , T=[self._target_name, s_colname])
+                        fimi_cd = self._calculate_multi_granularity_fuzzy_implication_entropy([colname], type='mutual' , T=[self.target_name_, s_colname])
                         sim += fimi_d_cv + fimi_cv_cu - fimi_cd
                     sim = sim / len(S)
 
                     l = S + [colname]
-                    W =  1 + (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self._target_name]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=l)) / (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self._target_name]) + 0.01)
+                    W =  1 + (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self.target_name_]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=l)) / (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self.target_name_]) + 0.01)
                     cor = self._granular_consistency_of_B_subset([colname]) + self._local_granularity_consistency_of_B_subset([colname])
                     j = W * cor - sim
                     J_list.append((colname, j))
@@ -461,22 +462,22 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
                 S.append(cv)
                 B.remove(cv)
         else:
-            FIE_dc = self._calculate_multi_granularity_fuzzy_implication_entropy([self._target_name], type='conditional' , T=list(self._C.keys()))
-            FIE_ds = self._calculate_multi_granularity_fuzzy_implication_entropy([self._target_name], type='conditional' , T=S)
+            FIE_dc = self._calculate_multi_granularity_fuzzy_implication_entropy([self.target_name_], type='conditional' , T=list(self.C_.keys()))
+            FIE_ds = self._calculate_multi_granularity_fuzzy_implication_entropy([self.target_name_], type='conditional' , T=S)
             while FIE_dc != FIE_ds:
                 J_list = []
                 W_list = []
                 for col_index in B:
                     sim = 0
                     for s_index in S:
-                        fimi_d_cv = self._calculate_multi_granularity_fuzzy_implication_entropy([self._target_name], type='mutual' , T=[col_index])
+                        fimi_d_cv = self._calculate_multi_granularity_fuzzy_implication_entropy([self.target_name_], type='mutual' , T=[col_index])
                         fimi_cv_cu = self._calculate_multi_granularity_fuzzy_implication_entropy([col_index], type='mutual' , T=[s_index])
-                        fimi_cd = self._calculate_multi_granularity_fuzzy_implication_entropy([col_index], type='mutual' , T=[self._target_name, s_index])
+                        fimi_cd = self._calculate_multi_granularity_fuzzy_implication_entropy([col_index], type='mutual' , T=[self.target_name_, s_index])
                         sim += fimi_d_cv + fimi_cv_cu - fimi_cd
                     sim = sim / len(S)
 
                     l = S + [col_index]
-                    W =  1 + (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self._target_name]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=l)) / (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self._target_name]) + 0.01)
+                    W =  1 + (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self.target_name_]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=l)) / (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self.target_name_]) + 0.01)
                     cor = self._granular_consistency_of_B_subset([col_index]) + self._local_granularity_consistency_of_B_subset([col_index])
                     j = W * cor - sim
                     J_list.append((colname, j))
@@ -485,14 +486,14 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
                 cv = max(J_list, key=lambda x: x[1])[0]
 
                 l = S + [cv]
-                W_cv_max =  1 + (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self._target_name]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=l)) / (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self._target_name]) + 0.01)
+                W_cv_max =  1 + (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self.target_name_]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=l)) / (self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional' , T=[self.target_name_]) + 0.01)
                 percen = np.percentile(np.array(W_list), self.sigma)
                 if W_cv_max >= percen:
                     S.append(cv)
                     B.remove(cv)
                 else:
                     break
-                FIE_ds = self._calculate_multi_granularity_fuzzy_implication_entropy([self._target_name], type='conditional' , T=S)
+                FIE_ds = self._calculate_multi_granularity_fuzzy_implication_entropy([self.target_name_], type='conditional' , T=S)
 
         return S
 

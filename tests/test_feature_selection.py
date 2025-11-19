@@ -41,10 +41,11 @@ def test_deterministic_results(sample_data):
 
     selector1.fit(X, y)
     selector2.fit(X, y)
-    assert selector1.S == selector2.S
+    assert selector1.S_ == selector2.S_
     transformed1 = selector1.transform(X)
     transformed2 = selector2.transform(X)
     pd.testing.assert_frame_equal(transformed1, transformed2)
+
 
 def test_transform_without_fit(sample_data):
     X, y = sample_data
@@ -55,6 +56,16 @@ def test_transform_without_fit(sample_data):
             attributes=[
                 "delta_cache_",
                 "entropy_cache_",
+                "U_",
+                "D_",
+                "n_",
+                "m_",
+                "target_name_",
+                "fuzzy_adaptive_neighbourhood_radius_",
+                "similarity_matrices_",
+                "D_partition_",
+                "C_"
+
             ]
         )
 
@@ -267,7 +278,7 @@ def test__create_partitions(sample_data):
     assert set(parts.keys()) == set(y.unique())
     for df_part in parts.values():
         assert isinstance(df_part, pd.DataFrame)
-        assert selector._target_name in df_part.columns
+        assert selector.target_name_ in df_part.columns
 
 
 def test__FIGFS_algorithm_executes(sample_data):
@@ -297,10 +308,10 @@ def test_d_less_than_number_of_features():
     selector.fit(X, y)
     X_transformed = selector.transform(X)
     
-    assert len(selector.S) <= selector.d, f"Selected features ({len(selector.S)}) exceed d={selector.d}"
-    assert X_transformed.shape[1] == len(selector.S)
+    assert len(selector.S_) <= selector.d, f"Selected features ({len(selector.S_)}) exceed d={selector.d}"
+    assert X_transformed.shape[1] == len(selector.S_)
     
-    for colname in selector.S:
+    for colname in selector.S_:
         assert colname in X.columns
 
 
@@ -318,7 +329,7 @@ def test_transform_single_row():
     X_transformed = selector.transform(X)
 
     assert X_transformed.shape[0] == 1, "Number of rows should remain 1"
-    assert X_transformed.shape[1] == min(selector.k, len(selector.S)), "Number of columns should match selected features"
+    assert X_transformed.shape[1] == min(selector.k, len(selector.S_)), "Number of columns should match selected features"
     
     for col in X_transformed.columns:
         assert col in X.columns
@@ -330,8 +341,8 @@ def test_d_greater_than_number_of_features(sample_data):
     selector.fit(X, y)
     X_transformed = selector.transform(X)
 
-    assert len(selector.S) <= X.shape[1], "Number of selected features should not exceed number of features"
-    assert X_transformed.shape[1] == len(selector.S)
+    assert len(selector.S_) <= X.shape[1], "Number of selected features should not exceed number of features"
+    assert X_transformed.shape[1] == len(selector.S_)
     
     for col in X_transformed.columns:
         assert col in X.columns
