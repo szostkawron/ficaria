@@ -1,9 +1,11 @@
+import os
+import sys
+
 import numpy as np
 import pandas as pd
 import pytest
 from scipy.spatial.distance import euclidean
 
-import os, sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c_means, validate_params
 
@@ -17,32 +19,32 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         ({"n_clusters": "3"}, TypeError, "Invalid type for n_clusters"),
         ({"n_clusters": -1}, ValueError, "Invalid value for n_clusters"),
         ({"n_clusters": 0}, ValueError, "Invalid value for n_clusters"),
-        
+
         # max_iter
         ({"max_iter": "100"}, TypeError, "Invalid type for max_iter"),
         ({"max_iter": 0}, ValueError, "Invalid value for max_iter"),
-        
+
         # random_state
         ({"random_state": "abc"}, TypeError, "Invalid type for random_state"),
-        
+
         # m (fuzziness)
         ({"m": "2.0"}, TypeError, "Invalid type for m"),
         ({"m": 1.0}, ValueError, "Invalid value for m"),
-        
+
         # tol
         ({"tol": "1e-5"}, TypeError, "Invalid type for tol"),
         ({"tol": 0}, ValueError, "Invalid value for tol"),
-        
+
         # wl
         ({"wl": "0.5"}, TypeError, "Invalid type for wl"),
         ({"wl": -0.1}, ValueError, "Invalid value for wl"),
         ({"wl": 1.5}, ValueError, "Invalid value for wl"),
-        
+
         # wb
         ({"wb": "0.2"}, TypeError, "Invalid type for wb"),
         ({"wb": -0.1}, ValueError, "Invalid value for wb"),
         ({"wb": 1.5}, ValueError, "Invalid value for wb"),
-        
+
         # tau
         ({"tau": "0.5"}, TypeError, "Invalid type for tau"),
         ({"tau": -0.1}, ValueError, "Invalid value for tau"),
@@ -104,6 +106,7 @@ vector_pairs = [
     (np.array([np.nan, 2.0, 3.0, np.nan, 5.0]), np.array([1.0, 2.0, 4.0, 8.0, 5.0])),
 ]
 
+
 @pytest.mark.parametrize("a, b", vector_pairs)
 def test_euclidean_distance_matches_scipy(a, b):
     mask = ~np.isnan(a) & ~np.isnan(b)
@@ -120,7 +123,7 @@ dataframes_list = [
         "b": [5.0, 4.0, 3.0],
     }),
 
-        pd.DataFrame({
+    pd.DataFrame({
         "a": [1.0, 2.0, 3.0, 4.0, 5.0],
         "b": [5.0, 4.0, 3.0, 2.0, 1.0],
     }),
@@ -134,10 +137,11 @@ dataframes_list = [
     }),
 ]
 
+
 @pytest.mark.parametrize("X", dataframes_list)
 def test_fuzzy_c_means_output_shapes(X):
     centers, memberships = fuzzy_c_means(X, n_clusters=2, m=2.0, max_iter=50, tol=1e-4, random_state=42)
-    
+
     assert centers.shape == (2, X.shape[1])
     assert memberships.shape == (X.shape[0], 2)
     np.testing.assert_allclose(np.sum(memberships, axis=1), 1.0, atol=1e-5)

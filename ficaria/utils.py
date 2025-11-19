@@ -1,10 +1,11 @@
+from typing import Optional
+
 import numpy as np
 import pandas as pd
+from gower import gower_matrix
 from kneed import KneeLocator
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
-from typing import Optional
-from gower import gower_matrix
 
 
 def split_complete_incomplete(X: pd.DataFrame):
@@ -133,7 +134,7 @@ def validate_params(params):
             raise TypeError(f"Invalid type for tau: {type(tau).__name__}. Must be int or float.")
         if tau < 0:
             raise ValueError(f"Invalid value for tau: {tau}. Must be >= 0.")
-        
+
     if 'k' in params:
         k = params['k']
         if not isinstance(k, int):
@@ -147,7 +148,7 @@ def validate_params(params):
             raise TypeError(f"Invalid type for alpha: {type(alpha).__name__}. Must be int or float.")
         if not (0 < alpha <= 1):
             raise ValueError(f"Invalid value for alpha: {alpha}. Must be in range (0, 1].")
-        
+
     if 'n_features' in params:
         n_features = params['n_features']
         if not isinstance(n_features, int):
@@ -310,7 +311,8 @@ def rough_kmeans_from_fcm(X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, 
         clusters.append((lower, upper, centers[k]))
 
     return clusters
-  
+
+
 def fuzzy_c_means_categorical(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
                               random_state=None):
     """

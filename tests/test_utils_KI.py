@@ -404,6 +404,7 @@ def test_impute_FCKI(X, X_train, n_clusters, random_state, m, max_iter):
     assert result.shape == X.shape
     assert result.isna().sum().sum() == 0
 
+
 ############################################
 
 @pytest.mark.parametrize("X, n_clusters, random_state, m", [

@@ -2,8 +2,6 @@ import os
 import sys
 
 import pytest
-from sklearn.impute import SimpleImputer
-import os, sys
 from sklearn.exceptions import NotFittedError
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -281,13 +279,13 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
 
 
 @pytest.mark.parametrize("bad_X", [
-    pd.DataFrame(),  
-    np.array([]), 
-    None,  
-    "not a dataframe", 
-    [1, 2, 3],  
-    3.14,  
-    pd.DataFrame({'a': [0.1, 'bad', 0.3]}), 
+    pd.DataFrame(),
+    np.array([]),
+    None,
+    "not a dataframe",
+    [1, 2, 3],
+    3.14,
+    pd.DataFrame({'a': [0.1, 'bad', 0.3]}),
 ])
 def test_liiifcm_fit_invalid_input_types(bad_X):
     imputer = FCMInterpolationIterativeImputer()
@@ -313,6 +311,7 @@ def test_liiifcm_sigma_branch():
     assert isinstance(result, pd.DataFrame)
     assert result.shape == X.shape
     assert not result.isnull().any().any()
+
 
 @pytest.mark.parametrize("random_state", [42, 0, None])
 def test_liiifcm_init_random_state(random_state):
@@ -424,10 +423,11 @@ def test_liiifcm_ifcm_output_shapes(X):
     assert V_star.shape[0] == imputer.n_clusters
     assert V_star.shape[1] == X.shape[1]
 
+
 def test_liiifcm_transform_fails_on_different_columns():
     X_fit = pd.DataFrame({'a': [0.1, 0.2, 0.3], 'b': [0.4, 0.5, 0.6]})
     X_transform = pd.DataFrame({'x': [0.1, 0.2, 0.3], 'y': [0.4, 0.5, 0.6]})
-    
+
     imputer = FCMInterpolationIterativeImputer()
     imputer.fit(X_fit)
 
@@ -450,8 +450,7 @@ def test_liiifcm_ifcm_j_history_validity():
     assert len(J_history) <= imputer.max_iter, "J_history length should not exceed max_iter"
     assert all(isinstance(j, (float, np.floating)) for j in J_history), "J_history elements should be floats"
     assert np.all(np.isfinite(J_history)), "J_history should not contain NaN or inf values"
-    assert result.isna().sum().sum() == 0
-    assert result.equals(result2)
+
 
 ##################
 
@@ -1148,6 +1147,8 @@ def test_fcmkiimputer_transform_column_mismatch(X_fit, X_transform):
 
     with pytest.raises(ValueError, match="Invalid input: Input dataset columns do not match columns seen during fit"):
         imputer.transform(X_transform)
+
+
 dataframes_list = [
     pd.DataFrame({
         "a": [1.0, 2.0, 3.0, np.nan, 5.0],
@@ -1255,7 +1256,7 @@ def test_fcmcentroidimputer_fit_raises_if_too_many_clusters():
 def test_fcmcentroidimputer_fit_no_complete_rows():
     X = pd.DataFrame({"a": [np.nan, np.nan], "b": [np.nan, np.nan]})
     imputer = FCMCentroidImputer()
-    with pytest.raises(ValueError, match="No complete rows found for fitting"):
+    with pytest.raises(ValueError, match="Invalid input: Input dataset contains no complete rows."):
         imputer.fit(X)
 
 
@@ -1368,6 +1369,8 @@ def test_rough_kmeans_from_fcm_cluster_consistency():
         assert isinstance(lower, np.ndarray)
         assert isinstance(upper, np.ndarray)
         assert lower.shape[1] == X.shape[1] if len(lower) > 0 else True
+
+
 @pytest.mark.parametrize(
     "params, expected_exception, expected_msg",
     [

@@ -1,13 +1,12 @@
 from collections import defaultdict
+from typing import Tuple, List
 
+import numpy as np
+import pandas as pd
 from pandas.api.types import is_numeric_dtype
 from scipy.spatial.distance import cdist
 from sklearn.base import BaseEstimator, TransformerMixin
-import numpy as np
-import pandas as pd
-from typing import Optional, Tuple, List
 from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.utils.validation import check_is_fitted
@@ -240,16 +239,16 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         )
 
         self.clusters_ = self._rough_kmeans_from_fcm(
-                    complete_array,
-                    self.memberships_,
-                    self.centers_,
-                    wl=self.wl,
-                    wb=self.wb,
-                    tau=self.tau,
-                    max_iter=self.max_iter,
-                    tol=self.tol
-                )
-        
+            complete_array,
+            self.memberships_,
+            self.centers_,
+            wl=self.wl,
+            wb=self.wb,
+            tau=self.tau,
+            max_iter=self.max_iter,
+            tol=self.tol
+        )
+
         self.feature_names_in_ = list(X.columns)
 
         return self
@@ -298,7 +297,6 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
                 X_imputed.at[idx, col] = np.mean(approx_data[:, col_idx])
 
         return X_imputed
-    
 
     def _rough_kmeans_from_fcm(self, X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter=100, tol=1e-4):
         """
@@ -328,7 +326,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
         if isinstance(X, pd.DataFrame):
             X = X.to_numpy()
-        
+
         n_samples = X.shape[0]
         n_clusters = center_init.shape[0]
         centers = center_init.copy()
@@ -437,6 +435,7 @@ class KIImputer(BaseEstimator, TransformerMixin):
         X_imputed = impute_KI(X, self.X_train_, np_rng=self.np_rng_, max_iter=self.max_iter)
         return X_imputed
 
+
 # --------------------------------------
 # FCMKIterativeImputer
 # --------------------------------------
@@ -505,10 +504,16 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         return X_imputed
 
 
+# --------------------------------------
+# FCMInterpolationIterativeImputer
+# --------------------------------------
+
 class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
-    def __init__(self,n_clusters: int = 3,m: float = 2.0,alpha: float = 2.0,max_iter: int = 100,tol: float = 1e-5,max_outer_iter: int = 20,stop_criteria: float = 0.01,sigma: bool = False,random_state: Optional[int] = None,):
-        
+    def __init__(self, n_clusters: int = 3, m: float = 2.0, alpha: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
+                 max_outer_iter: int = 20, stop_criteria: float = 0.01, sigma: bool = False,
+                 random_state: Optional[int] = None, ):
+
         """
         Initialize Linear Interpolation Based Iterative Intuitionistic Fuzzy C-Means (LI-IIFCM).
         Parameters
@@ -613,8 +618,6 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         if list(X.columns) != list(self.columns_):
             raise ValueError("Columns of input DataFrame differ from those used in fit")
 
-
-
         X = check_input_dataset(X)
         missing_mask = X.isnull().reset_index(drop=True)
         X_filled = X.interpolate(method='linear', limit_direction='both').reset_index(drop=True)
@@ -714,6 +717,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             U = new_U.copy()
 
         return U_star, V_star, J_history
+
 
 # --------------------------------------
 # FCMDTIterativeImputer
