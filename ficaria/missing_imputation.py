@@ -619,7 +619,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         missing_mask = X.isnull().reset_index(drop=True)
         X_filled = X.interpolate(method='linear', limit_direction='both').reset_index(drop=True)
 
-        for _ in range(1, self.max_outer_iter + 1):
+        for _ in range(self.max_outer_iter):
             U_star, V_star, _ = self._ifcm(X_filled)
 
             X_new = X_filled.copy()
@@ -627,8 +627,6 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
                 for j in range(X_filled.shape[1]):
                     if missing_mask.iloc[i, j]:
                         X_new.iloc[i, j] = np.sum(U_star[i, :] * V_star[:, j])
-
-            X_new = X_new.clip(0, 1)
 
             diff = np.abs(X_new - X_filled)
             rel_diff = diff / (np.abs(X_filled) + 1e-10)
@@ -638,8 +636,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
                 AvgV = 0
 
             if AvgV <= self.stop_criteria:
-                X_filled = X_new
-                break
+                return X_new
 
             X_filled = X_new.copy()
 
@@ -672,8 +669,14 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         U = U / np.sum(U, axis=1, keepdims=True)
         J_history = []
 
+        sigma_val = 1.0
+        if isinstance(self.sigma, (int, float)):
+            sigma_val = float(self.sigma)
+
         for _ in range(self.max_iter):
             eta = 1 - U - (1 - U ** self.alpha) ** (1 / self.alpha)
+            eta = np.clip(eta, 0, 1)
+
             U_star = U + eta
 
             V_star = np.zeros((self.n_clusters, F))
@@ -687,10 +690,10 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
                 for j in range(self.n_clusters):
                     diff = np.linalg.norm(data[i] - V_star[j])
                     if self.sigma:
-                        numerator = np.sum((U_star[:, j][:, None] ** self.m) * (data - V_star[j]) ** 2, axis=0)
-                        denominator = np.sum(U_star[:, j] ** self.m)
-                        sigma_j = np.sqrt(np.sum(numerator) / (denominator + 1e-10))
-                        diff = diff / (sigma_j + 1e-10)
+                        D2 = diff**2
+                        sim = np.exp(-D2 / (2 * sigma_val**2))
+                        diff = 1 - sim 
+
                     dist[i, j] = diff
             dist = np.fmax(dist, 1e-10)
 
