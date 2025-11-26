@@ -396,47 +396,6 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
 
 # --------------------------------------
-# KIImputer
-# --------------------------------------
-class KIImputer(BaseEstimator, TransformerMixin):
-    """
-    KIImputer: Hybrid KNN + Iterative Imputer for Missing Data.
-
-    Implements the KI imputation method, which combines k-nearest neighbors (KNN)
-    and iterative imputation to estimate missing values. For each incomplete row,
-    the best number of neighbors (k) is selected by minimizing reconstruction error,
-    and the imputation is refined using a model-based iterative approach.
-    """
-
-    def __init__(self, random_state: Optional[int] = None, max_iter: int = 30):
-        if random_state is not None and not isinstance(random_state, int):
-            raise TypeError('Invalid random_state: Expected an integer or None')
-        if not isinstance(max_iter, int) or max_iter <= 1:
-            raise TypeError('Invalid max_iter: Expected a positive integer')
-
-        self.random_state = random_state
-        self.max_iter = max_iter
-        pass
-
-    def fit(self, X, y=None):
-        X = check_input_dataset(X)
-        self.X_train_ = X.copy()
-        self.np_rng_ = np.random.RandomState(self.random_state)
-        return self
-
-    def transform(self, X):
-        X = check_input_dataset(X)
-        check_is_fitted(self, attributes=["X_train_", "np_rng_"])
-        if not X.columns.equals(self.X_train_.columns):
-            raise ValueError(
-                f"Invalid input: Input dataset columns do not match columns seen during fit"
-            )
-
-        X_imputed = impute_KI(X, self.X_train_, np_rng=self.np_rng_, max_iter=self.max_iter)
-        return X_imputed
-
-
-# --------------------------------------
 # FCMKIterativeImputer
 # --------------------------------------
 class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
