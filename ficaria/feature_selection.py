@@ -439,7 +439,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         S.append(c1)
         B.remove(c1)
 
-        if self.m_ < self.d:
+        if self.k < self.d:
             while len(B) > 0:
                 J_list = []
                 for colname in B:
