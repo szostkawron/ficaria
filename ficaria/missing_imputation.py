@@ -32,6 +32,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
             m (float): fuzziness parameter
             max_iter (int): maximum number of FCM iterations
             tol (float): convergence tolerance
+            random_state (int): random seed
         """
         validate_params({
             'n_clusters': n_clusters,
@@ -104,7 +105,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 # FCMParameterImputer
 # --------------------------------------
 class FCMParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, m=2.0, max_iter=150, tol=1e-5, random_state=None):
+    def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, random_state=None):
         """
         Fuzzy C-Means Parameter-based Imputation.
         
@@ -116,6 +117,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
             m (float): fuzziness parameter
             max_iter (int): maximum number of FCM iterations
             tol (float): convergence tolerance
+            random_state (int): random seed
         """
         validate_params({
             'n_clusters': n_clusters,
@@ -192,6 +194,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 # --------------------------------------
 # FCMRoughParameterImputer
 # --------------------------------------
+
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
     def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
         """
@@ -402,7 +405,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 # --------------------------------------
 class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
     """
-   Hybrid imputer combining fuzzy c-means clustering, k-nearest neighbors, and iterative imputation.
+   Hybrid imputer combining fuzzy c-means clustering, n_feature-nearest neighbors, and iterative imputation.
 
    FCKI improves missing data imputation by first clustering data with fuzzy c-means,
    allowing points to belong to multiple clusters. It then performs KNN-based imputation
@@ -410,7 +413,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
    similarity search enhances accuracy compared to standard KNN imputation.
     """
 
-    def __init__(self, random_state: Optional[int] = None, max_clusters: int = 10, m: float = 2, max_iter: int = 30):
+    def __init__(self, random_state: Optional[int] = None, max_clusters: int = 10, m: float = 2,
+                 max_FCM_iter: int = 100, max_II_iter: int = 30, max_k: int = 20, tol: float = 1e-5):
         if random_state is not None and not isinstance(random_state, int):
             raise TypeError('Invalid random_state: Expected an integer or None')
 
@@ -420,13 +424,23 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         if not isinstance(m, (int, float)) or m <= 1:
             raise TypeError('Invalid m value: Expected a numeric value greater than 1')
 
-        if not isinstance(max_iter, int) or max_iter <= 1:
-            raise TypeError('Invalid max_iter: Expected a positive integer greater than 1')
+        if not isinstance(max_FCM_iter, int) or max_FCM_iter <= 1:
+            raise TypeError('Invalid max_FCM_iter: Expected a positive integer greater than 1')
+        if not isinstance(max_II_iter, int) or max_II_iter <= 1:
+            raise TypeError('Invalid max_II_iter: Expected a positive integer greater than 1')
+        if not isinstance(max_k, int) or max_k <= 1:
+            raise TypeError('Invalid max_k: Expected a positive integer greater than 1')
+        if not isinstance(tol, (int, float)) or tol <= 0:
+            raise TypeError('Invalid tol value: Expected a numeric value greater than 0')
 
         self.random_state = random_state
         self.max_clusters = max_clusters
         self.m = m
-        self.max_iter = max_iter
+        self.max_FCM_iter = max_FCM_iter
+        self.max_II_iter = max_II_iter
+        self.max_k = max_k
+        self.tol = tol
+
         pass
 
     def fit(self, X, y=None):
@@ -438,7 +452,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
 
         self.optimal_c_ = find_optimal_clusters_fuzzy(X_filled, min_clusters=1, max_clusters=self.max_clusters,
-                                                      m=self.m, random_state=self.random_state)
+                                                      m=self.m, random_state=self.random_state,
+                                                      max_iter=self.max_FCM_iter, tol=self.tol)
         self.np_rng_ = np.random.RandomState(self.random_state)
         np.random.seed(self.random_state)
 
@@ -465,7 +480,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     def _find_best_k(self, St: pd.DataFrame, random_col: int, original_value: float) -> int:
         """
-        Select the optimal number of neighbors (k) that minimizes RMSE
+        Select the optimal number of neighbors (n_feature) that minimizes RMSE
         when imputing a masked value in a selected column.
     
         Parameters:
@@ -474,7 +489,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             original_value (float): True value before masking.
 
         Returns:
-            int: Best value of k.
+            int: Best value of n_feature.
         """
         n = len(St)
         if n <= 1:
@@ -487,7 +502,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         sorted_indices = np.argsort(distances)
         sorted_rows = St_without_xi[sorted_indices]
 
-        max_k = min(n - 1, self.max_iter)
+        max_k = min(n - 1, self.max_k)
         k_values = range(1, max_k + 1)
         rmse_list = []
 
@@ -508,7 +523,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     def _get_neighbors(self, train: list[list[float]], test_row: list[float], k: int) -> list[list[float]]:
         """
-        Returns the k closest rows in `train` to `test_row`
+        Returns the n_feature closest rows in `train` to `test_row`
         using Euclidean distance (ignores NaNs).
 
         Parameters:
@@ -516,7 +531,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             test_row (list[float]): Query point.
             k (int): Number of neighbors to return.
         Returns:
-            list: Closest k rows from `train`.
+            list: Closest n_feature rows from `train`.
         """
         test = np.array(test_row)
         distances = list()
@@ -589,7 +604,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             neighbors_xi = self._get_neighbors(Pt_without_xi, xi_from_Pt, k)
             S = np.vstack([neighbors_xi, xi.to_numpy()])
 
-            imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_iter)
+            imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_II_iter)
             S_filled_EM = imputer.fit_transform(S)
 
             xi_imputed = S_filled_EM[-1, :]
@@ -645,7 +660,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
     def __init__(self, n_clusters: int = 3, m: float = 2.0, alpha: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
-                 max_outer_iter: int = 20, stop_criteria: float = 0.01, sigma: bool = False,
+                 max_outer_iter: int = 20, stop_threshold: float = 0.01, sigma: bool = False,
                  random_state: Optional[int] = None, ):
 
         """
@@ -664,7 +679,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             Tolerance value for convergence during IIFCM iterations.
         max_outer_iter : int, default=20
             Maximum number of iterations for the imputation process.
-        stop_criteria : float, default=0.01
+        stop_threshold : float, default=0.01
             Threshold for average relative change in missing values used to stop iteration early.
         sigma : bool, default=False
             If True, applies weighted IFCM-σ distance metric instead of standard Euclidean distance.
@@ -684,8 +699,8 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             raise TypeError("Invalid tol: Expected a positive float.")
         if not isinstance(max_outer_iter, int) or max_outer_iter <= 0:
             raise TypeError("Invalid max_outer_iter: Expected a positive integer.")
-        if not isinstance(stop_criteria, (int, float)) or stop_criteria <= 0:
-            raise TypeError("Invalid stop_criteria: Expected a positive float.")
+        if not isinstance(stop_threshold, (int, float)) or stop_threshold <= 0:
+            raise TypeError("Invalid stop_threshold: Expected a positive float.")
         if not isinstance(sigma, bool):
             raise TypeError("Invalid sigma: Expected a boolean value.")
         if random_state is not None and not isinstance(random_state, int):
@@ -697,7 +712,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         self.max_iter = max_iter
         self.tol = tol
         self.max_outer_iter = max_outer_iter
-        self.stop_criteria = stop_criteria
+        self.stop_threshold = stop_threshold
         self.sigma = sigma
         self.random_state = random_state
 
@@ -772,7 +787,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             else:
                 AvgV = 0
 
-            if AvgV <= self.stop_criteria:
+            if AvgV <= self.stop_threshold:
                 return X_new
 
             X_filled = X_new.copy()
@@ -827,9 +842,9 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
                 for j in range(self.n_clusters):
                     diff = np.linalg.norm(data[i] - V_star[j])
                     if self.sigma:
-                        D2 = diff**2
-                        sim = np.exp(-D2 / (2 * sigma_val**2))
-                        diff = 1 - sim 
+                        D2 = diff ** 2
+                        sim = np.exp(-D2 / (2 * sigma_val ** 2))
+                        diff = 1 - sim
 
                     dist[i, j] = diff
             dist = np.fmax(dist, 1e-10)
@@ -864,8 +879,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, random_state=None, min_samples_leaf=3, learning_rate=0.1, m=2, max_clusters=20, max_iter=100,
-                 stop_threshold=1.0,
-                 alpha=1.0):
+                 stop_threshold=1.0, alpha=1.0, max_FCM_iter=100, tol=1e-5):
         if random_state is not None and not isinstance(random_state, int):
             raise TypeError('Invalid random_state: Expected an integer or None.')
 
@@ -878,17 +892,23 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         if not isinstance(m, (int, float)) or m <= 1:
             raise TypeError('Invalid m value: Expected a numeric value greater than 1.')
 
-        if not isinstance(max_clusters, int) or max_iter <= 1:
-            raise TypeError('Invalid max_clusters value: Expected an integer greater than 1.')
+        if not isinstance(max_clusters, int) or max_clusters < 1:
+            raise TypeError('Invalid max_clusters value: Expected an integer >= 1.')
 
-        if not isinstance(max_iter, int) or max_iter <= 1:
-            raise TypeError('Invalid max_iter value: Expected an integer greater than 1.')
+        if not isinstance(max_iter, int) or max_iter < 1:
+            raise TypeError('Invalid max_iter value: Expected an integer >= 1.')
 
         if not isinstance(stop_threshold, (int, float)) or stop_threshold < 0:
             raise TypeError('Invalid stop_threshold value: Expected a numeric value >= 0.')
 
         if not isinstance(alpha, (int, float)) or alpha <= 0:
             raise TypeError('Invalid alpha value: Expected a numeric value greater than 0.')
+
+        if not isinstance(max_FCM_iter, int) or max_FCM_iter < 1:
+            raise TypeError('Invalid max_FCM_iter value: Expected an integer >= 1.')
+
+        if not isinstance(tol, (int, float)) or tol <= 0:
+            raise TypeError('Invalid tol value: Expected a numeric value greater than 0.')
 
         self.random_state = random_state
         self.min_samples_leaf = min_samples_leaf
@@ -898,6 +918,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         self.max_iter = max_iter
         self.stop_threshold = stop_threshold
         self.alpha = alpha
+        self.max_FCM_iter = max_FCM_iter
+        self.tol = tol
 
     def fit(self, X, y=None):
         X = check_input_dataset(X, require_numeric=False)
@@ -984,7 +1006,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
         FSI = []
         for c in c_values:
-            centers, u = fcm_function(X.to_numpy(), c, self.m, self.max_iter, random_state=self.random_state)
+            centers, u = fcm_function(X.to_numpy(), c, self.m, self.max_FCM_iter, random_state=self.random_state,
+                                      tol=self.tol)
             FSI.append(self._fuzzy_silhouette(X.to_numpy(), u, self.alpha))
 
         opt_c = c_values[np.argmax(FSI)]
@@ -1110,8 +1133,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         records_in_leaf = pd.concat([complete_records_in_leaf, imputed_X.loc[matching_indices]])
 
         n_clusters = self._determine_optimal_n_clusters_FSI(records_in_leaf, fcm_function)
-        centers, u = fcm_function(records_in_leaf.to_numpy(), n_clusters, self.m, max_iter=self.max_iter,
-                                  random_state=self.random_state)
+        centers, u = fcm_function(records_in_leaf.to_numpy(), n_clusters, self.m, max_iter=self.max_FCM_iter,
+                                  tol=self.tol, random_state=self.random_state)
 
         col_j_idx = self.X_train_complete_.columns.get_loc(j)
         centers = np.asarray(centers)

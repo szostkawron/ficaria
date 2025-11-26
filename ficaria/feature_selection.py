@@ -17,13 +17,13 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     Parameters
     ----------
-    k : int, default=3
+    n_feature : int, default=3
         Number of features to choose while transforming data
 
     eps : float, default=0.5
         Controls fuzzy radius normalization (> 0).
 
-    d : int, default=3
+    max_features : int, default=3
         Maximum number of features to consider (> 0).
 
     sigma : int, default=10
@@ -39,21 +39,22 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     """
 
-    def __init__(self, k: int = 3, eps: float = 0.5, d: int = 10, sigma: int = 10, random_state: Optional[int] = None):
-        if not isinstance(k, int) or k <= 0 or k > d:
-            raise ValueError("k must be a positive integer and less or equal d.")
+    def __init__(self, n_feature: int = 3, eps: float = 0.5, max_features: int = 10, sigma: int = 10,
+                 random_state: Optional[int] = None):
+        if not isinstance(n_feature, int) or n_feature <= 0 or n_feature > max_features:
+            raise ValueError("n_feature must be a positive integer and less or equal max_features.")
         if not isinstance(eps, (int, float)) or eps <= 0:
             raise ValueError("eps must be a positive number.")
-        if not isinstance(d, int) or d <= 0:
-            raise ValueError("d must be a positive integer.")
+        if not isinstance(max_features, int) or max_features <= 0:
+            raise ValueError("max_features must be a positive integer.")
         if not isinstance(sigma, int) or not (1 <= sigma <= 100):
             raise ValueError("sigma must be an integer in [1, 100].")
         if random_state is not None and not isinstance(random_state, int):
             raise ValueError("random_state must be an integer or None.")
 
-        self.k = k
+        self.k = n_feature
         self.eps = float(eps)
-        self.d = int(d)
+        self.d = int(max_features)
         self.sigma = int(sigma)
         self.random_state = random_state
 
@@ -211,7 +212,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         return mat
 
     def _calculate_delta_for_column_subset(self, row_index: int, B: List[str], df: Optional[pd.DataFrame] = None) -> \
-    Tuple[np.ndarray, float]:
+            Tuple[np.ndarray, float]:
         """
         Calculate granule membership vector and size for a given row and subset of features.
 
@@ -459,9 +460,9 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
                         self.target_name_]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S,
                                                                                                           type='conditional',
                                                                                                           T=l)) / (
-                                    self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional',
-                                                                                                T=[
-                                                                                                    self.target_name_]) + 0.01)
+                                self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional',
+                                                                                            T=[
+                                                                                                self.target_name_]) + 0.01)
                     cor = self._granular_consistency_of_B_subset(
                         [colname]) + self._local_granularity_consistency_of_B_subset([colname])
                     j = W * cor - sim
@@ -501,9 +502,9 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
                         self.target_name_]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S,
                                                                                                           type='conditional',
                                                                                                           T=l)) / (
-                                    self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional',
-                                                                                                T=[
-                                                                                                    self.target_name_]) + 0.01)
+                                self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional',
+                                                                                            T=[
+                                                                                                self.target_name_]) + 0.01)
                     cor = self._granular_consistency_of_B_subset(
                         [col_index]) + self._local_granularity_consistency_of_B_subset([col_index])
                     j = W * cor - sim
@@ -517,10 +518,10 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
                     self.target_name_]) - self._calculate_multi_granularity_fuzzy_implication_entropy(S,
                                                                                                       type='conditional',
                                                                                                       T=l)) / (
-                                       self._calculate_multi_granularity_fuzzy_implication_entropy(S,
-                                                                                                   type='conditional',
-                                                                                                   T=[
-                                                                                                       self.target_name_]) + 0.01)
+                                   self._calculate_multi_granularity_fuzzy_implication_entropy(S,
+                                                                                               type='conditional',
+                                                                                               T=[
+                                                                                                   self.target_name_]) + 0.01)
                 percen = np.percentile(np.array(W_list), self.sigma)
                 if W_cv_max >= percen:
                     S.append(cv)
@@ -554,7 +555,7 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         validate_params({
             'n_features': n_features,
             'alpha': alpha,
-            'k': k
+            'n_feature': k
         })
 
         self.W_ = None
@@ -726,7 +727,7 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_density(self, distances, knn_indices):
         """
-        Compute local density rho(x) for each sample based on distances and k-nearest neighbors
+        Compute local density rho(x) for each sample based on distances and n_feature-nearest neighbors
 
         Parameters:
             distances (np.ndarray): pairwise distance matrix between all samples
@@ -749,7 +750,7 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
         Parameters:
             rho (np.ndarray): density values for all samples
-            knn_indices (np.ndarray): matrix with k-nearest neighbor indices
+            knn_indices (np.ndarray): matrix with n_feature-nearest neighbor indices
         """
 
         n_samples = len(rho)

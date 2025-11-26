@@ -95,7 +95,7 @@ def validate_params(params):
         max_iter = params['max_iter']
         if not isinstance(max_iter, int):
             raise TypeError(f"Invalid type for max_iter: {type(max_iter).__name__}. Must be int.")
-        if max_iter < 1:
+        if max_iter <= 1:
             raise ValueError(f"Invalid value for max_iter: {max_iter}. Must be >= 1.")
 
     if 'random_state' in params:
@@ -138,12 +138,12 @@ def validate_params(params):
         if tau < 0:
             raise ValueError(f"Invalid value for tau: {tau}. Must be >= 0.")
 
-    if 'k' in params:
-        k = params['k']
+    if 'n_feature' in params:
+        k = params['n_feature']
         if not isinstance(k, int):
-            raise TypeError(f"Invalid type for k: {type(k).__name__}. Must be int.")
+            raise TypeError(f"Invalid type for n_feature: {type(k).__name__}. Must be int.")
         if k <= 1:
-            raise ValueError(f"Invalid value for k: {k}. Must be > 1.")
+            raise ValueError(f"Invalid value for n_feature: {k}. Must be > 1.")
 
     if 'alpha' in params:
         alpha = params['alpha']
@@ -423,7 +423,8 @@ def compute_fcm_objective(X: np.ndarray, centers: np.ndarray, u: np.ndarray, m: 
 
 
 def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters: int = 2, max_clusters: int = 10,
-                                random_state: Optional[int] = None, m: float = 2):
+                                random_state: Optional[int] = None, m: float = 2, max_iter: int = 100,
+                                tol: float = 1e-5):
     """
     Elbow method for fuzzy C-means with missing data imputation and objective function calculation.
 
@@ -433,6 +434,8 @@ def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters: int = 2, max_clus
         max_clusters (int): Maximum number of clusters (default is 10).
         random_state (int): Seed for reproducibility (default is None).
         m (float): Fuzziness parameter (default is 2).
+        max_iter (int): Maximum number of iterations in FCM (default is 100).
+        tol (float): Tolerance for FCM (default is 1e-5).
 
     Returns:
         int or None: Optimal number of clusters found by the elbow method.
@@ -445,7 +448,8 @@ def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters: int = 2, max_clus
     X_sampled = X.sample(n=sample_size, random_state=random_state)
 
     for k in k_values:
-        centers, u = fuzzy_c_means(X_sampled.values, n_clusters=k, m=m, random_state=random_state)
+        centers, u = fuzzy_c_means(X_sampled.values, n_clusters=k, m=m, random_state=random_state, max_iter=max_iter,
+                                   tol=tol)
 
         obj = compute_fcm_objective(X_sampled.to_numpy(), centers, u, m)
         objective_values.append(obj)

@@ -49,10 +49,10 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         ({"tau": "0.5"}, TypeError, "Invalid type for tau"),
         ({"tau": -0.1}, ValueError, "Invalid value for tau"),
 
-        # k
-        ({"k": "ABC"}, TypeError, "Invalid type for k"),
-        ({"k": 0}, ValueError, "Invalid value for k"),
-        ({"k": -3}, ValueError, "Invalid value for k"),
+        # n_feature
+        ({"n_feature": "ABC"}, TypeError, "Invalid type for n_feature"),
+        ({"n_feature": 0}, ValueError, "Invalid value for n_feature"),
+        ({"n_feature": -3}, ValueError, "Invalid value for n_feature"),
 
         # alpha
         ({"alpha": "xyz"}, TypeError, "Invalid type for alpha"),

@@ -7,9 +7,10 @@ from sklearn.exceptions import NotFittedError
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ficaria.missing_imputation import *
 
+
 # ----- FCMKIterativeImputer ---------------------------------------
 
-@pytest.mark.parametrize("St, random_col, original_value, max_iter, random_state", [
+@pytest.mark.parametrize("St, random_col, original_value, max_k, random_state", [
     (
             pd.DataFrame({
                 'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
@@ -22,8 +23,8 @@ from ficaria.missing_imputation import *
                 'income': [50000, 55000, 80000, 85000, 90000, 120000, np.nan]}),
             0, 125000, 15, 42)
 ])
-def test_fcmkiimputer_find_best_k(St, random_col, original_value, max_iter, random_state):
-    imputer = FCMKIterativeImputer(random_state=random_state, max_iter=max_iter)
+def test_fcmkiimputer_find_best_k(St, random_col, original_value, max_k, random_state):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_k=max_k)
     result1 = imputer._find_best_k(St, random_col, original_value)
     result2 = imputer._find_best_k(St, random_col, original_value)
     assert result1 == result2
@@ -96,7 +97,7 @@ def test_fcmkiimputer_KI_algorithm_error_no_complete(X, random_state):
         imputer._KI_algorithm(X)
 
 
-@pytest.mark.parametrize("X, X_train, random_state, max_iter", [
+@pytest.mark.parametrize("X, X_train, random_state, max_FCM_iter, max_k, max_II_iter", [
     (pd.DataFrame({
         'a': [1, np.nan, 3],
         'b': [4, 5, np.nan],
@@ -107,7 +108,7 @@ def test_fcmkiimputer_KI_algorithm_error_no_complete(X, random_state):
          'b': [13, 14, 15],
          'c': [16, 17, 18]
      }),
-     42, 15),
+     42, 100, 15, 50),
     (pd.DataFrame({
         'a': [1, np.nan, 3],
         'b': [4, 5, np.nan],
@@ -118,17 +119,18 @@ def test_fcmkiimputer_KI_algorithm_error_no_complete(X, random_state):
          'b': [4, 5, np.nan],
          'c': [7, 8, 9]
      }),
-     123, 30),
+     123, 120, 30, 100),
     (pd.DataFrame({
         'a': [1, np.nan, 3],
         'b': [4, 5, np.nan],
         'c': [7, 8, 9]
     }),
      None,
-     42, 20)
+     42, 50, 10, 80)
 ])
-def test_fcmkiimputer_KI_algorithm_with_parameters(X, X_train, random_state, max_iter):
-    imputer = FCMKIterativeImputer(random_state=random_state, max_iter=max_iter)
+def test_fcmkiimputer_KI_algorithm_with_parameters(X, X_train, random_state, max_FCM_iter, max_k, max_II_iter):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_FCM_iter=max_FCM_iter, max_k=max_k,
+                                   max_II_iter=max_II_iter)
     imputer.fit(X)
     result = imputer._KI_algorithm(X, X_train)
     assert isinstance(result, pd.DataFrame)
@@ -138,7 +140,7 @@ def test_fcmkiimputer_KI_algorithm_with_parameters(X, X_train, random_state, max
     np.testing.assert_array_almost_equal(result, result_repeat)
 
 
-@pytest.mark.parametrize("X, X_train, n_clusters, random_state, m, max_iter", [
+@pytest.mark.parametrize("X, X_train, n_clusters, random_state, m, max_FCM_iter, max_k, max_II_iter", [
     (pd.DataFrame({
         "a": [1.0, np.nan, 3.0],
         "b": [4.0, 5.0, 6.0]
@@ -147,7 +149,7 @@ def test_fcmkiimputer_KI_algorithm_with_parameters(X, X_train, random_state, max
          "a": [1.0, 2.0, 3.0],
          "b": [4.0, 5.0, 6.0]
      }),
-     2, 42, 1.1, 15),
+     2, 42, 1.1, 50, 15, 100),
     (pd.DataFrame({
         "x": [np.nan, 2.5, 3.0, 4.5],
         "y": [1.0, np.nan, 3.0, 4.0]
@@ -156,7 +158,7 @@ def test_fcmkiimputer_KI_algorithm_with_parameters(X, X_train, random_state, max
          "x": [1.0, 2.0, 3.0, 4.0],
          "y": [1.0, 2.0, 3.0, 4.0]
      }),
-     2, 42, 2, 20),
+     2, 42, 2, 100, 20, 50),
     (pd.DataFrame({
         "x": [1.0, 2.0, 3.0],
         "y": [4.0, 5.0, 6.0]
@@ -165,10 +167,11 @@ def test_fcmkiimputer_KI_algorithm_with_parameters(X, X_train, random_state, max
          "x": [1.0, 2.0, 3.0],
          "y": [4.0, 5.0, 6.0]
      }),
-     2, 42, 1.7, 5)
+     2, 42, 1.7, 30, 5, 50)
 ])
-def test_fcmkiimputer_FCKI_algorithm(X, X_train, n_clusters, random_state, m, max_iter):
-    imputer = FCMKIterativeImputer(random_state=random_state, max_iter=max_iter, m=m)
+def test_fcmkiimputer_FCKI_algorithm(X, X_train, n_clusters, random_state, m, max_FCM_iter, max_k, max_II_iter):
+    imputer = FCMKIterativeImputer(random_state=random_state, m=m, max_FCM_iter=max_FCM_iter, max_k=max_k,
+                                   max_II_iter=max_II_iter)
     imputer.fit(X_train)
     result = imputer._FCKI_algorithm(X)
     assert isinstance(result, pd.DataFrame)
@@ -176,17 +179,20 @@ def test_fcmkiimputer_FCKI_algorithm(X, X_train, n_clusters, random_state, m, ma
     assert result.isna().sum().sum() == 0
 
 
-@pytest.mark.parametrize("random_state, max_clusters, m, max_iter", [
-    (42, 5, 1.1, 30),
-    (None, 8, 25, 10),
-    (123, 20, 3.1, 20)
+@pytest.mark.parametrize("random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter", [
+    (42, 5, 1.1, 100, 30, 50),
+    (None, 8, 25, 80, 10, 100),
+    (123, 20, 3.1, 30, 20, 30)
 ])
-def test_fcmkiimputer_init(random_state, max_clusters, m, max_iter):
-    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_iter=max_iter)
+def test_fcmkiimputer_init(random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_FCM_iter=max_FCM_iter,
+                                   max_k=max_k, max_II_iter=max_II_iter)
     assert imputer.random_state == random_state
     assert imputer.max_clusters == max_clusters
     assert imputer.m == m
-    assert max_iter == imputer.max_iter
+    assert max_FCM_iter == max_FCM_iter
+    assert max_k == max_k
+    assert max_II_iter == max_II_iter
 
 
 @pytest.mark.parametrize("random_state", [
@@ -198,7 +204,7 @@ def test_fcmkiimputer_init(random_state, max_clusters, m, max_iter):
 def test_fcmkiimputer_init_errors_randomstate(random_state):
     with pytest.raises(TypeError,
                        match="Invalid random_state: Expected an integer or None"):
-        imputer = FCMKIterativeImputer(random_state=random_state)
+        FCMKIterativeImputer(random_state=random_state)
 
 
 @pytest.mark.parametrize("max_clusters", [
@@ -214,7 +220,7 @@ def test_fcmkiimputer_init_errors_randomstate(random_state):
 def test_fcmkiimputer_init_errors_maxclusters(max_clusters):
     with pytest.raises(TypeError,
                        match="Invalid max_clusters: Expected an integer greater than 1"):
-        imputer = FCMKIterativeImputer(max_clusters=max_clusters)
+        FCMKIterativeImputer(max_clusters=max_clusters)
 
 
 @pytest.mark.parametrize("m", [
@@ -230,34 +236,61 @@ def test_fcmkiimputer_init_errors_maxclusters(max_clusters):
 def test_fcmkiimputer_init_errors_m(m):
     with pytest.raises(TypeError,
                        match="Invalid m value: Expected a numeric value greater than 1"):
-        imputer = FCMKIterativeImputer(m=m)
+        FCMKIterativeImputer(m=m)
 
 
-@pytest.mark.parametrize("max_iter", [
+@pytest.mark.parametrize("max_FCM_iter", [
     "txt",
     [24],
     [[35]],
     3.5,
     None
 ])
-def test_fcmkiimputer_init_errors_maxiter(max_iter):
+def test_fcmkiimputer_init_errors_max_FCM_iter(max_FCM_iter):
     with pytest.raises(TypeError,
-                       match="Invalid max_iter: Expected a positive integer greater than 1"):
-        imputer = FCMKIterativeImputer(max_iter=max_iter)
+                       match="Invalid max_FCM_iter: Expected a positive integer greater than 1"):
+        FCMKIterativeImputer(max_FCM_iter=max_FCM_iter)
 
 
-@pytest.mark.parametrize("X, random_state, max_clusters, m, max_iter", [
+@pytest.mark.parametrize("max_k", [
+    "txt",
+    [24],
+    [[35]],
+    3.5,
+    None
+])
+def test_fcmkiimputer_init_errors_max_k(max_k):
+    with pytest.raises(TypeError,
+                       match="Invalid max_k: Expected a positive integer greater than 1"):
+        FCMKIterativeImputer(max_k=max_k)
+
+
+@pytest.mark.parametrize("max_II_iter", [
+    "txt",
+    [24],
+    [[35]],
+    3.5,
+    None
+])
+def test_fcmkiimputer_init_errors_max_II_iter(max_II_iter):
+    with pytest.raises(TypeError,
+                       match="Invalid max_II_iter: Expected a positive integer greater than 1"):
+        FCMKIterativeImputer(max_II_iter=max_II_iter)
+
+
+@pytest.mark.parametrize("X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter", [
     (pd.DataFrame({
         'a': [np.nan, 2.0, 3.0],
         'b': [4.0, 5.0, np.nan]
-    }), 42, 5, 1.5, 100),
+    }), 42, 5, 1.5, 50, 20, 100),
     (pd.DataFrame({
         'a': [1.0, 2.0],
         'b': [np.nan, 6.0]
-    }), 42, 10, 2, 30)
+    }), 42, 10, 2, 30, 5, 100)
 ])
-def test_fcmkiimputer_fit(X, random_state, max_clusters, m, max_iter):
-    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_iter=max_iter)
+def test_fcmkiimputer_fit(X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_FCM_iter=max_FCM_iter,
+                                   max_k=max_k, max_II_iter=max_II_iter)
     imputer.fit(X)
 
     assert hasattr(imputer, "X_train_")
@@ -317,6 +350,7 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
     assert result.shape == X_test.shape
     assert result.isna().sum().sum() == 0
     assert result.equals(result2)
+
 
 @pytest.mark.parametrize("X", [
     pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
@@ -411,7 +445,7 @@ def test_liiifcm_reproducibility(X):
         max_iter=50,
         tol=1e-4,
         max_outer_iter=5,
-        stop_criteria=0.01,
+        stop_threshold=0.01,
         sigma=False,
         random_state=42
     )
@@ -428,11 +462,11 @@ def test_liiifcm_reproducibility(X):
     pd.testing.assert_frame_equal(result1, result2)
 
 
-@pytest.mark.parametrize("n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_criteria, sigma", [
+@pytest.mark.parametrize("n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_threshold, sigma", [
     (3, 2.0, 2.0, 100, 1e-5, 20, 0.01, False),
     (5, 1.5, 3.0, 50, 1e-4, 10, 0.05, True),
 ])
-def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_criteria, sigma):
+def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_threshold, sigma):
     imputer = FCMInterpolationIterativeImputer(
         n_clusters=n_clusters,
         m=m,
@@ -440,7 +474,7 @@ def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_
         max_iter=max_iter,
         tol=tol,
         max_outer_iter=max_outer_iter,
-        stop_criteria=stop_criteria,
+        stop_threshold=stop_threshold,
         sigma=sigma
     )
 
@@ -450,7 +484,7 @@ def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_
     assert imputer.max_iter == max_iter
     assert imputer.tol == tol
     assert imputer.max_outer_iter == max_outer_iter
-    assert imputer.stop_criteria == stop_criteria
+    assert imputer.stop_threshold == stop_threshold
     assert imputer.sigma == sigma
 
 
@@ -461,7 +495,7 @@ def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_
     ("max_iter", 0),
     ("tol", -1e-5),
     ("max_outer_iter", 0),
-    ("stop_criteria", 0),
+    ("stop_threshold", 0),
     ("sigma", "yes"),
 ])
 def test_liiifcm_init_invalid(param, value):
@@ -934,7 +968,7 @@ def test_fcmdti_init(random_state, min_samples_leaf, learning_rate, m, max_clust
 def test_fcmdti_init_errors_randomstate(random_state):
     with pytest.raises(TypeError,
                        match="Invalid random_state: Expected an integer or None"):
-        imputer = FCMDTIterativeImputer(random_state=random_state)
+        FCMDTIterativeImputer(random_state=random_state)
 
 
 invalid_values = ["txt", [24], [[35]], 3.5, 0, -5, 1]
@@ -945,7 +979,7 @@ params_to_test = ["max_iter", "max_clusters"]
 def test_fcmdti_init_errors(param_name, value):
     kwargs = {param_name: value}
     with pytest.raises(TypeError, match=f"Invalid {param_name} value: Expected an integer greater than 1."):
-        imputer = FCMDTIterativeImputer(**kwargs)
+        FCMDTIterativeImputer(**kwargs)
 
 
 @pytest.mark.parametrize("m", [
@@ -960,7 +994,7 @@ def test_fcmdti_init_errors(param_name, value):
 def test_fcmdti_init_errors_m(m):
     with pytest.raises(TypeError,
                        match="Invalid m value: Expected a numeric value greater than 1"):
-        imputer = FCMDTIterativeImputer(m=m)
+        FCMDTIterativeImputer(m=m)
 
 
 invalid_values = ["txt", [24], [[35]], -3.5, -5]
@@ -971,7 +1005,7 @@ params_to_test = ["min_samples_leaf", "learning_rate", "stop_threshold", "alpha"
 def test_fcmdti_init_errors(param_name, value):
     kwargs = {param_name: value}
     with pytest.raises(TypeError, match=f"Invalid {param_name} value: Expected a numeric value"):
-        imputer = FCMDTIterativeImputer(**kwargs)
+        FCMDTIterativeImputer(**kwargs)
 
 
 @pytest.mark.parametrize("X, random_state,min_samples_leaf,learning_rate,m,max_clusters,max_iter,stop_threshold,alpha",
@@ -1190,7 +1224,6 @@ def test_fcmdti_transform_column_mismatch(X_fit, X_transform):
         imputer.transform(X_transform)
 
 
-
 dataframes_list = [
     pd.DataFrame({
         "a": [1.0, 2.0, 3.0, np.nan, 5.0],
@@ -1228,6 +1261,7 @@ fcm_params_list = [
     (2, 1.5, 150, 1e-5),
     (3, 2.5, 300, 1e-6),
     (3, 3.0, 600, 1e-4),
+    (1, 3.0, 600, 1e-4),
 ]
 
 
@@ -1349,7 +1383,7 @@ def test_fcmroughparameterimputer_fit_creates_clusters():
 
 @pytest.mark.parametrize("X", dataframes_list)
 def test_fcmroughparameterimputer_transform_imputes_values(X):
-    imputer = FCMRoughParameterImputer()
+    imputer = FCMRoughParameterImputer(wl=1, wb=1, n_clusters=1, tau=0)
     imputer.fit(X.dropna())
     result = imputer.transform(X)
     assert not result.isna().any().any()
@@ -1440,6 +1474,7 @@ def test_rough_kmeans_from_fcm_cluster_consistency():
         ({"wl": "0.5"}, TypeError, "Invalid type for wl"),
         ({"wl": -0.1}, ValueError, "Invalid value for wl"),
         ({"wl": 1.5}, ValueError, "Invalid value for wl"),
+        ({"wl": 0}, ValueError, "Invalid value for wl"),
 
         # wb
         ({"wb": "0.2"}, TypeError, "Invalid type for wb"),
