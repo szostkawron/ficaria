@@ -7,6 +7,8 @@ from pandas.api.types import is_numeric_dtype
 from scipy.spatial.distance import cdist
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.compose import ColumnTransformer
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.preprocessing import OrdinalEncoder
 from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
 from sklearn.utils.validation import check_is_fitted
@@ -428,7 +430,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         pass
 
     def fit(self, X, y=None):
-        X = check_input_dataset(X, require_numeric=True)
+        X = check_input_dataset(X, require_numeric=True, no_nan_columns=True)
         self.X_train_ = X.copy()
 
         self.imputer_ = SimpleImputer(strategy="mean")
@@ -458,9 +460,182 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
                 f"Invalid input: Input dataset columns do not match columns seen during fit"
             )
 
-        X_imputed = impute_FCKI(X, self.X_train_, self.centers_, self.u_, self.optimal_c_, self.imputer_, self.m,
-                                self.np_rng_, self.random_state, max_iter=self.max_iter)
+        X_imputed = self._FCKI_algorithm(X)
         return X_imputed
+
+    def _find_best_k(self, St: pd.DataFrame, random_col: int, original_value: float) -> int:
+        """
+        Select the optimal number of neighbors (k) that minimizes RMSE
+        when imputing a masked value in a selected column.
+    
+        Parameters:
+            St (pd.DataFrame): Data with last row partially masked.
+            random_col (int): Index of the masked column.
+            original_value (float): True value before masking.
+
+        Returns:
+            int: Best value of k.
+        """
+        n = len(St)
+        if n <= 1:
+            return 1
+
+        xi = St.iloc[-1].to_numpy()
+        St_without_xi = St.iloc[:-1].to_numpy()
+
+        distances = [euclidean_distance(xi, row) for row in St_without_xi]
+        sorted_indices = np.argsort(distances)
+        sorted_rows = St_without_xi[sorted_indices]
+
+        max_k = min(n - 1, self.max_iter)
+        k_values = range(1, max_k + 1)
+        rmse_list = []
+
+        for k in k_values:
+            top_k_rows = sorted_rows[:k]
+            col_values = top_k_rows[:, random_col]
+            col_values = col_values[~np.isnan(col_values)]
+
+            if len(col_values) > 0:
+                mean_value = np.mean(col_values)
+                rmse = np.sqrt((mean_value - original_value) ** 2)
+            else:
+                rmse = np.inf
+            rmse_list.append(rmse)
+
+        best_k = k_values[np.argmin(rmse_list)]
+        return best_k
+
+    def _get_neighbors(self, train: list[list[float]], test_row: list[float], k: int) -> list[list[float]]:
+        """
+        Returns the k closest rows in `train` to `test_row`
+        using Euclidean distance (ignores NaNs).
+
+        Parameters:
+            train (list[list[float]]): Training data.
+            test_row (list[float]): Query point.
+            k (int): Number of neighbors to return.
+        Returns:
+            list: Closest k rows from `train`.
+        """
+        test = np.array(test_row)
+        distances = list()
+        for train_row in train:
+            dist = np.sqrt(np.nansum((test - np.array(train_row)) ** 2))
+            distances.append((train_row, dist))
+        distances.sort(key=lambda tup: tup[1])
+        neighbors = list()
+        for i in range(k):
+            neighbors.append(distances[i][0])
+        return neighbors
+
+    def _KI_algorithm(self, X: pd.DataFrame, X_train: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+        """
+        Impute missing values using the KI method (KNN + Iterative Imputation).
+
+        Parameters:
+            X (pd.DataFrame): Data to impute.
+            X_train (pd.DataFrame): Optional reference data (default is None).
+
+        Returns:
+            pd.DataFrame: Imputed dataset (same shape and index as X).
+        """
+
+        X_incomplete_rows = X.copy()
+        X_mis = X_incomplete_rows[X_incomplete_rows.isnull().any(axis=1)]
+
+        if X_train is not None and not X.equals(X_train):
+            X_safe = X.copy()
+            X_train_safe = X_train.copy()
+
+            X_safe_reset = X_safe.reset_index(drop=True)
+            X_train_safe_reset = X_train_safe.reset_index(drop=True)
+
+            all_data = pd.concat([X_safe_reset, X_train_safe_reset], axis=0, ignore_index=True)
+            index_map = dict(zip(X.index, range(len(X))))
+        else:
+            all_data = X.reset_index(drop=True).copy()
+            index_map = dict(zip(X.index, range(len(X))))
+
+        mis_idx = X_mis.index.to_numpy()
+        imputed_values = []
+
+        for idx in mis_idx:
+            xi = X_incomplete_rows.loc[idx]
+
+            A_mis = [col for col in X.columns if pd.isnull(xi[col])]
+
+            P = all_data.dropna(subset=A_mis)
+            if P.empty:
+                raise ValueError(f"Invalid input: No rows with valid values found in columns: {A_mis}")
+
+            P_ext = np.vstack([P.to_numpy(), xi.to_numpy()])
+
+            St = P_ext.copy()
+            St_Complete_Temp = St.copy()
+
+            A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
+            AV = St_Complete_Temp[-1, A_r]
+            while np.isnan(AV):
+                A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
+                AV = St_Complete_Temp[-1, A_r]
+            St[-1, A_r] = np.NaN
+
+            k = self._find_best_k(pd.DataFrame(St, columns=X.columns), A_r, AV)
+
+            xi_from_Pt = P_ext[-1, :].tolist()
+            Pt_without_xi = P_ext[:-1, :].tolist()
+
+            neighbors_xi = self._get_neighbors(Pt_without_xi, xi_from_Pt, k)
+            S = np.vstack([neighbors_xi, xi.to_numpy()])
+
+            imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_iter)
+            S_filled_EM = imputer.fit_transform(S)
+
+            xi_imputed = S_filled_EM[-1, :]
+            imputed_values.append(xi_imputed)
+
+            if idx in index_map:
+                all_data.iloc[index_map[idx]] = xi_imputed
+
+        if imputed_values:
+            X_incomplete_rows.loc[mis_idx, :] = np.vstack(imputed_values)
+
+        return X_incomplete_rows
+
+    def _FCKI_algorithm(self, X: pd.DataFrame) -> pd.DataFrame:
+        """
+        Impute missing values using the FCKI method (FCM + KNN + Iterative Imputation).
+
+        Parameters:
+            X (pd.DataFrame): Data to impute.
+
+        Returns:
+            np.ndarray: Imputed dataset.
+        """
+        X_filled = self.imputer_.transform(X)
+        X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
+        membership_matrix = fcm_predict(X_filled.values, self.centers_, self.m)
+        fcm_labels_train = self.u_.argmax(axis=1)
+        fcm_labels_X = membership_matrix.argmax(axis=1)
+
+        all_clusters = pd.DataFrame(columns=X.columns)
+
+        for i in range(self.optimal_c_):
+            cluster_train_i = self.X_train_[fcm_labels_train == i]
+            cluster_X_i = X[fcm_labels_X == i]
+            imputed_cluster_X_I = self._KI_algorithm(cluster_X_i, cluster_train_i)
+            imputed_cluster_X_I = pd.DataFrame(imputed_cluster_X_I, columns=X.columns, index=cluster_X_i.index)
+            if len(all_clusters) == 0:
+                all_clusters = imputed_cluster_X_I
+            else:
+                all_clusters = pd.concat([all_clusters, imputed_cluster_X_I], axis=0)
+
+        all_clusters = all_clusters.loc[~all_clusters.index.duplicated(keep='last')]
+
+        all_clusters.sort_index(inplace=True)
+
+        return all_clusters
 
 
 # --------------------------------------

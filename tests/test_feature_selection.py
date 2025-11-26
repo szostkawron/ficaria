@@ -8,6 +8,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ficaria.feature_selection import *
 
 
+# ----- FuzzyGranularitySelector -----------------------------------------------
+
 @pytest.fixture
 def sample_data():
     X = pd.DataFrame({

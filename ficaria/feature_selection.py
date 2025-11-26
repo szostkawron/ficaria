@@ -322,7 +322,8 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     def _granular_consistency_of_B_subset(self, B: List[str]) -> float:
         """
-        Measure how well a subset of features B preserves the structure of the target variable D in terms of fuzzy information granules.
+        Measure how well a subset of features B preserves the structure of the target variable D in terms of
+        fuzzy information granules.
 
         Parameters
         ----------

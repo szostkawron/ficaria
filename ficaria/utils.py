@@ -4,8 +4,6 @@ import numpy as np
 import pandas as pd
 from gower import gower_matrix
 from kneed import KneeLocator
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer, SimpleImputer
 
 
 def split_complete_incomplete(X: pd.DataFrame):
@@ -23,7 +21,8 @@ def split_complete_incomplete(X: pd.DataFrame):
     return complete, incomplete
 
 
-def check_input_dataset(X, require_numeric=False, allow_nan=True, require_complete_rows=False, no_nan_rows=False):
+def check_input_dataset(X, require_numeric=False, allow_nan=True, require_complete_rows=False, no_nan_rows=False,
+                        no_nan_columns=False):
     """
     Convert input to DataFrame and check the validity of the dataset
 
@@ -33,6 +32,7 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True, require_comple
         allow_nan (bool): allow nan values
         require_complete_rows (bool): check if complete rows are present
         no_nan_rows (bool): check if there are no nan rows are present
+        no_nan_columns (bool): check if there are no nan columns are present
 
     Returns:
         pd.DataFrame: converted data
@@ -66,6 +66,9 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True, require_comple
         rows_all_nan = X.isnull().all(axis=1)
         if rows_all_nan.any():
             raise ValueError("Invalid input: Input dataset contains a row with only NaN values")
+
+    if no_nan_columns and X.isna().all().any():
+        raise ValueError("Invalid input: Input dataset contains a column with only NaN values")
 
     return X
 
@@ -395,156 +398,6 @@ def fcm_predict(X_new, centers, m=2.0):
     return u_new
 
 
-def get_neighbors(train: list[list[float]], test_row: list[float], k: int) -> list[list[float]]:
-    """
-    Returns the k closest rows in `train` to `test_row`
-    using Euclidean distance (ignores NaNs).
-
-    Parameters:
-        train (list[list[float]]): Training data.
-        test_row (list[float]): Query point.
-        k (int): Number of neighbors to return.
-    Returns:
-        list: Closest k rows from `train`.
-    """
-    test = np.array(test_row)
-    distances = list()
-    for train_row in train:
-        dist = np.sqrt(np.nansum((test - np.array(train_row)) ** 2))
-        distances.append((train_row, dist))
-    distances.sort(key=lambda tup: tup[1])
-    neighbors = list()
-    for i in range(k):
-        neighbors.append(distances[i][0])
-    return neighbors
-
-
-def find_best_k(St: pd.DataFrame, random_col: int, original_value: float, max_iter: int = 30) -> int:
-    """
-    Select the optimal number of neighbors (k) that minimizes RMSE
-    when imputing a masked value in a selected column.
-
-    Parameters:
-        St (pd.DataFrame): Data with last row partially masked.
-        random_col (int): Index of the masked column.
-        original_value (float): True value before masking.
-        max_iter (int): Maximum number of iterations (default is 30).
-
-    Returns:
-        int: Best value of k.
-    """
-    n = len(St)
-    if n <= 1:
-        return 1
-
-    xi = St.iloc[-1].to_numpy()
-    St_without_xi = St.iloc[:-1].to_numpy()
-
-    distances = [euclidean_distance(xi, row) for row in St_without_xi]
-    sorted_indices = np.argsort(distances)
-    sorted_rows = St_without_xi[sorted_indices]
-
-    max_k = min(n - 1, max_iter)
-    k_values = range(1, max_k + 1)
-    rmse_list = []
-
-    for k in k_values:
-        top_k_rows = sorted_rows[:k]
-        col_values = top_k_rows[:, random_col]
-        col_values = col_values[~np.isnan(col_values)]
-
-        if len(col_values) > 0:
-            mean_value = np.mean(col_values)
-            rmse = np.sqrt((mean_value - original_value) ** 2)
-        else:
-            rmse = np.inf
-        rmse_list.append(rmse)
-
-    best_k = k_values[np.argmin(rmse_list)]
-    return best_k
-
-
-def impute_KI(X: pd.DataFrame, X_train: Optional[pd.DataFrame] = None, np_rng: Optional[np.random.RandomState] = None,
-              random_state: int = 42, max_iter: int = 30) -> pd.DataFrame:
-    """
-    Impute missing values using the KI method (KNN + Iterative Imputation).
-
-    Parameters:
-        X (pd.DataFrame): Data to impute.
-        X_train (pd.DataFrame): Optional reference data (default is None).
-        np_rng (np.random.RandomState): Random generator for reproducibility (default is None).
-        random_state (int): Random state for reproducibility (default is 42).
-        max_iter (int): Maximum number of iterations (default is 30).
-
-    Returns:
-        pd.DataFrame: Imputed dataset (same shape and index as X).
-    """
-    if np_rng is None:
-        np_rng = np.random.RandomState()
-
-    X_incomplete_rows = X.copy()
-    X_mis = X_incomplete_rows[X_incomplete_rows.isnull().any(axis=1)]
-
-    if X_train is not None and not X.equals(X_train):
-        X_safe = X.copy()
-        X_train_safe = X_train.copy()
-
-        X_safe_reset = X_safe.reset_index(drop=True)
-        X_train_safe_reset = X_train_safe.reset_index(drop=True)
-
-        all_data = pd.concat([X_safe_reset, X_train_safe_reset], axis=0, ignore_index=True)
-        index_map = dict(zip(X.index, range(len(X))))
-    else:
-        all_data = X.reset_index(drop=True).copy()
-        index_map = dict(zip(X.index, range(len(X))))
-
-    mis_idx = X_mis.index.to_numpy()
-    imputed_values = []
-
-    for idx in mis_idx:
-        xi = X_incomplete_rows.loc[idx]
-
-        A_mis = [col for col in X.columns if pd.isnull(xi[col])]
-
-        P = all_data.dropna(subset=A_mis)
-        if P.empty:
-            raise ValueError(f"Invalid input: No rows with valid values found in columns: {A_mis}")
-
-        P_ext = np.vstack([P.to_numpy(), xi.to_numpy()])
-
-        St = P_ext.copy()
-        St_Complete_Temp = St.copy()
-
-        A_r = np_rng.randint(0, St_Complete_Temp.shape[1])
-        AV = St_Complete_Temp[-1, A_r]
-        while np.isnan(AV):
-            A_r = np_rng.randint(0, St_Complete_Temp.shape[1])
-            AV = St_Complete_Temp[-1, A_r]
-        St[-1, A_r] = np.NaN
-
-        k = find_best_k(pd.DataFrame(St, columns=X.columns), A_r, AV, max_iter)
-
-        xi_from_Pt = P_ext[-1, :].tolist()
-        Pt_without_xi = P_ext[:-1, :].tolist()
-
-        neighbors_xi = get_neighbors(Pt_without_xi, xi_from_Pt, k)
-        S = np.vstack([neighbors_xi, xi.to_numpy()])
-
-        imputer = IterativeImputer(random_state=random_state, max_iter=max_iter)
-        S_filled_EM = imputer.fit_transform(S)
-
-        xi_imputed = S_filled_EM[-1, :]
-        imputed_values.append(xi_imputed)
-
-        if idx in index_map:
-            all_data.iloc[index_map[idx]] = xi_imputed
-
-    if imputed_values:
-        X_incomplete_rows.loc[mis_idx, :] = np.vstack(imputed_values)
-
-    return X_incomplete_rows
-
-
 def compute_fcm_objective(X: np.ndarray, centers: np.ndarray, u: np.ndarray, m: float = 2):
     """
     Compute the fuzzy c-means objective function value.
@@ -603,49 +456,3 @@ def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters: int = 2, max_clus
     if optimal_k is None:
         return int((max_clusters + min_clusters) // 2)
     return int(optimal_k)
-
-
-def impute_FCKI(X: pd.DataFrame, X_train: pd.DataFrame, centers: np.ndarray, u_train: np.ndarray, c: int,
-                imputer: SimpleImputer, m: float = 2, np_rng: Optional[np.random.RandomState] = None,
-                random_state: Optional[int] = None, max_iter: int = 30) -> pd.DataFrame:
-    """
-    Impute missing values using the FCKI method (FCM + KNN + Iterative Imputation).
-
-    Parameters:
-        X (pd.DataFrame): Data to impute.
-        X_train (pd.DataFrame or None): Optional reference data.
-        centers (np.ndarray): Cluster centers obtained from fuzzy c-means (shape: [n_clusters, n_features]).
-        u_train (np.ndarray): Membership matrix for the training data (shape: [n_samples_train, n_clusters]).
-        c (int): Optimal number of clusters used in fuzzy c-means.
-        imputer (SimpleImputer): A fitted simple imputer used for the initial rough imputation
-        m (float): Fuzziness parameter used in fuzzy c-means (m > 1) (default is 2).
-        np_rng (np.random.RandomState or None): Optional NumPy random generator for reproducibility (default is None).
-        random_state (int): Random seed used for KNN-based imputation and reproducibility (default is 42).
-        max_iter (int): Maximum number of iterations (default is 30).
-
-    Returns:
-        np.ndarray: Imputed dataset.
-    """
-    X_filled = imputer.transform(X)
-    X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
-    membership_matrix = fcm_predict(X_filled.values, centers, m)
-    fcm_labels_train = u_train.argmax(axis=1)
-    fcm_labels_X = membership_matrix.argmax(axis=1)
-
-    all_clusters = pd.DataFrame(columns=X.columns)
-
-    for i in range(c):
-        cluster_train_i = X_train[fcm_labels_train == i]
-        cluster_X_i = X[fcm_labels_X == i]
-        imputed_cluster_X_I = impute_KI(cluster_X_i, cluster_train_i, np_rng, random_state, max_iter)
-        imputed_cluster_X_I = pd.DataFrame(imputed_cluster_X_I, columns=X.columns, index=cluster_X_i.index)
-        if len(all_clusters) == 0:
-            all_clusters = imputed_cluster_X_I
-        else:
-            all_clusters = pd.concat([all_clusters, imputed_cluster_X_I], axis=0)
-
-    all_clusters = all_clusters.loc[~all_clusters.index.duplicated(keep='last')]
-
-    all_clusters.sort_index(inplace=True)
-
-    return all_clusters

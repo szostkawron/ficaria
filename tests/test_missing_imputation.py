@@ -7,6 +7,174 @@ from sklearn.exceptions import NotFittedError
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ficaria.missing_imputation import *
 
+# ----- FCMKIterativeImputer ---------------------------------------
+
+@pytest.mark.parametrize("St, random_col, original_value, max_iter, random_state", [
+    (
+            pd.DataFrame({
+                'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
+                'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
+                'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]}),
+            1, 85, 20, 102),
+    (
+            pd.DataFrame({
+                'age': [25, 26, np.nan, 51, 53, 72, 75],
+                'income': [50000, 55000, 80000, 85000, 90000, 120000, np.nan]}),
+            0, 125000, 15, 42)
+])
+def test_fcmkiimputer_find_best_k(St, random_col, original_value, max_iter, random_state):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_iter=max_iter)
+    result1 = imputer._find_best_k(St, random_col, original_value)
+    result2 = imputer._find_best_k(St, random_col, original_value)
+    assert result1 == result2
+    assert isinstance(result1, int)
+    assert result1 > 0
+    assert result1 <= len(St)
+
+
+@pytest.mark.parametrize("train, test_row, num_neighbors, expected, random_state", [
+    (
+            [[1, 2], [3, 4], [5, 6], [7, 8]], [1, 2],
+            2, [[1, 2], [3, 4]], 42
+    ),
+    (
+            [[1, 2], [3, 4], [5, 6], [7, 8]], [5, 6],
+            1, [[5, 6]], 123
+    ),
+    (
+            [[1, 2], [3, 4], [5, 6]], [2, 3],
+            2, [[1, 2], [3, 4]], 34
+    )
+])
+def test_fcmkiimputer_get_neighbors(train, test_row, num_neighbors, expected, random_state):
+    imputer = FCMKIterativeImputer(random_state=random_state)
+    result = imputer._get_neighbors(train, test_row, num_neighbors)
+    assert result == expected
+    assert len(result) == num_neighbors
+
+
+@pytest.mark.parametrize("X, random_state", [
+    (pd.DataFrame({
+        'height_cm': [165, 170, 175, 180, 175, 160, 175, 190],
+        'weight_kg': [60, 65, 70, 75, 80, 55, 68, 80],
+        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, 25.0]}), 42),
+    (pd.DataFrame({
+        'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
+        'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
+        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]}), 120),
+    (pd.DataFrame({
+        'a': [1, 2, 3],
+        'b': [4, 5, 6],
+        'c': [7, 8, 9]
+    }), 100),
+    (pd.DataFrame({
+        'a': [1, np.nan, 3],
+        'b': [4, 5, np.nan],
+        'c': [7, 8, 9]
+    }), 34)
+])
+def test_fcmkiimputer_KI_algorithm(X, random_state):
+    imputer = FCMKIterativeImputer(random_state=random_state)
+    imputer.fit(X)
+    result = imputer._KI_algorithm(X)
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) == len(X)
+    assert result.isna().sum().sum() == 0
+
+
+@pytest.mark.parametrize("X, random_state", [
+    (pd.DataFrame({
+        'height_cm': [165, 170, 175, 180, 175, 160, 175, 190],
+        'weight_kg': [np.nan, np.nan, 70, 75, 80, 55, np.nan, 80],
+        'bmi': [np.nan, 21, np.nan, np.nan, np.nan, np.nan, 23.8, np.nan]}), 42),
+])
+def test_fcmkiimputer_KI_algorithm_error_no_complete(X, random_state):
+    imputer = FCMKIterativeImputer(random_state=random_state)
+    imputer.fit(X)
+    with pytest.raises(ValueError,
+                       match="Invalid input: No rows with valid values found in columns:"):
+        imputer._KI_algorithm(X)
+
+
+@pytest.mark.parametrize("X, X_train, random_state, max_iter", [
+    (pd.DataFrame({
+        'a': [1, np.nan, 3],
+        'b': [4, 5, np.nan],
+        'c': [7, 8, 9]
+    }),
+     pd.DataFrame({
+         'a': [10, 11, 12],
+         'b': [13, 14, 15],
+         'c': [16, 17, 18]
+     }),
+     42, 15),
+    (pd.DataFrame({
+        'a': [1, np.nan, 3],
+        'b': [4, 5, np.nan],
+        'c': [7, 8, 9]
+    }),
+     pd.DataFrame({
+         'a': [1, np.nan, 3],
+         'b': [4, 5, np.nan],
+         'c': [7, 8, 9]
+     }),
+     123, 30),
+    (pd.DataFrame({
+        'a': [1, np.nan, 3],
+        'b': [4, 5, np.nan],
+        'c': [7, 8, 9]
+    }),
+     None,
+     42, 20)
+])
+def test_fcmkiimputer_KI_algorithm_with_parameters(X, X_train, random_state, max_iter):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_iter=max_iter)
+    imputer.fit(X)
+    result = imputer._KI_algorithm(X, X_train)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X.shape
+    assert result.isna().sum().sum() == 0
+    result_repeat = imputer._KI_algorithm(X, X_train)
+    np.testing.assert_array_almost_equal(result, result_repeat)
+
+
+@pytest.mark.parametrize("X, X_train, n_clusters, random_state, m, max_iter", [
+    (pd.DataFrame({
+        "a": [1.0, np.nan, 3.0],
+        "b": [4.0, 5.0, 6.0]
+    }),
+     pd.DataFrame({
+         "a": [1.0, 2.0, 3.0],
+         "b": [4.0, 5.0, 6.0]
+     }),
+     2, 42, 1.1, 15),
+    (pd.DataFrame({
+        "x": [np.nan, 2.5, 3.0, 4.5],
+        "y": [1.0, np.nan, 3.0, 4.0]
+    }),
+     pd.DataFrame({
+         "x": [1.0, 2.0, 3.0, 4.0],
+         "y": [1.0, 2.0, 3.0, 4.0]
+     }),
+     2, 42, 2, 20),
+    (pd.DataFrame({
+        "x": [1.0, 2.0, 3.0],
+        "y": [4.0, 5.0, 6.0]
+    }),
+     pd.DataFrame({
+         "x": [1.0, 2.0, 3.0],
+         "y": [4.0, 5.0, 6.0]
+     }),
+     2, 42, 1.7, 5)
+])
+def test_fcmkiimputer_FCKI_algorithm(X, X_train, n_clusters, random_state, m, max_iter):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_iter=max_iter, m=m)
+    imputer.fit(X_train)
+    result = imputer._FCKI_algorithm(X)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X.shape
+    assert result.isna().sum().sum() == 0
+
 
 @pytest.mark.parametrize("random_state, max_clusters, m, max_iter", [
     (42, 5, 1.1, 30),
@@ -150,8 +318,39 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
     assert result.isna().sum().sum() == 0
     assert result.equals(result2)
 
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
+    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
+])
+def test_fcmkiimputer_transform_without_fit(X):
+    imputer = FCMKIterativeImputer(random_state=42)
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
 
-## ---------FCMInterpolationIterativeImputer-------------------------
+
+@pytest.mark.parametrize("X_fit, X_transform", [
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2]})
+    ),
+])
+def test_fcmkiimputer_transform_column_mismatch(X_fit, X_transform):
+    imputer = FCMKIterativeImputer(random_state=42)
+    imputer.fit(X_fit)
+
+    with pytest.raises(ValueError, match="Invalid input: Input dataset columns do not match columns seen during fit"):
+        imputer.transform(X_transform)
+
+
+# ---------FCMInterpolationIterativeImputer-------------------------
 
 
 @pytest.mark.parametrize("bad_X", [
@@ -328,7 +527,7 @@ def test_liiifcm_ifcm_j_history_validity():
     assert np.all(np.isfinite(J_history)), "J_history should not contain NaN or inf values"
 
 
-##################
+# ----- FCMDTIterativeImputer ---------------------------------------
 
 @pytest.mark.parametrize("X, n_clusters, alpha", [
     (pd.DataFrame({
@@ -990,39 +1189,6 @@ def test_fcmdti_transform_column_mismatch(X_fit, X_transform):
     with pytest.raises(ValueError, match="Invalid input: Input dataset columns do not match columns seen during fit"):
         imputer.transform(X_transform)
 
-
-#######################################
-
-@pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
-    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
-])
-def test_fcmkiimputer_transform_without_fit(X):
-    imputer = FCMKIterativeImputer(random_state=42)
-    with pytest.raises(NotFittedError):
-        imputer.transform(X)
-
-
-@pytest.mark.parametrize("X_fit, X_transform", [
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
-    ),
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
-    ),
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2]})
-    ),
-])
-def test_fcmkiimputer_transform_column_mismatch(X_fit, X_transform):
-    imputer = FCMKIterativeImputer(random_state=42)
-    imputer.fit(X_fit)
-
-    with pytest.raises(ValueError, match="Invalid input: Input dataset columns do not match columns seen during fit"):
-        imputer.transform(X_transform)
 
 
 dataframes_list = [
