@@ -413,25 +413,18 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
    similarity search enhances accuracy compared to standard KNN imputation.
     """
 
-    def __init__(self, random_state: Optional[int] = None, max_clusters: int = 10, m: float = 2,
-                 max_FCM_iter: int = 100, max_II_iter: int = 30, max_k: int = 20, tol: float = 1e-5):
-        if random_state is not None and not isinstance(random_state, int):
-            raise TypeError('Invalid random_state: Expected an integer or None')
+    def __init__(self, max_clusters: int = 10, m: float = 2, max_FCM_iter: int = 100, max_II_iter: int = 30,
+                 max_k: int = 20, tol: float = 1e-5, random_state: Optional[int] = None, ):
 
-        if not isinstance(max_clusters, int) or max_clusters <= 1:
-            raise TypeError('Invalid max_clusters: Expected an integer greater than 1')
-
-        if not isinstance(m, (int, float)) or m <= 1:
-            raise TypeError('Invalid m value: Expected a numeric value greater than 1')
-
-        if not isinstance(max_FCM_iter, int) or max_FCM_iter <= 1:
-            raise TypeError('Invalid max_FCM_iter: Expected a positive integer greater than 1')
-        if not isinstance(max_II_iter, int) or max_II_iter <= 1:
-            raise TypeError('Invalid max_II_iter: Expected a positive integer greater than 1')
-        if not isinstance(max_k, int) or max_k <= 1:
-            raise TypeError('Invalid max_k: Expected a positive integer greater than 1')
-        if not isinstance(tol, (int, float)) or tol <= 0:
-            raise TypeError('Invalid tol value: Expected a numeric value greater than 0')
+        validate_params({
+            'max_clusters': max_clusters,
+            'm': m,
+            'max_FCM_iter': max_FCM_iter,
+            'max_II_iter': max_II_iter,
+            'max_k': max_k,
+            'tol': tol,
+            'random_state': random_state
+        })
 
         self.random_state = random_state
         self.max_clusters = max_clusters
@@ -440,8 +433,6 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         self.max_II_iter = max_II_iter
         self.max_k = max_k
         self.tol = tol
-
-        pass
 
     def fit(self, X, y=None):
         X = check_input_dataset(X, require_numeric=True, no_nan_columns=True)

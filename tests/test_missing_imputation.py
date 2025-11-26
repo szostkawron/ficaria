@@ -195,50 +195,6 @@ def test_fcmkiimputer_init(random_state, max_clusters, m, max_FCM_iter, max_k, m
     assert max_II_iter == max_II_iter
 
 
-@pytest.mark.parametrize("random_state", [
-    "txt",
-    [24],
-    [[35]],
-    3.5
-])
-def test_fcmkiimputer_init_errors_randomstate(random_state):
-    with pytest.raises(TypeError,
-                       match="Invalid random_state: Expected an integer or None"):
-        FCMKIterativeImputer(random_state=random_state)
-
-
-@pytest.mark.parametrize("max_clusters", [
-    "txt",
-    [24],
-    [[35]],
-    3.5,
-    0,
-    -5,
-    1,
-    None
-])
-def test_fcmkiimputer_init_errors_maxclusters(max_clusters):
-    with pytest.raises(TypeError,
-                       match="Invalid max_clusters: Expected an integer greater than 1"):
-        FCMKIterativeImputer(max_clusters=max_clusters)
-
-
-@pytest.mark.parametrize("m", [
-    "txt",
-    [24],
-    [[35]],
-    0,
-    0.5,
-    -5,
-    1,
-    None
-])
-def test_fcmkiimputer_init_errors_m(m):
-    with pytest.raises(TypeError,
-                       match="Invalid m value: Expected a numeric value greater than 1"):
-        FCMKIterativeImputer(m=m)
-
-
 @pytest.mark.parametrize("max_FCM_iter", [
     "txt",
     [24],

@@ -91,12 +91,40 @@ def validate_params(params):
         if n_clusters < 1:
             raise ValueError(f"Invalid value for n_clusters: {n_clusters}. Must be >= 1.")
 
+    if 'max_clusters' in params:
+        max_clusters = params['max_clusters']
+        if not isinstance(max_clusters, int):
+            raise TypeError(f"Invalid type for max_clusters: {type(max_clusters).__name__}. Must be int.")
+        if max_clusters < 1:
+            raise ValueError(f"Invalid value for max_clusters: {max_clusters}. Must be >= 1.")
+
     if 'max_iter' in params:
         max_iter = params['max_iter']
         if not isinstance(max_iter, int):
             raise TypeError(f"Invalid type for max_iter: {type(max_iter).__name__}. Must be int.")
         if max_iter <= 1:
             raise ValueError(f"Invalid value for max_iter: {max_iter}. Must be >= 1.")
+
+    if 'max_FCM_iter' in params:
+        max_FCM_iter = params['max_FCM_iter']
+        if not isinstance(max_FCM_iter, int):
+            raise TypeError(f"Invalid type for max_FCM_iter: {type(max_FCM_iter).__name__}. Must be int.")
+        if max_FCM_iter <= 1:
+            raise ValueError(f"Invalid value for max_FCM_iter: {max_FCM_iter}. Must be >= 1.")
+
+    if 'max_II_iter' in params:
+        max_II_iter = params['max_II_iter']
+        if not isinstance(max_II_iter, int):
+            raise TypeError(f"Invalid type for max_II_iter: {type(max_II_iter).__name__}. Must be int.")
+        if max_II_iter <= 1:
+            raise ValueError(f"Invalid value for max_II_iter: {max_II_iter}. Must be >= 1.")
+
+    if 'max_k' in params:
+        max_k = params['max_k']
+        if not isinstance(max_k, int):
+            raise TypeError(f"Invalid type for max_k: {type(max_k).__name__}. Must be int.")
+        if max_k <= 1:
+            raise ValueError(f"Invalid value for max_k: {max_k}. Must be >= 1.")
 
     if 'random_state' in params:
         rs = params['random_state']

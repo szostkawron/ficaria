@@ -20,9 +20,34 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         ({"n_clusters": -1}, ValueError, "Invalid value for n_clusters"),
         ({"n_clusters": 0}, ValueError, "Invalid value for n_clusters"),
 
+        # max_clusters
+        ({"max_clusters": "3"}, TypeError, "Invalid type for max_clusters"),
+        ({"max_clusters": -1}, ValueError, "Invalid value for max_clusters"),
+        ({"max_clusters": 0}, ValueError, "Invalid value for max_clusters"),
+
         # max_iter
         ({"max_iter": "100"}, TypeError, "Invalid type for max_iter"),
+        ({"max_iter": 2.5}, TypeError, "Invalid type for max_iter"),
         ({"max_iter": 0}, ValueError, "Invalid value for max_iter"),
+        ({"max_iter": -5}, ValueError, "Invalid value for max_iter"),
+
+        # max_FCM_iter
+        ({"max_FCM_iter": "100"}, TypeError, "Invalid type for max_FCM_iter"),
+        ({"max_FCM_iter": 2.5}, TypeError, "Invalid type for max_FCM_iter"),
+        ({"max_FCM_iter": 0}, ValueError, "Invalid value for max_FCM_iter"),
+        ({"max_FCM_iter": -5}, ValueError, "Invalid value for max_FCM_iter"),
+
+        # max_II_iter
+        ({"max_II_iter": "100"}, TypeError, "Invalid type for max_II_iter"),
+        ({"max_II_iter": 2.5}, TypeError, "Invalid type for max_II_iter"),
+        ({"max_II_iter": 0}, ValueError, "Invalid value for max_II_iter"),
+        ({"max_II_iter": -5}, ValueError, "Invalid value for max_II_iter"),
+
+        # max_k
+        ({"max_k": "100"}, TypeError, "Invalid type for max_k"),
+        ({"max_k": 2.5}, TypeError, "Invalid type for max_k"),
+        ({"max_k": 0}, ValueError, "Invalid value for max_k"),
+        ({"max_k": -5}, ValueError, "Invalid value for max_k"),
 
         # random_state
         ({"random_state": "abc"}, TypeError, "Invalid type for random_state"),
