@@ -40,34 +40,36 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True, require_comple
     try:
         arr = np.asarray(X)
     except Exception:
-        raise TypeError(
-            "Invalid input: Expected a 2D structure such as a DataFrame, NumPy array, or similar tabular format")
+        raise TypeError(f"X must be array-like or DataFrame, got {type(X).__name__!r} instead")
 
     if arr.ndim != 2:
-        raise ValueError("Invalid input: Expected a 2D structure")
+        raise ValueError(f"X must be a 2D array-like structure, got {arr.ndim}D input instead")
 
     X = pd.DataFrame(X)
 
     if X.empty:
-        raise ValueError("Invalid input: Input dataset is empty")
+        raise ValueError("X must contain at least one sample, got an empty dataset instead")
+
+    if require_numeric and not all(pd.api.types.is_numeric_dtype(dt) for dt in X.dtypes):
+        non_numeric_cols = X.select_dtypes(exclude=np.number).columns.tolist()
+        raise TypeError(f"X must be numeric, got non-numeric columns: {non_numeric_cols} instead")
+
+    if not allow_nan and X.isnull().values.any():
+        raise ValueError("X must not contain missing values")
 
     complete_rows = X.dropna(how="any")
     if require_complete_rows and complete_rows.empty:
-        raise ValueError("Invalid input: Input dataset contains no complete rows.")
-
-    if require_numeric and not all(pd.api.types.is_numeric_dtype(dt) for dt in X.dtypes):
-        raise TypeError("Invalid input: Input dataset contains not numeric values")
-
-    if not allow_nan and X.isnull().values.any():
-        raise ValueError("Invalid input: Input dataset contains missing values")
+        raise ValueError(
+            "X must contain at least one row with no missing values")
 
     if no_nan_rows:
         rows_all_nan = X.isnull().all(axis=1)
         if rows_all_nan.any():
-            raise ValueError("Invalid input: Input dataset contains a row with only NaN values")
+            raise ValueError(f"X must not contain rows with all NaNs")
 
     if no_nan_columns and X.isna().all().any():
-        raise ValueError("Invalid input: Input dataset contains a column with only NaN values")
+        cols_all_nan = X.isna().all()
+        raise ValueError(f"X must not contain columns with all NaNs, got {cols_all_nan.sum()} such columns instead")
 
     return X
 
@@ -86,141 +88,140 @@ def validate_params(params):
     if 'n_clusters' in params:
         n_clusters = params['n_clusters']
         if not isinstance(n_clusters, int):
-            raise TypeError(f"Invalid type for n_clusters: {type(n_clusters).__name__}. Must be int.")
+            raise TypeError(f"n_clusters must be int, got {type(n_clusters).__name__} instead")
         if n_clusters < 1:
-            raise ValueError(f"Invalid value for n_clusters: {n_clusters}. Must be >= 1.")
+            raise ValueError(f"n_clusters must be >= 1, got {n_clusters} instead")
 
     if 'max_clusters' in params:
         max_clusters = params['max_clusters']
         if not isinstance(max_clusters, int):
-            raise TypeError(f"Invalid type for max_clusters: {type(max_clusters).__name__}. Must be int.")
+            raise TypeError(f"max_clusters must be int, got {type(max_clusters).__name__} instead")
         if max_clusters < 1:
-            raise ValueError(f"Invalid value for max_clusters: {max_clusters}. Must be >= 1.")
+            raise ValueError(f"max_clusters must be >= 1, got {max_clusters} instead")
 
     if 'max_iter' in params:
         max_iter = params['max_iter']
         if not isinstance(max_iter, int):
-            raise TypeError(f"Invalid type for max_iter: {type(max_iter).__name__}. Must be int.")
+            raise TypeError(f"max_iter must be int, got {type(max_iter).__name__} instead")
         if max_iter <= 1:
-            raise ValueError(f"Invalid value for max_iter: {max_iter}. Must be >= 1.")
+            raise ValueError(f"max_iter must be > 1, got {max_iter} instead")
 
     if 'max_FCM_iter' in params:
         max_FCM_iter = params['max_FCM_iter']
         if not isinstance(max_FCM_iter, int):
-            raise TypeError(f"Invalid type for max_FCM_iter: {type(max_FCM_iter).__name__}. Must be int.")
+            raise TypeError(f"max_FCM_iter must be int, got {type(max_FCM_iter).__name__} instead")
         if max_FCM_iter <= 1:
-            raise ValueError(f"Invalid value for max_FCM_iter: {max_FCM_iter}. Must be >= 1.")
+            raise ValueError(f"max_FCM_iter must be > 1, got {max_FCM_iter} instead")
 
     if 'max_II_iter' in params:
         max_II_iter = params['max_II_iter']
         if not isinstance(max_II_iter, int):
-            raise TypeError(f"Invalid type for max_II_iter: {type(max_II_iter).__name__}. Must be int.")
+            raise TypeError(f"max_II_iter must be int, got {type(max_II_iter).__name__} instead")
         if max_II_iter <= 1:
-            raise ValueError(f"Invalid value for max_II_iter: {max_II_iter}. Must be >= 1.")
+            raise ValueError(f"max_II_iter must be > 1, got {max_II_iter} instead")
 
     if 'max_outer_iter' in params:
         max_outer_iter = params['max_outer_iter']
         if not isinstance(max_outer_iter, int):
-            raise TypeError(f"Invalid type for max_outer_iter: {type(max_outer_iter).__name__}. Must be int.")
+            raise TypeError(f"max_outer_iter must be int, got {type(max_outer_iter).__name__} instead")
         if max_outer_iter < 1:
-            raise ValueError(f"Invalid value for max_outer_iter: {max_outer_iter}. Must be > 1.")
+            raise ValueError(f"max_outer_iter must be >= 1, got {max_outer_iter} instead")
 
     if 'max_k' in params:
         max_k = params['max_k']
         if not isinstance(max_k, int):
-            raise TypeError(f"Invalid type for max_k: {type(max_k).__name__}. Must be int.")
-        if max_k <= 1:
-            raise ValueError(f"Invalid value for max_k: {max_k}. Must be >= 1.")
+            raise TypeError(f"max_k must be int, got {type(max_k).__name__} instead")
+        if max_k < 1:
+            raise ValueError(f"max_k must be >= 1, got {max_k} instead")
 
     if 'random_state' in params:
         rs = params['random_state']
         if rs is not None and not isinstance(rs, int):
-            raise TypeError(f"Invalid type for random_state: {type(rs).__name__}. Must be int or None.")
+            raise TypeError(f"random_state must be int or None, got {type(rs).__name__} instead")
 
     if 'm' in params:
         m = params['m']
         if not isinstance(m, (int, float)):
-            raise TypeError(f"Invalid type for m: {type(m).__name__}. Must be float.")
+            raise TypeError(f"m must be int or float, got {type(m).__name__} instead")
         if m <= 1.0:
-            raise ValueError(f"Invalid value for m: {m}. Must be > 1.0.")
+            raise ValueError(f"m must be > 1.0, got {m} instead")
 
     if 'tol' in params:
         tol = params['tol']
         if not isinstance(tol, (int, float)):
-            raise TypeError(f"Invalid type for tol: {type(tol).__name__}. Must be float.")
+            raise TypeError(f"tol must be int or float, got {type(tol).__name__} instead")
         if tol <= 0:
-            raise ValueError(f"Invalid value for tol: {tol}. Must be > 0.")
+            raise ValueError(f"tol must be > 0, got {tol} instead")
 
     if 'wl' in params:
         wl = params['wl']
         if not isinstance(wl, (int, float)):
-            raise TypeError(f"Invalid type for wl: {type(wl).__name__}. Must be int or float.")
+            raise TypeError(f"wl must be int or float, got {type(wl).__name__} instead")
         if wl <= 0 or wl > 1:
-            raise ValueError(f"Invalid value for wl: {wl}. Must be in range (0, 1].")
+            raise ValueError(f"wl must be in range (0, 1], got {wl} instead")
 
     if 'wb' in params:
         wb = params['wb']
         if not isinstance(wb, (int, float)):
-            raise TypeError(f"Invalid type for wb: {type(wb).__name__}. Must be int or float.")
+            raise TypeError(f"wb must be int or float, got {type(wb).__name__} instead")
         if wb < 0 or wb > 1:
-            raise ValueError(f"Invalid value for wb: {wb}. Must be in range [0, 1].")
+            raise ValueError(f"wb must be in range [0, 1], got {wb} instead")
 
     if 'tau' in params:
         tau = params['tau']
         if not isinstance(tau, (int, float)):
-            raise TypeError(f"Invalid type for tau: {type(tau).__name__}. Must be int or float.")
+            raise TypeError(f"tau must be int or float, got {type(tau).__name__} instead")
         if tau < 0:
-            raise ValueError(f"Invalid value for tau: {tau}. Must be >= 0.")
+            raise ValueError(f"tau must be >= 0, got {tau} instead")
 
     if 'k' in params:
         k = params['k']
         if not isinstance(k, int):
-            raise TypeError(f"Invalid type for k: {type(k).__name__}. Must be int.")
+            raise TypeError(f"k must be int, got {type(k).__name__} instead")
         if k <= 1:
-            raise ValueError(f"Invalid value for k: {k}. Must be > 1.")
+            raise ValueError(f"k must be > 1, got {k} instead")
 
     if 'n_features' in params:
         n_features = params['n_features']
         if not isinstance(n_features, int):
-            raise TypeError(f"Invalid type for n_features: {type(n_features).__name__}. Must be int.")
+            raise TypeError(f"n_features must be int, got {type(n_features).__name__} instead")
         if n_features < 1:
-            raise ValueError(f"Invalid value for n_features: {n_features}. Must be >=1.")
+            raise ValueError(f"n_features must be >= 1, got {n_features} instead")
 
     if 'max_features' in params:
         max_features = params['max_features']
         if not isinstance(max_features, int):
-            raise TypeError(f"Invalid type for max_features: {type(max_features).__name__}. Must be int.")
+            raise TypeError(f"max_features must be int, got {type(max_features).__name__} instead")
         if max_features < 1:
-            raise ValueError(f"Invalid value for max_features: {max_features}. Must be >= 1.")
+            raise ValueError(f"max_features must be >= 1, got {max_features} instead")
 
     if 'stop_threshold' in params:
         stop_threshold = params['stop_threshold']
         if not isinstance(stop_threshold, (int, float)):
-            raise TypeError(f"Invalid type for stop_threshold: {type(stop_threshold).__name__}. Must be int or float.")
+            raise TypeError(f"stop_threshold must be int or float, got {type(stop_threshold).__name__} instead")
         if stop_threshold < 0:
-            raise ValueError(f"Invalid value for stop_threshold: {stop_threshold}. Must be >= 0.")
+            raise ValueError(f"stop_threshold must be >= 0, got {stop_threshold} instead")
 
     if 'min_samples_leaf' in params:
         min_samples_leaf = params['min_samples_leaf']
         if not isinstance(min_samples_leaf, (int, float)):
-            raise TypeError(
-                f"Invalid type for min_samples_leaf: {type(min_samples_leaf).__name__}. Must be int or float.")
+            raise TypeError(f"min_samples_leaf must be int or float, got {type(min_samples_leaf).__name__} instead")
         if min_samples_leaf <= 0:
-            raise ValueError(f"Invalid value for min_samples_leaf: {min_samples_leaf}. Must be > 0.")
+            raise ValueError(f"min_samples_leaf must be > 0, got {min_samples_leaf} instead")
 
     if 'learning_rate' in params:
         learning_rate = params['learning_rate']
         if not isinstance(learning_rate, (int, float)):
-            raise TypeError(f"Invalid type for learning_rate: {type(learning_rate).__name__}. Must be int or float.")
+            raise TypeError(f"learning_rate must be int or float, got {type(learning_rate).__name__} instead")
         if learning_rate <= 0:
-            raise ValueError(f"Invalid value for learning_rate: {learning_rate}. Must be > 0.")
+            raise ValueError(f"learning_rate must be > 0, got {learning_rate} instead")
 
     if 'eps' in params:
         eps = params['eps']
         if not isinstance(eps, (int, float)):
-            raise TypeError(f"Invalid type for eps: {type(eps).__name__}. Must be int or float.")
+            raise TypeError(f"eps must be int or float, got {type(eps).__name__} instead")
         if eps <= 0:
-            raise ValueError(f"Invalid value for eps: {eps}. Must be > 0.")
+            raise ValueError(f"eps must be > 0, got {eps} instead")
 
 
 def euclidean_distance(a: np.ndarray, b: np.ndarray):
