@@ -468,20 +468,20 @@ def test_liiifcm_ifcm_j_history_validity():
     }), 2, 1.2),
     (pd.DataFrame({
         "num1": [1, 2, 3, 4],
-        "cat1": ["A", "B", "A", "B"]
+        "num2": [0, 1, 0, 1]
     }), 2, 0.8),
     (pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", "A", "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", "X", "Y", "X"]
+        "num1": [0, 1, 0, 2, 0, 1, 2],
+        "num2": [0, 0, 1, 1, 0, 1, 0]
     }), 3, 1.1),
     (pd.DataFrame({
-        "cat1": ["A"],
-        "cat2": ["X"]
+        "num1": [6],
+        "num2": [0]
     }), 1, 1.1),
 ])
 def test_fcmdti_fuzzy_silhouette(X, n_clusters, alpha):
     imputer = FCMDTIterativeImputer()
-    centers, u = fuzzy_c_means_categorical(X, n_clusters)
+    centers, u = fuzzy_c_means(X, n_clusters)
     FSI = imputer._fuzzy_silhouette(X, u, alpha)
     assert isinstance(FSI, float)
     assert FSI >= -1 and FSI <= 1
@@ -522,24 +522,21 @@ def test_fcmdti_fuzzy_silhouette_zero_distance():
     }), 15, 30),
     (pd.DataFrame({
         "num1": [1, 2, 3, 4],
-        "cat1": ["A", "B", "A", "B"]
+        "num2": [0, 1, 0, 1]
     }), 20, 123),
     (pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", "A", "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", "X", "Y", "X"]
+        "num1": [0, 1, 0, 2, 0, 1, 2],
+        "num2": [0, 0, 1, 1, 0, 1, 0]
     }), 5, 30),
     (pd.DataFrame({
-        "cat1": ["A"],
-        "cat2": ["X"]
+        "num1": [0],
+        "num2": [1]
     }), 30, 100),
 ])
 def test_fcmdti_determine_optimal_n_clusters_FSI(X, max_clusters, random_state):
     imputer = FCMDTIterativeImputer(random_state=random_state, max_clusters=max_clusters)
     imputer.fit(X)
-    if X.select_dtypes(exclude=["number"]).empty:
-        fcm_function = fuzzy_c_means
-    else:
-        fcm_function = fuzzy_c_means_categorical
+    fcm_function = fuzzy_c_means
 
     n_clusters = imputer._determine_optimal_n_clusters_FSI(X, fcm_function)
     assert isinstance(n_clusters, int)
@@ -550,154 +547,98 @@ def test_fcmdti_determine_optimal_n_clusters_FSI(X, max_clusters, random_state):
         assert n_clusters == 1
 
 
-def test_fcmdti_create_mixed_imputer():
-    X = pd.DataFrame({
-        "num1": [1, 2, 3, 4],
-        "cat1": ["A", "B", "A", "B"]
-    })
-    mixed_imputer = FCMDTIterativeImputer()._create_mixed_imputer(X)
-    assert isinstance(mixed_imputer, ColumnTransformer)
-    assert set(mixed_imputer.transformers[0][2]) == {"num1"}
-    assert set(mixed_imputer.transformers[1][2]) == {"cat1"}
-
-
-@pytest.mark.parametrize("X", [
-    pd.DataFrame({
-        "num1": [1, np.nan, 5, 3, np.nan],
-        "cat1": ["A", "B", np.nan, "A", np.nan]
-    }),
-    pd.DataFrame({
-        "num2": [10, 20, np.nan, 30, 40],
-        "cat2": [np.nan, "X", "Y", "X", "X"]
-    }),
-    pd.DataFrame({
-        "num3": [np.nan, np.nan, 2, 4, 6],
-        "cat3": ["C", "C", np.nan, "D", "C"]
-    }),
-    pd.DataFrame({
-        "x1": [1.0, 2.0, 3.0],
-        "x2": [6.0, 5.0, 4.0]
-    }),
-    pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", "A", "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", "X", "Y", "X"]
-    }),
-])
-def test_fcmdti_create_mixed_imputer_fill_missing(X):
-    imputer = FCMDTIterativeImputer()._create_mixed_imputer(X)
-    X_transformed = imputer.transform(X)
-    X_transformed.columns = imputer.get_feature_names_out()
-    X_transformed.columns = [col.split("__")[-1] for col in X_transformed.columns]
-    X_transformed_df = X_transformed[X.columns]
-
-    assert not X_transformed_df.isna().any().any()
-
-    for col in X.columns:
-        mask = X[col].isna()
-        if is_numeric_dtype(X[col]):
-            mean_val = X[col].mean(skipna=True)
-            assert np.all(np.isclose(X_transformed_df.loc[mask, col], mean_val))
-        else:
-            mode_val = X[col].mode()[0]
-            assert np.all(X_transformed_df.loc[mask, col] == mode_val)
-
-    X_transformed2 = imputer.transform(X)
-
-    np.testing.assert_array_equal(X_transformed, X_transformed2)
-
-
 @pytest.mark.parametrize("new_df, old_df, mask_missing, expected", [
     (pd.DataFrame({
         "num1": [1, 2, 5, 3, 8],
-        "cat1": ["A", "B", "A", "A", "B"]
+        "num2": [10, 20, 30, 40, 50]
     }),
      pd.DataFrame({
          "num1": [1, 2, 6, 3, 8],
-         "cat1": ["A", "B", "A", "A", "B"]
+         "num2": [10, 20, 30, 40, 50]
      }),
      pd.DataFrame({
          "num1": [False, False, True, False, False],
-         "cat1": [False, False, False, False, False]
+         "num2": [False, False, False, False, False]
      }), 1
     ),
     (pd.DataFrame({
         "num1": [1, 2, 5, 3, 8],
-        "cat1": ["A", "B", "A", "A", "B"]
+        "num2": [10, 20, 30, 40, 50]
     }),
      pd.DataFrame({
          "num1": [1, 2, 5, 3, 8],
-         "cat1": ["A", "A", "A", "A", "B"]
+         "num2": [10, 22, 30, 40, 50]
      }),
      pd.DataFrame({
          "num1": [False, False, False, False, False],
-         "cat1": [False, True, False, False, False]
-     }), 1
+         "num2": [False, True, False, False, False]
+     }), 2
     ),
     (pd.DataFrame({
         "num1": [1, 2, 5, 3, 8],
-        "cat1": ["A", "B", "A", "A", "B"]
+        "num2": [10, 20, 30, 40, 50]
     }),
      pd.DataFrame({
          "num1": [1, 2, 7, 3, 8],
-         "cat1": ["A", "A", "A", "A", "B"]
+         "num2": [10, 22, 30, 40, 50]
      }),
      pd.DataFrame({
          "num1": [False, False, True, False, False],
-         "cat1": [False, True, False, False, False]
-     }), 1.5
+         "num2": [False, True, False, False, False]
+     }), 2
     ),
     (pd.DataFrame({
         "num1": [1, 2, 5, 3, 8],
-        "cat1": ["A", "B", "A", "A", "B"]
+        "num2": [10, 20, 30, 40, 50]
     }),
      pd.DataFrame({
-         "num1": [1, 2, 5, 3, 8],
-         "cat1": ["A", "B", "A", "A", "B"]
+         "num1": [1, 2, 7, 3, 8],
+         "num2": [10, 22, 30, 40, 50]
      }),
      pd.DataFrame({
          "num1": [False, False, False, False, False],
-         "cat1": [False, False, False, False, False]
+         "num2": [False, False, False, False, False]
      }), 0
     ),
     (pd.DataFrame({
         "num1": [1, 2, 5, 3, 8],
-        "cat1": ["A", "B", "A", "A", "B"]
+        "num2": [10, 20, 30, 40, 50]
     }),
      pd.DataFrame({
-         "num1": [1, 2, 5, 3, 8],
-         "cat1": ["A", "B", "A", "A", "B"]
+         "num1": [1, 2, 7, 3, 8],
+         "num2": [10, 22, 30, 40, 50]
      }),
      pd.DataFrame({
          "num1": [True, True, True, True, True],
-         "cat1": [True, True, True, True, True]
-     }), 0
+         "num2": [True, True, True, True, True]
+     }), 0.4
     ),
     (
             pd.DataFrame({
                 "num1": [1, 2, 3],
-                "cat1": ["A", "B", "C"]
+                "num2": [10, 20, 30]  # nowa kolumna
             }),
             pd.DataFrame({
                 "num1": [1, 3, 6],
-                "cat1": ["A", "X", "C"]
+                "num2": [10, 25, 30]
             }),
             pd.DataFrame({
                 "num1": [True, True, True],
-                "cat1": [True, True, True]
+                "num2": [True, True, True]
             }),
-            ((0 + 1 + 3) / 3 + (0 + 1 + 0) / 3) / 2
+            ((0 + 1 + 3) / 3 + (0 + 5 + 0) / 3) / 2
     ),
     (
             pd.DataFrame({
-                "cat1": ["A", "B", "C"]
+                "num1": [10, 20, 30]  # jedna kolumna numeryczna
             }),
             pd.DataFrame({
-                "cat1": ["A", "X", "C"]
+                "num1": [10, 25, 30]
             }),
             pd.DataFrame({
-                "cat1": [True, True, True]
+                "num1": [True, True, True]
             }),
-            1 / 3
+            5 / 3
     ),
     (
             pd.DataFrame({
@@ -717,17 +658,17 @@ def test_fcmdti_create_mixed_imputer_fill_missing(X):
     (
             pd.DataFrame({
                 "num1": [1, 2, 3],
-                "cat1": ["A", "B", "C"]
+                "num2": [10, 20, 30]  # nowa kolumna
             }),
             pd.DataFrame({
                 "num1": [1, 4, 3],
-                "cat1": ["A", "X", "C"]
+                "num2": [10, 25, 30]
             }),
             pd.DataFrame({
                 "num1": [False, True, False],
-                "cat1": [False, True, False]
+                "num2": [False, True, False]
             }),
-            (abs(2) + 1) / 2
+            (abs(2) + 5) / 2
     ),
 
 ])
@@ -740,23 +681,23 @@ def test_fcmdti_calculate_AV(new_df, old_df, mask_missing, expected):
 @pytest.mark.parametrize("X, random_state", [
     (pd.DataFrame({
         "num1": [1, np.nan, 5, 3, np.nan, 8],
-        "cat1": ["A", "B", np.nan, "A", np.nan, "B"]
+        "num2": [10, 20, np.nan, 15, np.nan, 30]
     }), 42),
     (pd.DataFrame({
-        "num2": [10, 20, np.nan, 30, 40],
-        "cat2": [np.nan, "X", "Y", "X", "Y"]
+        "num1": [10, 20, np.nan, 30, 40],
+        "num2": [np.nan, 1, 2, 1, 2]
     }), 110),
     (pd.DataFrame({
-        "num3": [np.nan, np.nan, 2, 4, 6],
-        "cat3": ["C", "C", np.nan, "D", "C"]
+        "num1": [np.nan, np.nan, 2, 4, 6],
+        "num2": [5, 5, np.nan, 7, 5]
     }), 0),
     (pd.DataFrame({
         "x1": [1.0, 2.0, 3.0],
         "x2": [6.0, 5.0, 4.0]
     }), 23),
     (pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", np.nan, "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", np.nan, "Y", "X"]
+        "num1": [1, 2, 1, 3, np.nan, 2, 3],
+        "num2": [0, 0, 1, 1, np.nan, 1, 0]
     }), 42),
     (pd.DataFrame({
         "num1": [1.0, np.nan, 3.0, 4.0],
@@ -787,21 +728,21 @@ def test_fcmdti_initial_imputation_DT(X, random_state):
 
 @pytest.mark.parametrize("X, j, k, random_state", [
     (pd.DataFrame({
-        "num1": [1, np.nan, 5, 3, np.nan, 8, 10, 2, 13],
-        "cat1": ["A", "B", np.nan, "A", np.nan, "B", "A", "C", "A"]
+        "num1": [1, np.nan, 5, 3, np.nan, 8],
+        "num2": [10, 20, np.nan, 15, np.nan, 30]
     }), "num1", 1, 42),
     (pd.DataFrame({
-        "num2": [10, 20, np.nan, 30, 40, 100, 50],
-        "cat2": [np.nan, "X", "Y", "X", "Y", "X", "Y"]
-    }), "cat2", 1, 100),
+        "num1": [10, 20, np.nan, 30, 40],
+        "num2": [np.nan, 1, 2, 1, 2]
+    }), "num2", 1, 100),
     (pd.DataFrame({
-        "num3": [np.nan, np.nan, 2, 4, 6],
-        "cat3": ["C", "C", np.nan, "D", "C"]
-    }), "num3", 0, 0),
+        "num1": [np.nan, np.nan, 2, 4, 6],
+        "num2": [5, 5, np.nan, 7, 5]
+    }), "num1", 0, 0),
     (pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", "A", "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", np.nan, "Y", "X"]
-    }), "cat2", 1, 23),
+        "num1": [1, 2, 1, 3, np.nan, 2, 3],
+        "num2": [0, 0, 1, 1, np.nan, 1, 0]
+    }), "num2", 1, 23),
     (pd.DataFrame({
         "num1": [1.0, np.nan, 3.0, 4.0],
         "num2": [10.0, 20.0, 30.0, 40.0]
@@ -812,10 +753,8 @@ def test_fcmdti_improve_imputations_in_leaf(X, j, k, random_state):
     imputer.fit(X)
     _, incomplete_X = split_complete_incomplete(X)
     cols_with_nan = incomplete_X.columns[incomplete_X.isna().any()]
-    if X.select_dtypes(exclude=["number"]).empty:
-        fcm_function = fuzzy_c_means
-    else:
-        fcm_function = fuzzy_c_means_categorical
+    fcm_function = fuzzy_c_means
+
     leaf_indices, imputed_X = imputer._initial_imputation_DT(incomplete_X, cols_with_nan)
     imputed_X_after = imputer._improve_imputations_in_leaf(k, j, leaf_indices, imputed_X, fcm_function)
     assert imputed_X_after.isna().sum().sum() == 0
@@ -862,7 +801,7 @@ def test_fcmdti_init(max_clusters, m, max_iter, max_FCM_iter, tol, min_samples_l
                                      pd.DataFrame({
                                          "num1": [1, 2, 3, np.nan, 5],
                                          "num2": [5, 4, np.nan, 2, 1],
-                                         "cat": ["a", "b", "b", "a", np.nan]
+                                         "num3": [0.1, 0.5, 0.5, 0.1, np.nan]
                                      }),
                                      42, 2, 0.1, 2, 3, 10, 0.0, 1.0
                              ),
@@ -870,7 +809,7 @@ def test_fcmdti_init(max_clusters, m, max_iter, max_FCM_iter, tol, min_samples_l
                                      pd.DataFrame({
                                          "num1": [10, 20, np.nan, 40],
                                          "num2": [np.nan, 1, 2, 3],
-                                         "cat": ["x", "y", "x", np.nan]
+                                         "num3": [2, 3, 2, np.nan]
                                      }),
                                      7, 3, 0.5, 3, 40, 20, 0.01, 2.0
                              ),
@@ -878,7 +817,7 @@ def test_fcmdti_init(max_clusters, m, max_iter, max_FCM_iter, tol, min_samples_l
                                      pd.DataFrame({
                                          "num1": [np.nan, np.nan, 1, 2, 5, 7],
                                          "num2": [1, 2, np.nan, 6, 10, 4],
-                                         "cat": [np.nan, "b", "c", "a", "b", "c"]
+                                         "num3": [np.nan, 1, 2, 0, 1, 2]
                                      }),
                                      1, 1, 0.2, 2, 10, 50, 0.1, 0.5
                              )
@@ -894,12 +833,9 @@ def test_fcmdti_fit_sets_attributes(X, random_state, min_samples_leaf, learning_
     assert hasattr(imputer, 'imputer_')
     assert hasattr(imputer, 'trees_')
     assert hasattr(imputer, 'leaf_indices_')
-    assert hasattr(imputer, 'encoders_')
 
     assert isinstance(imputer.trees_, dict) and len(imputer.trees_) > 0
     assert isinstance(imputer.leaf_indices_, dict) and len(imputer.leaf_indices_) > 0
-    assert isinstance(imputer.encoders_, dict)
-    assert set(imputer.encoders_.keys()) == set(X.select_dtypes(exclude=["number"]).columns)
     assert set(imputer.trees_.keys()) == set(X.columns)
     assert set(imputer.leaf_indices_.keys()) == set(X.columns)
 
@@ -909,21 +845,21 @@ def test_fcmdti_fit_sets_attributes(X, random_state, min_samples_leaf, learning_
             pd.DataFrame({
                 "num1": [1, np.nan, 3, np.nan, 5],
                 "num2": [np.nan, 4, np.nan, 2, 1],
-                "cat": ["a", "b", "b", "a", np.nan]
+                "num3": [0, 1, 1, 0, np.nan]
             })
     ),
     (
             pd.DataFrame({
                 "num1": [10, np.nan, np.nan, 40],
                 "num2": [np.nan, 1, 2, 3],
-                "cat": ["x", "y", "x", np.nan]
+                "num3": [3, 4, 3, np.nan]
             })
     ),
     (
             pd.DataFrame({
                 "num1": [np.nan, np.nan, 1],
                 "num2": [1, 2, np.nan],
-                "cat": [np.nan, "b", "c"]
+                "num3": [np.nan, 1, 2]
             })
     )
 ])
@@ -934,21 +870,9 @@ def test_fcmdti_fit_error_no_complete(X):
 
 
 @pytest.mark.parametrize("X", [
-    (
-            pd.DataFrame({
-                "num1": [1, np.nan, 3, np.nan, 5],
-            })
-    ),
-    (
-            pd.DataFrame({
-                "num1": [np.nan, 1, 2, 3],
-            })
-    ),
-    (
-            pd.DataFrame({
-                "cat": [np.nan, "b", "c"]
-            })
-    )
+    (pd.DataFrame({"num1": [1, np.nan, 3, np.nan, 5], })),
+    (pd.DataFrame({"num1": [np.nan, 1, 2, 3], })),
+    (pd.DataFrame({"num1": [np.nan, 3.5, -4.7]}))
 ])
 def test_fcmdti_fit_error_one_column(X):
     imputer = FCMDTIterativeImputer()
@@ -962,12 +886,12 @@ def test_fcmdti_fit_error_one_column(X):
                 pd.DataFrame({
                     "num1": [1, 2, 3, 7, 5],
                     "num2": [5, 4, 3, 2, 1],
-                    "cat": ["a", "b", "b", "a", np.nan]
+                    "num3": [0, 1, 1, 0, np.nan]
                 }),
                 pd.DataFrame({
                     "num1": [np.nan, 2, 3, np.nan, 5],
                     "num2": [5, 4, np.nan, 2, 1],
-                    "cat": [np.nan, "b", "b", "a", np.nan]
+                    "num3": [np.nan, 1, 1, 0, np.nan]
                 }),
                 42, 2, 0.1, 2, 5, 10, 0.0, 1.0
         ),
@@ -975,12 +899,12 @@ def test_fcmdti_fit_error_one_column(X):
                 pd.DataFrame({
                     "num1": [10, 20, 50, 40],
                     "num2": [np.nan, 1, 2, 3],
-                    "cat": ["x", "y", "x", "y"]
+                    "num3": [3, 4, 3, 4]
                 }),
                 pd.DataFrame({
                     "num1": [10, 20, np.nan, 40],
                     "num2": [np.nan, 1, np.nan, 3],
-                    "cat": ["x", np.nan, "x", np.nan]
+                    "num3": [3, np.nan, 3, np.nan]
                 }),
                 7, 3, 0.5, 3, 20, 100, 0.01, 2.0
         ),
@@ -988,29 +912,29 @@ def test_fcmdti_fit_error_one_column(X):
                 pd.DataFrame({
                     "num1": [np.nan, 10, 1, 2, 5, 7],
                     "num2": [1, 2, 5, 6, 10, 4],
-                    "cat1": [np.nan, "b", "c", "a", "b", "c"],
-                    "cat2": ["z", "x", "z", "x", "y", "y"]
+                    "num3": [np.nan, 1, 2, 0, 1, 2],
+                    "num4": [2, 0, 2, 0, 1, 1]
                 }),
                 pd.DataFrame({
                     "num1": [np.nan, np.nan, 1, 2, np.nan, 7],
                     "num2": [1, 2, np.nan, 6, np.nan, 4],
-                    "cat1": [np.nan, "b", "c", np.nan, "b", "c"],
-                    "cat2": ["z", "x", np.nan, "x", "y", np.nan]
+                    "num3": [np.nan, 1, 2, np.nan, 1, 2],
+                    "num4": [2, 0, np.nan, 0, 1, np.nan]
                 }),
                 1, 1, 0.2, 2, 3, 15, 0.1, 0.5
         ),
         (
                 pd.DataFrame({
-                    "num1": [np.nan, 10, 1, 2, 5, 7],
-                    "num2": [1, 2, 5, 6, 10, 4],
-                    "cat1": [np.nan, "b", "c", "a", "b", "c"],
-                    "cat2": ["z", "x", "z", "x", "y", "y"]
+                    "num1": [np.nan, 10.3, 1, 2, 5, 7],
+                    "num2": [1, 2, 5, 6.6, 10, 4],
+                    "num3": [np.nan, 1, 2.7, 0, 1, 2],
+                    "num4": [2, 0, 2.3, 0.5, 1.9, 1]
                 }),
                 pd.DataFrame({
-                    "num1": [1, 5, 1, 2, 8, 7],
-                    "num2": [1, 2, 5, 6, 3, 4],
-                    "cat1": ["a", "b", "c", "a", "b", "c"],
-                    "cat2": ["z", "x", "y", "x", "y", "z"]
+                    "num1": [1, 5, 1, 2.1, 8, 7],
+                    "num2": [1, 2, 5.4, 6, 3, 4],
+                    "num3": [0, 1.8, 2, 0, 1.4, 2],
+                    "num4": [2, 0, 1, 0, 1, 2]
                 }),
                 1, 1, 0.2, 2, 15, 50, 0.1, 0.5
         )

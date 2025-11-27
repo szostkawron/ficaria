@@ -1,15 +1,10 @@
-from collections import defaultdict
-
 import numpy as np
 import pandas as pd
-from pandas.api.types import is_numeric_dtype
 from scipy.spatial.distance import cdist
 from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.compose import ColumnTransformer
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
-from sklearn.preprocessing import OrdinalEncoder
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from sklearn.tree import DecisionTreeRegressor
 from sklearn.utils.validation import check_is_fitted
 
 from .utils import *
@@ -892,7 +887,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         self.tol = tol
 
     def fit(self, X, y=None):
-        X = check_input_dataset(X, require_numeric=False)
+        X = check_input_dataset(X, require_numeric=True)
         self.X_train_complete_, _ = split_complete_incomplete(X.copy())
 
         if self.X_train_complete_.empty:
@@ -901,23 +896,14 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         if self.X_train_complete_.shape[1] < 2:
             raise ValueError("Invalid input: Input dataset has only one column")
 
-        self.imputer_ = self._create_mixed_imputer(self.X_train_complete_)
+        self.imputer_ = SimpleImputer(strategy="mean")
+        self.imputer_.fit(X)
         self.trees_ = {}
         self.leaf_indices_ = {}
-        self.encoders_ = {}
         X_for_tree = self.X_train_complete_.copy()
-        cat_cols = X_for_tree.select_dtypes(exclude=["number"]).columns
-
-        for col in cat_cols:
-            enc = OrdinalEncoder()
-            X_for_tree[col] = enc.fit_transform(X_for_tree[[col]])
-            self.encoders_[col] = enc
 
         for j in self.X_train_complete_.columns:
-            if is_numeric_dtype(self.X_train_complete_[j]):
-                tree = DecisionTreeRegressor(min_samples_leaf=self.min_samples_leaf, random_state=self.random_state)
-            else:
-                tree = DecisionTreeClassifier(min_samples_leaf=self.min_samples_leaf, random_state=self.random_state)
+            tree = DecisionTreeRegressor(min_samples_leaf=self.min_samples_leaf, random_state=self.random_state)
 
             X_without_j_column = X_for_tree.drop(columns=[j])
             tree.fit(X_without_j_column, self.X_train_complete_[j])
@@ -927,8 +913,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
-        X = check_input_dataset(X, require_numeric=False)
-        check_is_fitted(self, attributes=["X_train_complete_"])
+        X = check_input_dataset(X, require_numeric=True)
+        check_is_fitted(self, attributes=["X_train_complete_", "imputer_", "trees_", "leaf_indices_"])
 
         if not X.columns.equals(self.X_train_complete_.columns):
             raise ValueError(
@@ -942,10 +928,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         mask_missing = incomplete_X.isna()
         cols_with_nan = incomplete_X.columns[incomplete_X.isna().any()]
 
-        if X.select_dtypes(exclude=["number"]).empty:
-            fcm_function = fuzzy_c_means
-        else:
-            fcm_function = fuzzy_c_means_categorical
+        fcm_function = fuzzy_c_means
 
         incomplete_leaf_indices_dict, imputed_X = self._initial_imputation_DT(incomplete_X.copy(), cols_with_nan)
 
@@ -972,6 +955,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return combined
 
     def _determine_optimal_n_clusters_FSI(self, X, fcm_function):
+        if len(X) < 2:
+            return 1
         c_values = list(range(1, min(len(X), self.max_clusters) + 1))
 
         FSI = []
@@ -979,7 +964,6 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
             centers, u = fcm_function(X.to_numpy(), c, self.m, self.max_FCM_iter, random_state=self.random_state,
                                       tol=self.tol)
             FSI.append(self._fuzzy_silhouette(X.to_numpy(), u, self.alpha))
-
         opt_c = c_values[np.argmax(FSI)]
         return opt_c
 
@@ -987,10 +971,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         X = pd.DataFrame(X)
         only_numeric = all(pd.api.types.is_numeric_dtype(X[col]) for col in X.columns)
 
-        if only_numeric:
-            D = cdist(X.to_numpy().astype(float), X.to_numpy().astype(float), metric="euclidean")
-        else:
-            D = gower_matrix(X)
+        D = cdist(X.to_numpy().astype(float), X.to_numpy().astype(float), metric="euclidean")
 
         N, C = U.shape
         s = np.zeros(N)
@@ -1023,32 +1004,11 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         FS = np.sum(weights * s) / np.sum(weights) if np.sum(weights) > 0 else 0.0
         return FS
 
-    def _create_mixed_imputer(self, X):
-        numeric_cols = X.select_dtypes(include=["number"]).columns
-        categorical_cols = X.select_dtypes(exclude=["number"]).columns
-
-        numeric_imputer = SimpleImputer(strategy="mean")
-        categorical_imputer = SimpleImputer(strategy="most_frequent")
-
-        preprocessor = ColumnTransformer(
-            transformers=[
-                ("num", numeric_imputer, numeric_cols),
-                ("cat", categorical_imputer, categorical_cols)
-            ],
-            remainder='passthrough'
-        )
-        preprocessor.set_output(transform="pandas")
-        preprocessor.fit(X)
-        return preprocessor
-
     def _calculate_AV(self, new_df, old_df, mask_missing):
         diffs = []
         for col in new_df.columns:
             mask_col = mask_missing[col]
-            if pd.api.types.is_numeric_dtype(new_df[col]):
-                diff = (new_df[col] - old_df[col]).abs()
-            else:
-                diff = new_df[col].ne(old_df[col]).astype(float)
+            diff = (new_df[col] - old_df[col]).abs()
             diff = diff[mask_col]
             diffs.append(diff)
         all_diffs = pd.concat(diffs)
@@ -1071,22 +1031,11 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
                             xi_filled[col] = xi_filled[col].astype(self.X_train_complete_[col].dtype)
 
                         xi_imputed = self.imputer_.transform(xi_filled)
-                        xi_imputed.columns = self.imputer_.get_feature_names_out()
-                        xi_imputed.columns = [col.split("__")[-1] for col in xi_imputed.columns]
-                        xi_filled = xi_imputed[self.X_train_complete_.columns]
+                        xi_filled = pd.DataFrame(data=xi_imputed, columns=self.X_train_complete_.columns)
                         count_missing_values -= 1
                     tree = self.trees_[j]
 
                     xi_without_j = xi_filled.drop(columns=[j])
-
-                    for col, enc in self.encoders_.items():
-                        if col in xi_without_j.columns:
-                            val = xi_without_j[col].iloc[0]
-                            if isinstance(val, np.ndarray):
-                                val = val.item() if val.size == 1 else val[0]
-                            val_df = pd.DataFrame({col: [val]})
-                            xi_without_j[col] = enc.transform(val_df)[0, 0]
-
                     xi[j] = tree.predict(xi_without_j)
                     leaf_idx = tree.apply(xi_without_j)
                     incomplete_leaf_indices_dict[(idx, j)] = leaf_idx
@@ -1112,16 +1061,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
         for i in matching_indices:
             i_local = local_indices[i]
-            if is_numeric_dtype(self.X_train_complete_[j]):
-                correction = self.learning_rate * (
-                        u[i_local, :] @ centers[:, col_j_idx] - imputed_X.loc[i, j])
-                imputed_X.loc[i, j] = imputed_X.loc[i, j] + correction
-            else:
-                u_i = u[i_local, :]
-                sums = defaultdict(float)
-                for k, cat in enumerate(centers[:, col_j_idx]):
-                    sums[cat] += u_i[k]
-                new_value = max(sums, key=sums.get)
-                imputed_X.loc[i, j] = new_value
+            correction = self.learning_rate * (
+                    u[i_local, :] @ centers[:, col_j_idx] - imputed_X.loc[i, j])
+            imputed_X.loc[i, j] = imputed_X.loc[i, j] + correction
 
         return imputed_X

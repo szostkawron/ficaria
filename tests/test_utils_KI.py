@@ -3,8 +3,7 @@ import pandas as pd
 import pytest
 from sklearn.datasets import make_blobs
 
-from ficaria.utils import check_input_dataset, compute_fcm_objective, find_optimal_clusters_fuzzy, fcm_predict, \
-    fuzzy_c_means_categorical
+from ficaria.utils import check_input_dataset, compute_fcm_objective, find_optimal_clusters_fuzzy, fcm_predict
 
 
 # ----- check_input_dataset ---------------------------------------
@@ -230,49 +229,3 @@ def test_find_optimal_clusters_fuzzy(X, min_clusters, max_clusters, random_state
     result = find_optimal_clusters_fuzzy(X, min_clusters, max_clusters, random_state, m)
     assert isinstance(result, int)
     assert abs(result - expected_k) <= 3
-
-
-# ----- fuzzy_c_means_categorical ---------------------------------------
-
-@pytest.mark.parametrize("X, n_clusters, random_state, m", [
-    (pd.DataFrame({
-        "x1": [1.0, 2.0, 3.0],
-        "x2": [4.0, 5.0, 6.0]
-    }), 2, 42, 2),
-
-    (pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", "A", "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", "X", "Y", "X"]
-    }), 3, 123, 1.1),
-
-    (pd.DataFrame({
-        "num1": [1, 2, 3, 4],
-        "cat1": ["A", "B", "A", "B"]
-    }), 2, 25, 1.5),
-
-    (pd.DataFrame({
-        "x1": [2.0, 2.0, 2.0],
-        "x2": [5.0, 5.0, 5.0]
-    }), 2, 42, 2),
-])
-def test_fuzzy_c_means_categorical(X, n_clusters, random_state, m):
-    centers, u = fuzzy_c_means_categorical(X, n_clusters=n_clusters, m=m, max_iter=50, random_state=random_state)
-
-    assert u.shape == (X.shape[0], n_clusters), "Membership matrix shape is incorrect"
-    assert centers.shape[0] == n_clusters, "Number of centers is incorrect"
-    assert set(centers.columns) == set(X.columns), "Centers columns mismatch"
-
-    row_sums = u.sum(axis=1)
-    np.testing.assert_allclose(row_sums, np.ones(X.shape[0]), rtol=1e-5, atol=1e-8)
-
-    for col in X.columns:
-        if not pd.api.types.is_numeric_dtype(X[col]):
-            assert all(val in X[col].values for val in centers[col]), f"Categorical center {col} contains invalid value"
-
-    centers2, u2 = fuzzy_c_means_categorical(X, n_clusters=n_clusters, m=m, max_iter=50, random_state=random_state)
-
-    pd.testing.assert_frame_equal(centers.sort_index(axis=1), centers2.sort_index(axis=1), check_dtype=False, atol=1e-8,
-                                  rtol=1e-5, obj="Cluster centers")
-
-    np.testing.assert_allclose(u, u2, rtol=1e-5, atol=1e-8,
-                               err_msg="Membership matrix differs between runs with the same random_state")
