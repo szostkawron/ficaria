@@ -18,104 +18,129 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
     "params, expected_exception, expected_msg",
     [
         # n_clusters
-        ({"n_clusters": "3"}, TypeError, "Invalid type for n_clusters"),
-        ({"n_clusters": -1}, ValueError, "Invalid value for n_clusters"),
-        ({"n_clusters": 0}, ValueError, "Invalid value for n_clusters"),
+        ({"n_clusters": "3"}, TypeError, "n_clusters must be int, got"),
+        ({"n_clusters": [3]}, TypeError, "n_clusters must be int, got"),
+        ({"n_clusters": 0}, ValueError, "n_clusters must be >= 1, got"),
 
         # max_clusters
-        ({"max_clusters": "3"}, TypeError, "Invalid type for max_clusters"),
-        ({"max_clusters": -1}, ValueError, "Invalid value for max_clusters"),
-        ({"max_clusters": 0}, ValueError, "Invalid value for max_clusters"),
+        ({"max_clusters": "3"}, TypeError, "max_clusters must be int, got"),
+        ({"max_clusters": [3]}, TypeError, "max_clusters must be int, got"),
+        ({"max_clusters": 0.1}, TypeError, "max_clusters must be int, got"),
+        ({"max_clusters": -1}, ValueError, "max_clusters must be >= 1, got"),
+        ({"max_clusters": 0}, ValueError, "max_clusters must be >= 1, got"),
 
         # max_iter
-        ({"max_iter": "100"}, TypeError, "Invalid type for max_iter"),
-        ({"max_iter": 2.5}, TypeError, "Invalid type for max_iter"),
-        ({"max_iter": 1}, ValueError, "Invalid value for max_iter"),
-        ({"max_iter": -5}, ValueError, "Invalid value for max_iter"),
+        ({"max_iter": "100"}, TypeError, "max_iter must be int, got"),
+        ({"max_iter": [100]}, TypeError, "max_iter must be int, got"),
+        ({"max_iter": 2.5}, TypeError, "max_iter must be int, got"),
+        ({"max_iter": 1}, ValueError, "max_iter must be > 1, got"),
+        ({"max_iter": -5}, ValueError, "max_iter must be > 1, got"),
 
         # max_FCM_iter
-        ({"max_FCM_iter": "100"}, TypeError, "Invalid type for max_FCM_iter"),
-        ({"max_FCM_iter": 2.5}, TypeError, "Invalid type for max_FCM_iter"),
-        ({"max_FCM_iter": 1}, ValueError, "Invalid value for max_FCM_iter"),
-        ({"max_FCM_iter": -5}, ValueError, "Invalid value for max_FCM_iter"),
+        ({"max_FCM_iter": "100"}, TypeError, "max_FCM_iter must be int, got"),
+        ({"max_FCM_iter": [100]}, TypeError, "max_FCM_iter must be int, got"),
+        ({"max_FCM_iter": 2.5}, TypeError, "max_FCM_iter must be int, got"),
+        ({"max_FCM_iter": 1}, ValueError, "max_FCM_iter must be > 1, got"),
+        ({"max_FCM_iter": -5}, ValueError, "max_FCM_iter must be > 1, got"),
 
         # max_II_iter
-        ({"max_II_iter": "100"}, TypeError, "Invalid type for max_II_iter"),
-        ({"max_II_iter": 2.5}, TypeError, "Invalid type for max_II_iter"),
-        ({"max_II_iter": 1}, ValueError, "Invalid value for max_II_iter"),
-        ({"max_II_iter": -5}, ValueError, "Invalid value for max_II_iter"),
+        ({"max_II_iter": "100"}, TypeError, "max_II_iter must be int, got"),
+        ({"max_II_iter": [100]}, TypeError, "max_II_iter must be int, got"),
+        ({"max_II_iter": 2.5}, TypeError, "max_II_iter must be int, got"),
+        ({"max_II_iter": 1}, ValueError, "max_II_iter must be > 1, got"),
+        ({"max_II_iter": -5}, ValueError, "max_II_iter must be > 1, got"),
 
         # max_outer_iter
-        ({"max_outer_iter": "100"}, TypeError, "Invalid type for max_outer_iter"),
-        ({"max_outer_iter": 2.5}, TypeError, "Invalid type for max_outer_iter"),
-        ({"max_outer_iter": 0}, ValueError, "Invalid value for max_outer_iter"),
-        ({"max_outer_iter": -5}, ValueError, "Invalid value for max_outer_iter"),
+        ({"max_outer_iter": "100"}, TypeError, "max_outer_iter must be int, got"),
+        ({"max_outer_iter": [100]}, TypeError, "max_outer_iter must be int, got"),
+        ({"max_outer_iter": 2.5}, TypeError, "max_outer_iter must be int, got"),
+        ({"max_outer_iter": 0}, ValueError, "max_outer_iter must be >= 1, got"),
+        ({"max_outer_iter": -5}, ValueError, "max_outer_iter must be >= 1, got"),
 
         # max_k
-        ({"max_k": "100"}, TypeError, "Invalid type for max_k"),
-        ({"max_k": 2.5}, TypeError, "Invalid type for max_k"),
-        ({"max_k": 1}, ValueError, "Invalid value for max_k"),
-        ({"max_k": -5}, ValueError, "Invalid value for max_k"),
+        ({"max_k": "100"}, TypeError, "max_k must be int, got"),
+        ({"max_k": [100]}, TypeError, "max_k must be int, got"),
+        ({"max_k": 2.5}, TypeError, "max_k must be int, got"),
+        ({"max_k": 0}, ValueError, "max_k must be >= 1, got"),
+        ({"max_k": -5}, ValueError, "max_k must be >= 1, got"),
 
         # random_state
-        ({"random_state": "abc"}, TypeError, "Invalid type for random_state"),
+        ({"random_state": "abc"}, TypeError, "random_state must be int or None, got"),
+        ({"random_state": [10]}, TypeError, "random_state must be int or None, got"),
+        ({"random_state": 2.5}, TypeError, "random_state must be int or None, got"),
 
         # m (fuzziness)
-        ({"m": "2.0"}, TypeError, "Invalid type for m"),
-        ({"m": 1.0}, ValueError, "Invalid value for m"),
-        ({"m": -3}, ValueError, "Invalid value for m"),
+        ({"m": "2.0"}, TypeError, "m must be int or float, got"),
+        ({"m": [2.0]}, TypeError, "m must be int or float, got"),
+        ({"m": 1.0}, ValueError, "m must be > 1.0, got"),
+        ({"m": -3}, ValueError, "m must be > 1.0, got"),
 
         # tol
-        ({"tol": "1e-5"}, TypeError, "Invalid type for tol"),
-        ({"tol": 0}, ValueError, "Invalid value for tol"),
+        ({"tol": "1e-5"}, TypeError, "tol must be int or float, got"),
+        ({"tol": [1e-5]}, TypeError, "tol must be int or float, got"),
+        ({"tol": 0}, ValueError, "tol must be > 0, got"),
+        ({"tol": -1.0}, ValueError, "tol must be > 0, got"),
 
         # wl
-        ({"wl": "0.5"}, TypeError, "Invalid type for wl"),
-        ({"wl": -0.1}, ValueError, "Invalid value for wl"),
-        ({"wl": 1.5}, ValueError, "Invalid value for wl"),
+        ({"wl": "0.5"}, TypeError, "wl must be int or float, got"),
+        ({"wl": [0.5]}, TypeError, "wl must be int or float, got"),
+        ({"wl": -0.1}, ValueError, "wl must be in range (0, 1], got"),
+        ({"wl": 1.5}, ValueError, "wl must be in range (0, 1], got"),
 
         # wb
-        ({"wb": "0.2"}, TypeError, "Invalid type for wb"),
-        ({"wb": -0.1}, ValueError, "Invalid value for wb"),
-        ({"wb": 1.5}, ValueError, "Invalid value for wb"),
+        ({"wb": "0.2"}, TypeError, "wb must be int or float, got"),
+        ({"wb": [0.2]}, TypeError, "wb must be int or float, got"),
+        ({"wb": -0.1}, ValueError, "wb must be in range [0, 1], got"),
+        ({"wb": 1.5}, ValueError, "wb must be in range [0, 1], got"),
 
         # tau
-        ({"tau": "0.5"}, TypeError, "Invalid type for tau"),
-        ({"tau": -0.1}, ValueError, "Invalid value for tau"),
+        ({"tau": "0.5"}, TypeError, "tau must be int or float, got"),
+        ({"tau": [0.5]}, TypeError, "tau must be int or float, got"),
+        ({"tau": -0.1}, ValueError, "tau must be >= 0, got"),
+
+        # k
+        ({"k": "ABC"}, TypeError, "k must be int, got"),
+        ({"k": [5]}, TypeError, "k must be int, got"),
+        ({"k": 3.5}, TypeError, "k must be int, got"),
+        ({"k": 0}, ValueError, "k must be > 1, got"),
+        ({"k": -3}, ValueError, "k must be > 1, got"),
 
         # n_features
-        ({"n_features": "ABC"}, TypeError, "Invalid type for n_features"),
-        ({"n_features": 0}, ValueError, "Invalid value for n_features"),
-        ({"n_features": -3}, ValueError, "Invalid value for n_features"),
-
-        # n_features
-        ({"n_features": "ABC"}, TypeError, "Invalid type for n_features"),
-        ({"n_features": -3}, ValueError, "Invalid value for n_features"),
-        ({"n_features": 0}, ValueError, "Invalid value for n_features"),
+        ({"n_features": "ABC"}, TypeError, "n_features must be int, got"),
+        ({"n_features": [6]}, TypeError, "n_features must be int, got"),
+        ({"n_features": 7.9}, TypeError, "n_features must be int, got"),
+        ({"n_features": -3}, ValueError, "n_features must be >= 1, got"),
+        ({"n_features": 0}, ValueError, "n_features must be >= 1, got"),
 
         # max_features
-        ({"max_features": "ABC"}, TypeError, "Invalid type for max_features"),
-        ({"max_features": -3}, ValueError, "Invalid value for max_features"),
-        ({"max_features": 0}, ValueError, "Invalid value for max_features"),
+        ({"max_features": "ABC"}, TypeError, "max_features must be int, got "),
+        ({"max_features": [2]}, TypeError, "max_features must be int, got "),
+        ({"max_features": 3.7}, TypeError, "max_features must be int, got "),
+        ({"max_features": -3}, ValueError, "max_features must be >= 1, got"),
+        ({"max_features": 0}, ValueError, "max_features must be >= 1, got"),
 
         # stop_threshold
-        ({"stop_threshold": "0.5"}, TypeError, "Invalid type for stop_threshold"),
-        ({"stop_threshold": -0.1}, ValueError, "Invalid value for stop_threshold"),
+        ({"stop_threshold": "0.5"}, TypeError, "stop_threshold must be int or float, got"),
+        ({"stop_threshold": [0.5]}, TypeError, "stop_threshold must be int or float, got"),
+        ({"stop_threshold": -0.1}, ValueError, "stop_threshold must be >= 0, got"),
 
         # min_samples_leaf
-        ({"min_samples_leaf": "0.5"}, TypeError, "Invalid type for min_samples_leaf"),
-        ({"min_samples_leaf": -0.1}, ValueError, "Invalid value for min_samples_leaf"),
-        ({"min_samples_leaf": 0}, ValueError, "Invalid value for min_samples_leaf"),
+        ({"min_samples_leaf": "0.5"}, TypeError, "min_samples_leaf must be int or float, got"),
+        ({"min_samples_leaf": [0.5]}, TypeError, "min_samples_leaf must be int or float, got"),
+        ({"min_samples_leaf": -0.1}, ValueError, "min_samples_leaf must be > 0, got"),
+        ({"min_samples_leaf": 0}, ValueError, "min_samples_leaf must be > 0, got"),
 
         # learning_rate
-        ({"learning_rate": "0.5"}, TypeError, "Invalid type for learning_rate"),
-        ({"learning_rate": -0.1}, ValueError, "Invalid value for learning_rate"),
-        ({"learning_rate": 0}, ValueError, "Invalid value for learning_rate"),
+        ({"learning_rate": "0.5"}, TypeError, "learning_rate must be int or float, got"),
+        ({"learning_rate": [1]}, TypeError, "learning_rate must be int or float, got"),
+        ({"learning_rate": -0.1}, ValueError, "learning_rate must be > 0, got"),
+        ({"learning_rate": 0}, ValueError, "learning_rate must be > 0, got"),
 
         # eps
-        ({"eps": "0.5"}, TypeError, "Invalid type for eps"),
-        ({"eps": -0.1}, ValueError, "Invalid value for eps"),
-        ({"eps": 0}, ValueError, "Invalid value for eps"),
+        ({"eps": "0.5"}, TypeError, "eps must be int or float, got"),
+        ({"eps": [9]}, TypeError, "eps must be int or float, got"),
+        ({"eps": -0.1}, ValueError, "eps must be > 0, got"),
+        ({"eps": 0}, ValueError, "eps must be > 0, got"),
     ]
 )
 def test_validate_params_errors(params, expected_exception, expected_msg):
@@ -249,30 +274,30 @@ def test_check_input_dataset_valid_cases(X):
     assert result.shape[0] > 0
 
 
-@pytest.mark.parametrize("X, require_numeric, allow_nan", [
-    ([[1, 2], [1, 5, 7]], False, True),
+@pytest.mark.parametrize("X", [
+    ([[1, 2], [1, 5, 7]]),
 ])
-def test_check_input_dataset_wrong_input_types(X, require_numeric, allow_nan):
+def test_check_input_dataset_wrong_input_types(X):
     with pytest.raises(TypeError,
-                       match="Invalid input: Expected a 2D structure such as a DataFrame, NumPy array, or similar tabular format"):
-        check_input_dataset(X, require_numeric=require_numeric, allow_nan=allow_nan)
+                       match="X must be array-like or DataFrame, got"):
+        check_input_dataset(X)
 
 
-@pytest.mark.parametrize("X, require_numeric, allow_nan", [
-    (5, False, True),
-    ("txt", False, True),
-    ([5], False, True),
-    ([1, 2, 3], False, True),
-    ([[[1, 2], [3, 4]], [[5, 7], [3, 6]]], False, True),
-    ([{'a': 1}, {'a': 2}], False, True),
-    (object(), False, True),
-    (5 + 3j, False, True),
-    (lambda x: x, False, True)
+@pytest.mark.parametrize("X", [
+    (5),
+    ("txt"),
+    ([5]),
+    ([1, 2, 3]),
+    ([[[1, 2], [3, 4]], [[5, 7], [3, 6]]]),
+    ([{'a': 1}, {'a': 2}]),
+    (object()),
+    (5 + 3j),
+    (lambda x: x)
 ])
-def test_check_input_dataset_wrong_input_dimensions(X, require_numeric, allow_nan):
+def test_check_input_dataset_wrong_input_dimensions(X):
     with pytest.raises(ValueError,
-                       match="Invalid input: Expected a 2D structure"):
-        check_input_dataset(X, require_numeric=require_numeric, allow_nan=allow_nan)
+                       match="X must be a 2D array-like structure, got"):
+        check_input_dataset(X)
 
 
 @pytest.mark.parametrize("X", [
@@ -280,37 +305,36 @@ def test_check_input_dataset_wrong_input_dimensions(X, require_numeric, allow_na
 ])
 def test_check_input_dataset_empty_dataset(X):
     with pytest.raises(ValueError,
-                       match="Invalid input: Input dataset is empty"):
+                       match="X must contain at least one sample, got an empty dataset instead"):
         check_input_dataset(X)
 
 
-@pytest.mark.parametrize("X, require_numeric, allow_nan", [
-    ([[1, "txt", 3], [3, 7, 4]], True, True),
+@pytest.mark.parametrize("X, require_numeric", [
+    ([[1, "txt", 3], [3, 7, 4]], True),
     (pd.DataFrame({
         'height_cm': [165, 170, 175, 180, 175, 160, 175, 190],
         'weight_kg': [60, 65, 70, 75, 80, 55, 68, 80],
         'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, 25.0],
         'name': ["txt", "txt", "txt", "txt", "txt", "txt", "txt", "txt"]
-    }), True, True),
+    }), True),
 ])
-def test_check_input_dataset_check_require_numeric_true(X, require_numeric, allow_nan):
+def test_check_input_dataset_check_require_numeric_true(X, require_numeric):
     with pytest.raises(TypeError,
-                       match="Invalid input: Input dataset contains not numeric values"):
-        check_input_dataset(X, require_numeric=require_numeric, allow_nan=allow_nan)
+                       match="X must be numeric, got non-numeric columns:"):
+        check_input_dataset(X, require_numeric=require_numeric)
 
 
-@pytest.mark.parametrize("X, require_numeric, allow_nan", [
-    ([[1, np.nan, 3], [3, 7, 4]], False, False),
+@pytest.mark.parametrize("X,allow_nan", [
+    ([[1, np.nan, 3], [3, 7, 4]], False),
     (pd.DataFrame({
         'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
         'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
         'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]
-    }), False, False),
+    }), False),
 ])
-def test_check_input_dataset_check_allow_nan_false(X, require_numeric, allow_nan):
-    with pytest.raises(ValueError,
-                       match="Invalid input: Input dataset contains missing values"):
-        check_input_dataset(X, require_numeric=require_numeric, allow_nan=allow_nan)
+def test_check_input_dataset_check_allow_nan_false(X, allow_nan):
+    with pytest.raises(ValueError, match="X must not contain missing values"):
+        check_input_dataset(X, allow_nan=allow_nan)
 
 
 @pytest.mark.parametrize("X, require_complete_rows", [
@@ -323,7 +347,7 @@ def test_check_input_dataset_check_allow_nan_false(X, require_numeric, allow_nan
 ])
 def test_check_input_dataset_check_require_complete(X, require_complete_rows):
     with pytest.raises(ValueError,
-                       match="Invalid input: Input dataset contains no complete rows"):
+                       match="X must contain at least one row with no missing values"):
         check_input_dataset(X, require_complete_rows=require_complete_rows)
 
 
@@ -337,7 +361,7 @@ def test_check_input_dataset_check_require_complete(X, require_complete_rows):
 ])
 def test_check_input_dataset_check_no_nan_rows(X, no_nan_rows):
     with pytest.raises(ValueError,
-                       match="Invalid input: Input dataset contains a row with only NaN values"):
+                       match="X must not contain rows with all NaNs"):
         check_input_dataset(X, no_nan_rows=no_nan_rows)
 
 
@@ -351,7 +375,7 @@ def test_check_input_dataset_check_no_nan_rows(X, no_nan_rows):
 ])
 def test_check_input_dataset_check_no_nan_columns(X, no_nan_columns):
     with pytest.raises(ValueError,
-                       match="Invalid input: Input dataset contains a column with only NaN values"):
+                       match="X must not contain columns with all NaNs, got"):
         check_input_dataset(X, no_nan_columns=no_nan_columns)
 
 

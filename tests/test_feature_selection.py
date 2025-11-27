@@ -49,6 +49,7 @@ def test_deterministic_results(sample_data):
     transformed2 = selector2.transform(X)
     pd.testing.assert_frame_equal(transformed1, transformed2)
 
+
 def test_transform_without_fit(sample_data):
     X, y = sample_data
     selector = FuzzyGranularitySelector()
