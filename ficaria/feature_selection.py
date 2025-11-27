@@ -41,6 +41,13 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     def __init__(self, n_feature: int = 3, eps: float = 0.5, max_features: int = 10, sigma: int = 10,
                  random_state: Optional[int] = None):
+
+        # validate_params({
+        #     'n_features': n_features,
+        #     'alpha': alpha,
+        #     'k': k
+        # })
+
         if not isinstance(n_feature, int) or n_feature <= 0 or n_feature > max_features:
             raise ValueError("n_feature must be a positive integer and less or equal max_features.")
         if not isinstance(eps, (int, float)) or eps <= 0:
@@ -548,15 +555,22 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         """
 
     def __init__(self, n_features, alpha=0.5, k=5):
+
+        validate_params({
+            'n_features': n_features,
+            'k': k
+        })
+
+
+        if not isinstance(alpha, (int, float)):
+            raise TypeError(f"Invalid type for alpha: {type(alpha).__name__}. Must be int or float.")
+        if not (0 < alpha <= 1):
+            raise ValueError(f"Invalid value for alpha: {alpha}. Must be in range (0, 1].")
+
         self.n_features = n_features
         self.alpha = alpha
         self.k = k
 
-        validate_params({
-            'n_features': n_features,
-            'alpha': alpha,
-            'n_feature': k
-        })
 
         self.W_ = None
         self.selected_features_ = None
