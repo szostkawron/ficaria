@@ -173,26 +173,26 @@ def validate_params(params):
         if tau < 0:
             raise ValueError(f"Invalid value for tau: {tau}. Must be >= 0.")
 
-    if 'n_feature' in params:
-        k = params['n_feature']
+    if 'k' in params:
+        k = params['k']
         if not isinstance(k, int):
-            raise TypeError(f"Invalid type for n_feature: {type(k).__name__}. Must be int.")
+            raise TypeError(f"Invalid type for k: {type(k).__name__}. Must be int.")
         if k <= 1:
-            raise ValueError(f"Invalid value for n_feature: {k}. Must be > 1.")
-
-    if 'alpha' in params:
-        alpha = params['alpha']
-        if not isinstance(alpha, (int, float)):
-            raise TypeError(f"Invalid type for alpha: {type(alpha).__name__}. Must be int or float.")
-        if not (0 < alpha <= 1):
-            raise ValueError(f"Invalid value for alpha: {alpha}. Must be in range (0, 1].")
+            raise ValueError(f"Invalid value for k: {k}. Must be > 1.")
 
     if 'n_features' in params:
         n_features = params['n_features']
         if not isinstance(n_features, int):
             raise TypeError(f"Invalid type for n_features: {type(n_features).__name__}. Must be int.")
         if n_features < 1:
-            raise ValueError(f"Invalid value for n_features: {n_features}. Must be > n_features.")
+            raise ValueError(f"Invalid value for n_features: {n_features}. Must be >=1.")
+
+    if 'max_features' in params:
+        max_features = params['max_features']
+        if not isinstance(max_features, int):
+            raise TypeError(f"Invalid type for max_features: {type(max_features).__name__}. Must be int.")
+        if max_features < 1:
+            raise ValueError(f"Invalid value for max_features: {max_features}. Must be >= 1.")
 
     if 'stop_threshold' in params:
         stop_threshold = params['stop_threshold']
@@ -204,7 +204,8 @@ def validate_params(params):
     if 'min_samples_leaf' in params:
         min_samples_leaf = params['min_samples_leaf']
         if not isinstance(min_samples_leaf, (int, float)):
-            raise TypeError(f"Invalid type for min_samples_leaf: {type(min_samples_leaf).__name__}. Must be int or float.")
+            raise TypeError(
+                f"Invalid type for min_samples_leaf: {type(min_samples_leaf).__name__}. Must be int or float.")
         if min_samples_leaf <= 0:
             raise ValueError(f"Invalid value for min_samples_leaf: {min_samples_leaf}. Must be > 0.")
 
@@ -214,6 +215,13 @@ def validate_params(params):
             raise TypeError(f"Invalid type for learning_rate: {type(learning_rate).__name__}. Must be int or float.")
         if learning_rate <= 0:
             raise ValueError(f"Invalid value for learning_rate: {learning_rate}. Must be > 0.")
+
+    if 'eps' in params:
+        eps = params['eps']
+        if not isinstance(eps, (int, float)):
+            raise TypeError(f"Invalid type for eps: {type(eps).__name__}. Must be int or float.")
+        if eps <= 0:
+            raise ValueError(f"Invalid value for eps: {eps}. Must be > 0.")
 
 
 def euclidean_distance(a: np.ndarray, b: np.ndarray):

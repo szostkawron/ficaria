@@ -73,25 +73,12 @@ def test_transform_without_fit(sample_data):
 
 
 def test_init_valid(sample_data):
-    selector = FuzzyGranularitySelector(n_feature=3, eps=0.5, max_features=5, sigma=10, random_state=42)
+    selector = FuzzyGranularitySelector(n_features=3, eps=0.5, max_features=5, sigma=10, random_state=42)
     assert selector.random_state == 42
     assert selector.eps == 0.5
     assert selector.d == 5
     assert selector.sigma == 10
     assert selector.k == 3
-
-
-@pytest.mark.parametrize("n_feature,eps,max_features,sigma,random_state", [
-    (20, -1, 10, 50, None),
-    (-1, 0, 10, 50, None),
-    (None, 0.5, -5, 50, None),
-    (0.5, 0.5, 10, 200, None),
-    (11, 0.5, 10, 10, "abc"),
-])
-def test_init_invalid(n_feature, eps, max_features, sigma, random_state):
-    with pytest.raises(ValueError):
-        FuzzyGranularitySelector(n_feature=n_feature, eps=eps, max_features=max_features, sigma=sigma,
-                                 random_state=random_state)
 
 
 def test_fit_and_transform(sample_data):
@@ -326,7 +313,7 @@ def test_transform_single_row():
     })
     y = pd.Series([1])
 
-    selector = FuzzyGranularitySelector(n_feature=2, max_features=3, eps=0.5, sigma=10, random_state=42)
+    selector = FuzzyGranularitySelector(n_features=2, max_features=3, eps=0.5, sigma=10, random_state=42)
     selector.fit(X, y)
     X_transformed = selector.transform(X)
 
@@ -341,7 +328,7 @@ def test_transform_single_row():
 def test_d_greater_than_number_of_features(sample_data):
     X, y = sample_data
 
-    selector = FuzzyGranularitySelector(max_features=10, n_feature=3, eps=0.5, sigma=10, random_state=42)
+    selector = FuzzyGranularitySelector(max_features=10, n_features=3, eps=0.5, sigma=10, random_state=42)
     selector.fit(X, y)
     X_transformed = selector.transform(X)
 
@@ -358,7 +345,7 @@ dataframes_list = [
     pd.DataFrame({
         "a": [1.0, 2.0, 3.0, 4.0, 5.0],
         "b": [4.0, 5.0, 6.0, 7.0, 6.0],
-        "c": ["n_feature", "n_feature", "m", "m", "m"],
+        "c": ["n_features", "n_features", "m", "m", "m"],
     }),
 
     pd.DataFrame({
@@ -390,7 +377,7 @@ dataframes_list = [
     pd.DataFrame({
         "a": ["txt", "txt", "txt", "csv", "csv"],
         "b": ["A", "B", "B", "C", "C"],
-        "c": ["n_feature", "n_feature", "m", "m", "m"],
+        "c": ["n_features", "n_features", "m", "m", "m"],
     }),
 ]
 
@@ -411,6 +398,16 @@ selector_params_list = [
     (3, 0.25, 2),
     (3, 0.75, 6)
 ]
+
+
+@pytest.mark.parametrize("alpha, expected_exception, expected_msg", [
+    ("xyz", TypeError, "Invalid type for alpha"),
+    (-0.1, ValueError, "Invalid value for alpha"),
+])
+def test_fcmcentroidimputer_fit_raises_if_too_many_clusters(alpha, expected_exception, expected_msg):
+    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    with pytest.raises(expected_exception, match=expected_msg):
+        WeightedFuzzyRoughSelector(n_features=2, alpha=alpha)
 
 
 @pytest.mark.parametrize("n_features,alpha,k", selector_params_list)
@@ -499,7 +496,7 @@ def test_weightedfuzzyroughselector_fit_transform_combinations(X, y, params):
     if k >= min_class_count:
         k = int(min_class_count - 1)
         if k <= 1:
-            pytest.skip(f"Skipping n_feature for this dataset, not enough samples in smallest class.")
+            pytest.skip(f"Skipping n_features for this dataset, not enough samples in smallest class.")
 
     if n_features >= X.shape[1]:
         n_features = X.shape[1]

@@ -17,7 +17,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     Parameters
     ----------
-    n_feature : int, default=3
+    n_features : int, default=3
         Number of features to choose while transforming data
 
     eps : float, default=0.5
@@ -39,27 +39,23 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     """
 
-    def __init__(self, n_feature: int = 3, eps: float = 0.5, max_features: int = 10, sigma: int = 10,
+    def __init__(self, n_features: int = 3, eps: float = 0.5, max_features: int = 10, sigma: int = 10,
                  random_state: Optional[int] = None):
 
-        # validate_params({
-        #     'n_features': n_features,
-        #     'alpha': alpha,
-        #     'k': k
-        # })
+        validate_params({
+            'n_features': n_features,
+            'eps': eps,
+            'max_features': max_features,
+            'random_state': random_state
+        })
 
-        if not isinstance(n_feature, int) or n_feature <= 0 or n_feature > max_features:
-            raise ValueError("n_feature must be a positive integer and less or equal max_features.")
-        if not isinstance(eps, (int, float)) or eps <= 0:
-            raise ValueError("eps must be a positive number.")
-        if not isinstance(max_features, int) or max_features <= 0:
-            raise ValueError("max_features must be a positive integer.")
+        if n_features > max_features:
+            raise ValueError("n_features must be a positive integer and less or equal max_features.")
+
         if not isinstance(sigma, int) or not (1 <= sigma <= 100):
             raise ValueError("sigma must be an integer in [1, 100].")
-        if random_state is not None and not isinstance(random_state, int):
-            raise ValueError("random_state must be an integer or None.")
 
-        self.k = n_feature
+        self.k = n_features
         self.eps = float(eps)
         self.d = int(max_features)
         self.sigma = int(sigma)
@@ -561,7 +557,6 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
             'k': k
         })
 
-
         if not isinstance(alpha, (int, float)):
             raise TypeError(f"Invalid type for alpha: {type(alpha).__name__}. Must be int or float.")
         if not (0 < alpha <= 1):
@@ -570,7 +565,6 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         self.n_features = n_features
         self.alpha = alpha
         self.k = k
-
 
         self.W_ = None
         self.selected_features_ = None
@@ -741,7 +735,7 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_density(self, distances, knn_indices):
         """
-        Compute local density rho(x) for each sample based on distances and n_feature-nearest neighbors
+        Compute local density rho(x) for each sample based on distances and n_features-nearest neighbors
 
         Parameters:
             distances (np.ndarray): pairwise distance matrix between all samples
@@ -764,7 +758,7 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
         Parameters:
             rho (np.ndarray): density values for all samples
-            knn_indices (np.ndarray): matrix with n_feature-nearest neighbor indices
+            knn_indices (np.ndarray): matrix with n_features-nearest neighbor indices
         """
 
         n_samples = len(rho)

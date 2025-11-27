@@ -405,7 +405,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 # --------------------------------------
 class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
     """
-   Hybrid imputer combining fuzzy c-means clustering, n_feature-nearest neighbors, and iterative imputation.
+   Hybrid imputer combining fuzzy c-means clustering, n_features-nearest neighbors, and iterative imputation.
 
    FCKI improves missing data imputation by first clustering data with fuzzy c-means,
    allowing points to belong to multiple clusters. It then performs KNN-based imputation
@@ -471,7 +471,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     def _find_best_k(self, St: pd.DataFrame, random_col: int, original_value: float) -> int:
         """
-        Select the optimal number of neighbors (n_feature) that minimizes RMSE
+        Select the optimal number of neighbors (n_features) that minimizes RMSE
         when imputing a masked value in a selected column.
     
         Parameters:
@@ -480,7 +480,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             original_value (float): True value before masking.
 
         Returns:
-            int: Best value of n_feature.
+            int: Best value of n_features.
         """
         n = len(St)
         if n <= 1:
@@ -514,7 +514,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     def _get_neighbors(self, train: list[list[float]], test_row: list[float], k: int) -> list[list[float]]:
         """
-        Returns the n_feature closest rows in `train` to `test_row`
+        Returns the n_features closest rows in `train` to `test_row`
         using Euclidean distance (ignores NaNs).
 
         Parameters:
@@ -522,7 +522,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             test_row (list[float]): Query point.
             k (int): Number of neighbors to return.
         Returns:
-            list: Closest n_feature rows from `train`.
+            list: Closest n_features rows from `train`.
         """
         test = np.array(test_row)
         distances = list()

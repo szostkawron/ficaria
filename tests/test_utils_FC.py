@@ -81,18 +81,20 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         ({"tau": "0.5"}, TypeError, "Invalid type for tau"),
         ({"tau": -0.1}, ValueError, "Invalid value for tau"),
 
-        # n_feature
-        ({"n_feature": "ABC"}, TypeError, "Invalid type for n_feature"),
-        ({"n_feature": 0}, ValueError, "Invalid value for n_feature"),
-        ({"n_feature": -3}, ValueError, "Invalid value for n_feature"),
-
-        # alpha
-        ({"alpha": "xyz"}, TypeError, "Invalid type for alpha"),
-        ({"alpha": -0.1}, ValueError, "Invalid value for alpha"),
+        # n_features
+        ({"n_features": "ABC"}, TypeError, "Invalid type for n_features"),
+        ({"n_features": 0}, ValueError, "Invalid value for n_features"),
+        ({"n_features": -3}, ValueError, "Invalid value for n_features"),
 
         # n_features
         ({"n_features": "ABC"}, TypeError, "Invalid type for n_features"),
         ({"n_features": -3}, ValueError, "Invalid value for n_features"),
+        ({"n_features": 0}, ValueError, "Invalid value for n_features"),
+
+        # max_features
+        ({"max_features": "ABC"}, TypeError, "Invalid type for max_features"),
+        ({"max_features": -3}, ValueError, "Invalid value for max_features"),
+        ({"max_features": 0}, ValueError, "Invalid value for max_features"),
 
         # stop_threshold
         ({"stop_threshold": "0.5"}, TypeError, "Invalid type for stop_threshold"),
@@ -107,6 +109,11 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         ({"learning_rate": "0.5"}, TypeError, "Invalid type for learning_rate"),
         ({"learning_rate": -0.1}, ValueError, "Invalid value for learning_rate"),
         ({"learning_rate": 0}, ValueError, "Invalid value for learning_rate"),
+
+        # eps
+        ({"eps": "0.5"}, TypeError, "Invalid type for eps"),
+        ({"eps": -0.1}, ValueError, "Invalid value for eps"),
+        ({"eps": 0}, ValueError, "Invalid value for eps"),
     ]
 )
 def test_validate_params_errors(params, expected_exception, expected_msg):
