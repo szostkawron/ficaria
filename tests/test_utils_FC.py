@@ -28,25 +28,31 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         # max_iter
         ({"max_iter": "100"}, TypeError, "Invalid type for max_iter"),
         ({"max_iter": 2.5}, TypeError, "Invalid type for max_iter"),
-        ({"max_iter": 0}, ValueError, "Invalid value for max_iter"),
+        ({"max_iter": 1}, ValueError, "Invalid value for max_iter"),
         ({"max_iter": -5}, ValueError, "Invalid value for max_iter"),
 
         # max_FCM_iter
         ({"max_FCM_iter": "100"}, TypeError, "Invalid type for max_FCM_iter"),
         ({"max_FCM_iter": 2.5}, TypeError, "Invalid type for max_FCM_iter"),
-        ({"max_FCM_iter": 0}, ValueError, "Invalid value for max_FCM_iter"),
+        ({"max_FCM_iter": 1}, ValueError, "Invalid value for max_FCM_iter"),
         ({"max_FCM_iter": -5}, ValueError, "Invalid value for max_FCM_iter"),
 
         # max_II_iter
         ({"max_II_iter": "100"}, TypeError, "Invalid type for max_II_iter"),
         ({"max_II_iter": 2.5}, TypeError, "Invalid type for max_II_iter"),
-        ({"max_II_iter": 0}, ValueError, "Invalid value for max_II_iter"),
+        ({"max_II_iter": 1}, ValueError, "Invalid value for max_II_iter"),
         ({"max_II_iter": -5}, ValueError, "Invalid value for max_II_iter"),
+
+        # max_outer_iter
+        ({"max_outer_iter": "100"}, TypeError, "Invalid type for max_outer_iter"),
+        ({"max_outer_iter": 2.5}, TypeError, "Invalid type for max_outer_iter"),
+        ({"max_outer_iter": 0}, ValueError, "Invalid value for max_outer_iter"),
+        ({"max_outer_iter": -5}, ValueError, "Invalid value for max_outer_iter"),
 
         # max_k
         ({"max_k": "100"}, TypeError, "Invalid type for max_k"),
         ({"max_k": 2.5}, TypeError, "Invalid type for max_k"),
-        ({"max_k": 0}, ValueError, "Invalid value for max_k"),
+        ({"max_k": 1}, ValueError, "Invalid value for max_k"),
         ({"max_k": -5}, ValueError, "Invalid value for max_k"),
 
         # random_state
@@ -86,6 +92,12 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         # n_features
         ({"n_features": "ABC"}, TypeError, "Invalid type for n_features"),
         ({"n_features": -3}, ValueError, "Invalid value for n_features"),
+
+        # stop_threshold
+        ({"stop_threshold": "0.5"}, TypeError, "Invalid type for stop_threshold"),
+        ({"stop_threshold": -0.1}, ValueError, "Invalid value for stop_threshold"),
+        ({"stop_threshold": 0}, ValueError, "Invalid value for stop_threshold"),
+
     ]
 )
 def test_validate_params_errors(params, expected_exception, expected_msg):

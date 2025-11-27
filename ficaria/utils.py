@@ -119,6 +119,13 @@ def validate_params(params):
         if max_II_iter <= 1:
             raise ValueError(f"Invalid value for max_II_iter: {max_II_iter}. Must be >= 1.")
 
+    if 'max_outer_iter' in params:
+        max_outer_iter = params['max_outer_iter']
+        if not isinstance(max_outer_iter, int):
+            raise TypeError(f"Invalid type for max_outer_iter: {type(max_outer_iter).__name__}. Must be int.")
+        if max_outer_iter < 1:
+            raise ValueError(f"Invalid value for max_outer_iter: {max_outer_iter}. Must be > 1.")
+
     if 'max_k' in params:
         max_k = params['max_k']
         if not isinstance(max_k, int):
@@ -186,6 +193,13 @@ def validate_params(params):
             raise TypeError(f"Invalid type for n_features: {type(n_features).__name__}. Must be int.")
         if n_features < 1:
             raise ValueError(f"Invalid value for n_features: {n_features}. Must be > n_features.")
+
+    if 'stop_threshold' in params:
+        stop_threshold = params['stop_threshold']
+        if not isinstance(stop_threshold, (int, float)):
+            raise TypeError(f"Invalid type for stop_threshold: {type(stop_threshold).__name__}. Must be int or float.")
+        if stop_threshold <= 0:
+            raise ValueError(f"Invalid value for stop_threshold: {stop_threshold}. Must be > 0.")
 
 
 def euclidean_distance(a: np.ndarray, b: np.ndarray):

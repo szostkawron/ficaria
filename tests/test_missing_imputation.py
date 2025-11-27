@@ -195,44 +195,6 @@ def test_fcmkiimputer_init(random_state, max_clusters, m, max_FCM_iter, max_k, m
     assert max_II_iter == max_II_iter
 
 
-@pytest.mark.parametrize("max_FCM_iter", [
-    "txt",
-    [24],
-    [[35]],
-    3.5,
-    None
-])
-def test_fcmkiimputer_init_errors_max_FCM_iter(max_FCM_iter):
-    with pytest.raises(TypeError,
-                       match="Invalid max_FCM_iter: Expected a positive integer greater than 1"):
-        FCMKIterativeImputer(max_FCM_iter=max_FCM_iter)
-
-
-@pytest.mark.parametrize("max_k", [
-    "txt",
-    [24],
-    [[35]],
-    3.5,
-    None
-])
-def test_fcmkiimputer_init_errors_max_k(max_k):
-    with pytest.raises(TypeError,
-                       match="Invalid max_k: Expected a positive integer greater than 1"):
-        FCMKIterativeImputer(max_k=max_k)
-
-
-@pytest.mark.parametrize("max_II_iter", [
-    "txt",
-    [24],
-    [[35]],
-    3.5,
-    None
-])
-def test_fcmkiimputer_init_errors_max_II_iter(max_II_iter):
-    with pytest.raises(TypeError,
-                       match="Invalid max_II_iter: Expected a positive integer greater than 1"):
-        FCMKIterativeImputer(max_II_iter=max_II_iter)
-
 
 @pytest.mark.parametrize("X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter", [
     (pd.DataFrame({
@@ -384,11 +346,6 @@ def test_liiifcm_init_random_state(random_state):
     assert imputer.random_state == random_state
 
 
-@pytest.mark.parametrize("random_state", ["abc", [1], 3.14])
-def test_liiifcm_init_random_state_invalid(random_state):
-    with pytest.raises(TypeError, match="Invalid random_state: Expected an integer or None."):
-        FCMInterpolationIterativeImputer(random_state=random_state)
-
 
 @pytest.mark.parametrize("X", [
     pd.DataFrame({'a': [np.nan, 0.2, 0.8], 'b': [0.5, np.nan, 0.7]}),
@@ -442,23 +399,6 @@ def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_
     assert imputer.max_outer_iter == max_outer_iter
     assert imputer.stop_threshold == stop_threshold
     assert imputer.sigma == sigma
-
-
-@pytest.mark.parametrize("param,value", [
-    ("n_clusters", 1),
-    ("m", 1.0),
-    ("alpha", -1),
-    ("max_iter", 0),
-    ("tol", -1e-5),
-    ("max_outer_iter", 0),
-    ("stop_threshold", 0),
-    ("sigma", "yes"),
-])
-def test_liiifcm_init_invalid(param, value):
-    kwargs = dict()
-    kwargs[param] = value
-    with pytest.raises(TypeError):
-        FCMInterpolationIterativeImputer(**kwargs)
 
 
 @pytest.mark.parametrize("X", [

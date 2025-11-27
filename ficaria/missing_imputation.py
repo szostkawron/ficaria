@@ -650,10 +650,9 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
 class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
-    def __init__(self, n_clusters: int = 3, m: float = 2.0, alpha: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
-                 max_outer_iter: int = 20, stop_threshold: float = 0.01, sigma: bool = False,
-                 random_state: Optional[int] = None, ):
-
+    def __init__(self, n_clusters: int = 3, m: float = 2.0, max_iter: int = 100, max_outer_iter: int = 20,
+                 alpha: float = 2.0, tol: float = 1e-5, stop_threshold: float = 0.01, sigma: bool = False,
+                 random_state: Optional[int] = None):
         """
         Initialize Linear Interpolation Based Iterative Intuitionistic Fuzzy C-Means (LI-IIFCM).
         Parameters
@@ -678,24 +677,21 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             Controls randomness.
         """
 
-        if not isinstance(n_clusters, int) or n_clusters < 2:
-            raise TypeError("Invalid n_clusters: Expected an integer greater than 1.")
-        if not isinstance(m, (int, float)) or m <= 1:
-            raise TypeError("Invalid m value: Expected a numeric value greater than 1.")
+        validate_params({
+            'n_clusters': n_clusters,
+            'm': m,
+            'max_iter': max_iter,
+            'max_outer_iter': max_outer_iter,
+            'tol': tol,
+            'stop_threshold': stop_threshold,
+            'random_state': random_state
+        })
+
         if not isinstance(alpha, (int, float)) or alpha <= 0:
             raise TypeError("Invalid alpha value: Expected a positive number.")
-        if not isinstance(max_iter, int) or max_iter <= 0:
-            raise TypeError("Invalid max_iter: Expected a positive integer.")
-        if not isinstance(tol, (int, float)) or tol <= 0:
-            raise TypeError("Invalid tol: Expected a positive float.")
-        if not isinstance(max_outer_iter, int) or max_outer_iter <= 0:
-            raise TypeError("Invalid max_outer_iter: Expected a positive integer.")
-        if not isinstance(stop_threshold, (int, float)) or stop_threshold <= 0:
-            raise TypeError("Invalid stop_threshold: Expected a positive float.")
+
         if not isinstance(sigma, bool):
             raise TypeError("Invalid sigma: Expected a boolean value.")
-        if random_state is not None and not isinstance(random_state, int):
-            raise TypeError("Invalid random_state: Expected an integer or None.")
 
         self.n_clusters = n_clusters
         self.m = m
