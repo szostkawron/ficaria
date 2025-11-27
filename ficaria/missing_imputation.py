@@ -865,37 +865,23 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
     to estimate and refine missing values in mixed-type datasets (numerical and categorical).
     """
 
-    def __init__(self, random_state=None, min_samples_leaf=3, learning_rate=0.1, m=2, max_clusters=20, max_iter=100,
-                 stop_threshold=1.0, alpha=1.0, max_FCM_iter=100, tol=1e-5):
-        if random_state is not None and not isinstance(random_state, int):
-            raise TypeError('Invalid random_state: Expected an integer or None.')
+    def __init__(self, max_clusters=20, m=2, max_iter=100, max_FCM_iter=100, tol=1e-5, min_samples_leaf=3,
+                 learning_rate=0.1, stop_threshold=1.0, alpha=1.0, random_state=None):
 
-        if not isinstance(min_samples_leaf, (int, float)) or min_samples_leaf <= 0:
-            raise TypeError('Invalid min_samples_leaf value: Expected a numeric value greater than 0.')
-
-        if not isinstance(learning_rate, (float, int)) or (learning_rate <= 0):
-            raise TypeError('Invalid learning_rate value: Expected a numeric value greater than 0.')
-
-        if not isinstance(m, (int, float)) or m <= 1:
-            raise TypeError('Invalid m value: Expected a numeric value greater than 1.')
-
-        if not isinstance(max_clusters, int) or max_clusters < 1:
-            raise TypeError('Invalid max_clusters value: Expected an integer >= 1.')
-
-        if not isinstance(max_iter, int) or max_iter < 1:
-            raise TypeError('Invalid max_iter value: Expected an integer >= 1.')
-
-        if not isinstance(stop_threshold, (int, float)) or stop_threshold < 0:
-            raise TypeError('Invalid stop_threshold value: Expected a numeric value >= 0.')
+        validate_params({
+            'max_clusters': max_clusters,
+            'm': m,
+            'max_iter': max_iter,
+            'max_FCM_iter': max_FCM_iter,
+            'tol': tol,
+            'stop_threshold': stop_threshold,
+            'random_state': random_state,
+            'min_samples_leaf': min_samples_leaf,
+            'learning_rate': learning_rate
+        })
 
         if not isinstance(alpha, (int, float)) or alpha <= 0:
             raise TypeError('Invalid alpha value: Expected a numeric value greater than 0.')
-
-        if not isinstance(max_FCM_iter, int) or max_FCM_iter < 1:
-            raise TypeError('Invalid max_FCM_iter value: Expected an integer >= 1.')
-
-        if not isinstance(tol, (int, float)) or tol <= 0:
-            raise TypeError('Invalid tol value: Expected a numeric value greater than 0.')
 
         self.random_state = random_state
         self.min_samples_leaf = min_samples_leaf

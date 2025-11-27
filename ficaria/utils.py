@@ -198,8 +198,22 @@ def validate_params(params):
         stop_threshold = params['stop_threshold']
         if not isinstance(stop_threshold, (int, float)):
             raise TypeError(f"Invalid type for stop_threshold: {type(stop_threshold).__name__}. Must be int or float.")
-        if stop_threshold <= 0:
-            raise ValueError(f"Invalid value for stop_threshold: {stop_threshold}. Must be > 0.")
+        if stop_threshold < 0:
+            raise ValueError(f"Invalid value for stop_threshold: {stop_threshold}. Must be >= 0.")
+
+    if 'min_samples_leaf' in params:
+        min_samples_leaf = params['min_samples_leaf']
+        if not isinstance(min_samples_leaf, (int, float)):
+            raise TypeError(f"Invalid type for min_samples_leaf: {type(min_samples_leaf).__name__}. Must be int or float.")
+        if min_samples_leaf <= 0:
+            raise ValueError(f"Invalid value for min_samples_leaf: {min_samples_leaf}. Must be > 0.")
+
+    if 'learning_rate' in params:
+        learning_rate = params['learning_rate']
+        if not isinstance(learning_rate, (int, float)):
+            raise TypeError(f"Invalid type for learning_rate: {type(learning_rate).__name__}. Must be int or float.")
+        if learning_rate <= 0:
+            raise ValueError(f"Invalid value for learning_rate: {learning_rate}. Must be > 0.")
 
 
 def euclidean_distance(a: np.ndarray, b: np.ndarray):

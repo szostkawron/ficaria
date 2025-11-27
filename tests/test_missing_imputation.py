@@ -195,7 +195,6 @@ def test_fcmkiimputer_init(random_state, max_clusters, m, max_FCM_iter, max_k, m
     assert max_II_iter == max_II_iter
 
 
-
 @pytest.mark.parametrize("X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter", [
     (pd.DataFrame({
         'a': [np.nan, 2.0, 3.0],
@@ -344,7 +343,6 @@ def test_liiifcm_sigma_branch():
 def test_liiifcm_init_random_state(random_state):
     imputer = FCMInterpolationIterativeImputer(random_state=random_state)
     assert imputer.random_state == random_state
-
 
 
 @pytest.mark.parametrize("X", [
@@ -835,15 +833,16 @@ def test_fcmdti_improve_imputations_in_leaf(X, j, k, random_state):
 
 
 @pytest.mark.parametrize(
-    "random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter, stop_threshold, alpha", [
-        (42, 0.1, 0.1, 1.1, 3, 10, 0, 0.1),
-        (None, 5, 1, 2.0, 20, 100, 1, 0.5),
-        (123, 10, 0.5, 1.5, 100, 50, 0.5, 0.9)
-
+    "max_clusters, m, max_iter, max_FCM_iter, tol, min_samples_leaf, learning_rate, stop_threshold, alpha, random_state",
+    [
+        (10, 2, 30, 100, 1e-5, 4, 0.1, 1, 1, 42),
+        (5, 2.5, 100, 200, 1e-10, 5, 0.2, 0.1, 1.2, 100),
+        (20, 1.1, 50, 50, 1e-3, 10, 0.05, 0.5, 0.8, None)
     ])
-def test_fcmdti_init(random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter, stop_threshold, alpha):
-    imputer = FCMDTIterativeImputer(random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter,
-                                    stop_threshold, alpha)
+def test_fcmdti_init(max_clusters, m, max_iter, max_FCM_iter, tol, min_samples_leaf, learning_rate, stop_threshold,
+                     alpha, random_state):
+    imputer = FCMDTIterativeImputer(max_clusters, m, max_iter, max_FCM_iter, tol, min_samples_leaf,
+                                    learning_rate, stop_threshold, alpha, random_state)
 
     assert imputer.random_state == random_state
     assert imputer.min_samples_leaf == min_samples_leaf
@@ -853,55 +852,8 @@ def test_fcmdti_init(random_state, min_samples_leaf, learning_rate, m, max_clust
     assert imputer.max_iter == max_iter
     assert imputer.stop_threshold == stop_threshold
     assert imputer.alpha == alpha
-
-
-@pytest.mark.parametrize("random_state", [
-    "txt",
-    [24],
-    [[35]],
-    3.5
-])
-def test_fcmdti_init_errors_randomstate(random_state):
-    with pytest.raises(TypeError,
-                       match="Invalid random_state: Expected an integer or None"):
-        FCMDTIterativeImputer(random_state=random_state)
-
-
-invalid_values = ["txt", [24], [[35]], 3.5, 0, -5, 1]
-params_to_test = ["max_iter", "max_clusters"]
-
-
-@pytest.mark.parametrize("param_name,value", [(p, v) for p in params_to_test for v in invalid_values])
-def test_fcmdti_init_errors(param_name, value):
-    kwargs = {param_name: value}
-    with pytest.raises(TypeError, match=f"Invalid {param_name} value: Expected an integer greater than 1."):
-        FCMDTIterativeImputer(**kwargs)
-
-
-@pytest.mark.parametrize("m", [
-    "txt",
-    [24],
-    [[35]],
-    0,
-    0.5,
-    -5,
-    1
-])
-def test_fcmdti_init_errors_m(m):
-    with pytest.raises(TypeError,
-                       match="Invalid m value: Expected a numeric value greater than 1"):
-        FCMDTIterativeImputer(m=m)
-
-
-invalid_values = ["txt", [24], [[35]], -3.5, -5]
-params_to_test = ["min_samples_leaf", "learning_rate", "stop_threshold", "alpha"]
-
-
-@pytest.mark.parametrize("param_name,value", [(p, v) for p in params_to_test for v in invalid_values])
-def test_fcmdti_init_errors(param_name, value):
-    kwargs = {param_name: value}
-    with pytest.raises(TypeError, match=f"Invalid {param_name} value: Expected a numeric value"):
-        FCMDTIterativeImputer(**kwargs)
+    assert imputer.max_FCM_iter == max_FCM_iter
+    assert imputer.tol == tol
 
 
 @pytest.mark.parametrize("X, random_state,min_samples_leaf,learning_rate,m,max_clusters,max_iter,stop_threshold,alpha",

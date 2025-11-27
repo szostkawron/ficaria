@@ -61,6 +61,7 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         # m (fuzziness)
         ({"m": "2.0"}, TypeError, "Invalid type for m"),
         ({"m": 1.0}, ValueError, "Invalid value for m"),
+        ({"m": -3}, ValueError, "Invalid value for m"),
 
         # tol
         ({"tol": "1e-5"}, TypeError, "Invalid type for tol"),
@@ -96,8 +97,16 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         # stop_threshold
         ({"stop_threshold": "0.5"}, TypeError, "Invalid type for stop_threshold"),
         ({"stop_threshold": -0.1}, ValueError, "Invalid value for stop_threshold"),
-        ({"stop_threshold": 0}, ValueError, "Invalid value for stop_threshold"),
 
+        # min_samples_leaf
+        ({"min_samples_leaf": "0.5"}, TypeError, "Invalid type for min_samples_leaf"),
+        ({"min_samples_leaf": -0.1}, ValueError, "Invalid value for min_samples_leaf"),
+        ({"min_samples_leaf": 0}, ValueError, "Invalid value for min_samples_leaf"),
+
+        # learning_rate
+        ({"learning_rate": "0.5"}, TypeError, "Invalid type for learning_rate"),
+        ({"learning_rate": -0.1}, ValueError, "Invalid value for learning_rate"),
+        ({"learning_rate": 0}, ValueError, "Invalid value for learning_rate"),
     ]
 )
 def test_validate_params_errors(params, expected_exception, expected_msg):
