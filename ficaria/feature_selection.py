@@ -1,4 +1,4 @@
-from typing import Optional, Union, List, Tuple, Dict, Any
+from typing import Optional, List, Tuple, Dict, Any
 
 import numpy as np
 import pandas as pd
@@ -39,8 +39,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     """
 
-    def __init__(self, n_features: int = 3, eps: float = 0.5, max_features: int = 10, sigma: int = 10,
-                 random_state: Optional[int] = None):
+    def __init__(self, n_features=3, eps=0.5, max_features=10, sigma=10, random_state=None):
 
         validate_params({
             'n_features': n_features,
@@ -74,8 +73,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         self.D_partition_: Dict[Any, pd.DataFrame] = {}
         self.C_: Dict[str, str] = {}
 
-    def fit(self, X: Union[pd.DataFrame, np.ndarray, List[List[Any]]],
-            y: Optional[Union[pd.Series, np.ndarray, pd.DataFrame]] = None):
+    def fit(self, X, y=None):
         """
         Fit the FIGFS algorithm on the dataset and determine the optimal feature subset.
 
@@ -138,7 +136,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         self.S_ = self._FIGFS_algorithm()
         return self
 
-    def transform(self, X: Union[pd.DataFrame, np.ndarray, List[List[Any]]]) -> pd.DataFrame:
+    def transform(self, X):
         """
         Transform input dataset using selected optimal feature subset.
 
@@ -165,7 +163,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
         return X_transformed[final_cols].copy()
 
-    def _calculate_similarity_matrix_for_df(self, colname: str, df: pd.DataFrame) -> np.ndarray:
+    def _calculate_similarity_matrix_for_df(self, colname, df):
         """
         Compute fuzzy similarity matrix for a single column (numeric or categorical),
         working correctly in both global and local contexts.
@@ -214,8 +212,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
         return mat
 
-    def _calculate_delta_for_column_subset(self, row_index: int, B: List[str], df: Optional[pd.DataFrame] = None) -> \
-            Tuple[np.ndarray, float]:
+    def _calculate_delta_for_column_subset(self, row_index, B, df=None):
         """
         Calculate granule membership vector and size for a given row and subset of features.
 
@@ -274,8 +271,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
         return granule, size
 
-    def _calculate_multi_granularity_fuzzy_implication_entropy(self, B: List[str], type: str = 'basic',
-                                                               T: Optional[List[str]] = None) -> float:
+    def _calculate_multi_granularity_fuzzy_implication_entropy(self, B, type='basic', T=None):
         """
         Measure the uncertainty or fuzziness of information granules
         formed by a subset of features B, optionally conditioned on another subset T.
@@ -324,7 +320,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
         return out
 
-    def _granular_consistency_of_B_subset(self, B: List[str]) -> float:
+    def _granular_consistency_of_B_subset(self, B):
         """
         Measure how well a subset of features B preserves the structure of the target variable D in terms of
         fuzzy information granules.
@@ -360,7 +356,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
         return total / self.n_
 
-    def _local_granularity_consistency_of_B_subset(self, B: List[str]) -> float:
+    def _local_granularity_consistency_of_B_subset(self, B):
 
         """
         Evaluates how consistent the fuzzy granules of B are within each
@@ -397,7 +393,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             total += (res / part_n)
         return total / len(self.D_partition_)
 
-    def _create_partitions(self) -> Dict[Any, pd.DataFrame]:
+    def _create_partitions(self):
         """
         Partition the dataset into subsets according to target values.
 

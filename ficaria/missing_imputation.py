@@ -1,5 +1,4 @@
 from collections import defaultdict
-from typing import Tuple, List
 
 import numpy as np
 import pandas as pd
@@ -413,8 +412,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
    similarity search enhances accuracy compared to standard KNN imputation.
     """
 
-    def __init__(self, max_clusters: int = 10, m: float = 2, max_FCM_iter: int = 100, max_II_iter: int = 30,
-                 max_k: int = 20, tol: float = 1e-5, random_state: Optional[int] = None, ):
+    def __init__(self, max_clusters=10, m=2, max_FCM_iter=100, max_II_iter=30, max_k=20, tol=1e-5, random_state=None):
 
         validate_params({
             'max_clusters': max_clusters,
@@ -469,7 +467,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         X_imputed = self._FCKI_algorithm(X)
         return X_imputed
 
-    def _find_best_k(self, St: pd.DataFrame, random_col: int, original_value: float) -> int:
+    def _find_best_k(self, St, random_col, original_value):
         """
         Select the optimal number of neighbors (n_features) that minimizes RMSE
         when imputing a masked value in a selected column.
@@ -512,7 +510,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         best_k = k_values[np.argmin(rmse_list)]
         return best_k
 
-    def _get_neighbors(self, train: list[list[float]], test_row: list[float], k: int) -> list[list[float]]:
+    def _get_neighbors(self, train, test_row, k):
         """
         Returns the n_features closest rows in `train` to `test_row`
         using Euclidean distance (ignores NaNs).
@@ -535,7 +533,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             neighbors.append(distances[i][0])
         return neighbors
 
-    def _KI_algorithm(self, X: pd.DataFrame, X_train: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    def _KI_algorithm(self, X, X_train=None):
         """
         Impute missing values using the KI method (KNN + Iterative Imputation).
 
@@ -609,7 +607,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
         return X_incomplete_rows
 
-    def _FCKI_algorithm(self, X: pd.DataFrame) -> pd.DataFrame:
+    def _FCKI_algorithm(self, X):
         """
         Impute missing values using the FCKI method (FCM + KNN + Iterative Imputation).
 
@@ -650,9 +648,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
 class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
-    def __init__(self, n_clusters: int = 3, m: float = 2.0, max_iter: int = 100, max_outer_iter: int = 20,
-                 alpha: float = 2.0, tol: float = 1e-5, stop_threshold: float = 0.01, sigma: bool = False,
-                 random_state: Optional[int] = None):
+    def __init__(self, n_clusters=3, m=2.0, max_iter=100, max_outer_iter=20, alpha=2.0, tol=1e-5, stop_threshold=0.01,
+                 sigma=False, random_state=None):
         """
         Initialize Linear Interpolation Based Iterative Intuitionistic Fuzzy C-Means (LI-IIFCM).
         Parameters
@@ -703,7 +700,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         self.sigma = sigma
         self.random_state = random_state
 
-    def fit(self, X: pd.DataFrame, y: Optional[np.ndarray] = None) -> "FCMInterpolationIterativeImputer":
+    def fit(self, X, y=None):
         """
         Fit the LI-IIFCM model on input data.
 
@@ -731,7 +728,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         self.columns_ = X.columns
         return self
 
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, X):
         """
         Impute missing values using Linear Interpolation and Iterative Intuitionistic Fuzzy C-Means.
 
@@ -781,7 +778,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
         return X_filled
 
-    def _ifcm(self, data: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, List[float]]:
+    def _ifcm(self, data):
         """
         Method implementing Intuitionistic Fuzzy C-Means clustering.
         Optionally applies weighted distance metric (IFCM-σ) if sigma=True.
