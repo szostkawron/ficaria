@@ -3,6 +3,7 @@ from typing import Optional, List, Tuple, Dict, Any
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.utils.validation import check_is_fitted
 
 from .utils import *
 
@@ -150,11 +151,11 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         DataFrame
             Reduced dataset with optimal features.
         """
+        check_is_fitted(self, attributes=["U_", "n_", "C_", "m_", "D_", "fuzzy_adaptive_neighbourhood_radius_",
+                                          "delta_cache_", "entropy_cache_", "D_partition_", "S_"])
 
         X = check_input_dataset(X, allow_nan=False)
 
-        if self.C_ is None:
-            raise RuntimeError("fit() must be called before transform().")
         if list(X.columns) != list(self.C_.keys()):
             raise ValueError("Input X columns differ from those used in fit().")
 
@@ -625,8 +626,9 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         Parameters:
             X (pd.DataFrame): input dataset with the same columns as seen during fit
         """
-        if self.feature_sequence_ is None:
-            raise AttributeError("fit must be called before transform.")
+
+        check_is_fitted(self,
+                        attributes=["feature_names_in_", "W_", "feature_sequence_", "Rw_", "feature_importances_"])
 
         if list(X.columns) != list(self.feature_names_in_):
             raise ValueError("Columns in transform do not match columns seen during fit")

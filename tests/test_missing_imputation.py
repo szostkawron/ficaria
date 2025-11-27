@@ -322,7 +322,7 @@ def test_liiifcm_fit_invalid_input_types(bad_X):
 def test_liiifcm_transform_before_fit():
     X = pd.DataFrame({'a': [0.1, np.nan, 0.5]})
     imputer = FCMInterpolationIterativeImputer()
-    with pytest.raises(AttributeError, match="must call fit"):
+    with pytest.raises(NotFittedError):
         imputer.transform(X)
 
 
@@ -1063,7 +1063,7 @@ def test_fcmcentroidimputer_transform_raises_if_not_fitted():
     X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
                       "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
     imputer = FCMCentroidImputer()
-    with pytest.raises(AttributeError, match="fit must be called before transform"):
+    with pytest.raises(NotFittedError):
         imputer.transform(X)
 
 
@@ -1142,6 +1142,14 @@ def test_fcmparameterimputer_feature_names_in_assigned():
     assert list(imputer.feature_names_in_) == list(X.columns)
 
 
+def test_fcmparameterimputer_transform_raises_if_not_fitted():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    imputer = FCMParameterImputer()
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
+
+
 # ----- FCMRoughParameterImputer -----------------------------------------------
 
 def test_fcmroughparameterimputer_fit_creates_clusters():
@@ -1166,6 +1174,14 @@ def test_fcmroughparameterimputer_fit_raises_if_too_many_clusters():
     imputer = FCMRoughParameterImputer(n_clusters=5)
     with pytest.raises(ValueError, match="n_clusters cannot be larger than the number of complete rows"):
         imputer.fit(X)
+
+
+def test_fcmroughparameterimputer_transform_raises_if_not_fitted():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    imputer = FCMRoughParameterImputer(n_clusters=5)
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
 
 
 @pytest.mark.parametrize("imputer_class", [

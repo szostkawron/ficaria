@@ -2,6 +2,7 @@ import os
 import sys
 
 import pytest
+from sklearn.exceptions import NotFittedError
 from sklearn.utils.validation import check_is_fitted
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -48,28 +49,11 @@ def test_deterministic_results(sample_data):
     transformed2 = selector2.transform(X)
     pd.testing.assert_frame_equal(transformed1, transformed2)
 
-
 def test_transform_without_fit(sample_data):
     X, y = sample_data
     selector = FuzzyGranularitySelector()
-    with pytest.raises(AttributeError):
-        check_is_fitted(
-            selector,
-            attributes=[
-                "delta_cache_",
-                "entropy_cache_",
-                "U_",
-                "D_",
-                "n_",
-                "m_",
-                "target_name_",
-                "fuzzy_adaptive_neighbourhood_radius_",
-                "similarity_matrices_",
-                "D_partition_",
-                "C_"
-
-            ]
-        )
+    with pytest.raises(NotFittedError):
+        selector.transform(X)
 
 
 def test_init_valid(sample_data):
@@ -421,7 +405,7 @@ def test_weightedfuzzyroughselector_init_parametrized(n_features, alpha, k):
 def test_weightedfuzzyroughselector_transform_raises_if_not_fitted():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
     selector = WeightedFuzzyRoughSelector(n_features=1)
-    with pytest.raises(AttributeError, match="fit must be called before transform"):
+    with pytest.raises(NotFittedError):
         selector.transform(X)
 
 

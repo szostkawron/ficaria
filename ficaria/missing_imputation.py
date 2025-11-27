@@ -69,8 +69,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         Impute missing values using nearest cluster centroid.
         """
 
-        if not hasattr(self, "centers_") or not hasattr(self, "memberships_"):
-            raise AttributeError("fit must be called before transform.")
+        check_is_fitted(self, attributes=["centers_", "memberships_", "feature_names_in_"])
 
         if list(X.columns) != list(self.feature_names_in_):
             raise ValueError("Columns in transform do not match columns seen during fit")
@@ -156,8 +155,8 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         Each missing value is the weighted sum of all centroids
         based on membership values.
         """
-        if not hasattr(self, "centers_") or not hasattr(self, "memberships_"):
-            raise AttributeError("fit must be called before transform.")
+
+        check_is_fitted(self, attributes=["centers_", "memberships_", "feature_names_in_"])
 
         if list(X.columns) != list(self.feature_names_in_):
             raise ValueError("Columns in transform do not match columns seen during fit")
@@ -256,8 +255,8 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         Impute missing values using rough parameter-based FCM method.
         """
-        if not hasattr(self, "centers_") or not hasattr(self, "memberships_") or not hasattr(self, "clusters_"):
-            raise AttributeError("fit must be called before transform")
+
+        check_is_fitted(self, attributes=["centers_", "memberships_", "clusters_", "feature_names_in_"])
 
         if list(X.columns) != list(self.feature_names_in_):
             raise ValueError("Columns in transform do not match columns seen during fit")
@@ -737,12 +736,8 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         pd.DataFrame
             Dataset with missing values filled using LI-IIFCM algorithm.
         """
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("Input must be a pandas DataFrame")
-        if X.empty:
-            raise ValueError("Input DataFrame is empty")
-        if not hasattr(self, "columns_"):
-            raise AttributeError("You must call fit before transform")
+        check_is_fitted(self, attributes=["columns_"])
+
         if list(X.columns) != list(self.columns_):
             raise ValueError("Columns of input DataFrame differ from those used in fit")
 
