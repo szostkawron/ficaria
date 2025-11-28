@@ -7,6 +7,312 @@ from sklearn.exceptions import NotFittedError
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ficaria.missing_imputation import *
 
+dataframes_list = [
+    pd.DataFrame({
+        "a": [1.0, 2.0, 3.0, np.nan, 5.0],
+        "b": [5.0, 4.0, 3.0, 2.0, 1.0],
+    }),
+
+    pd.DataFrame({
+        "a": [np.nan, np.nan, 3.0, 4.0, 5.0],
+        "b": [np.nan, np.nan, 3.0, 2.0, 1.0],
+    }),
+
+    pd.DataFrame({
+        "a": [np.nan, np.nan, 3.0, 4.0, 5.0, 6.0],
+        "b": [np.nan, 2.0, 3.0, np.nan, 5.0, 6.0],
+        "c": [2.0, 3.0, 4.0, 5.0, 5.0, 6.0],
+    }),
+
+    pd.DataFrame({
+        "a": [np.nan, 2.0, -3.0, -4.0, -5.0, -6.0],
+        "b": [1.0, 2.0, np.nan, -4.0, -5.0, -6.0],
+        "c": [1.0, 2.0, -3.0, np.nan, -5.0, -6.0],
+    }),
+
+    pd.DataFrame({
+        "a": [1.0, 2.0, 3.0, np.nan, 5.0, 6.0, 7.0],
+        "b": [5.0, 4.0, 3.0, np.nan, 2.0, 1.0, 0.0],
+        "c": [9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0],
+        "d": [10.0, np.nan, 15.0, 16.0, 17.0, 18.0, 19.0],
+        "e": [9.0, np.nan, 7.0, 6.0, 5.0, np.nan, np.nan],
+    }),
+]
+
+fcm_params_list = [
+    (2, 2.0, 100, 1e-3),
+    (2, 1.5, 150, 1e-5),
+    (3, 2.5, 300, 1e-6),
+    (3, 3.0, 600, 1e-4),
+    (1, 3.0, 600, 1e-4),
+]
+
+
+# ----- FCMCentroidImputer -----------------------------------------------
+
+@pytest.mark.parametrize("n_clusters,m,max_iter,tol", fcm_params_list)
+def test_fcmcentroidimputer_init_parametrized(n_clusters, m, max_iter, tol):
+    imputer = FCMCentroidImputer(
+        n_clusters=n_clusters, m=m, max_iter=max_iter, tol=tol
+    )
+    assert imputer.n_clusters == n_clusters
+    assert imputer.m == m
+    assert imputer.max_iter == max_iter
+    assert imputer.tol == tol
+
+
+def test_fcmcentroidimputer_fit_creates_attributes():
+    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMCentroidImputer()
+    imputer.fit(X)
+    assert hasattr(imputer, "centers_")
+    assert hasattr(imputer, "memberships_")
+    assert imputer.centers_.shape[1] == X.shape[1]
+
+
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_fcmcentroidimputer_transform_single_row(X_train, X_test):
+    imputer = FCMCentroidImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+
+
+def test_fcmcentroidimputer_transform_raises_if_not_fitted():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    imputer = FCMCentroidImputer()
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
+
+
+def test_fcmcentroidimputer_transform_raises_if_columns_differ():
+    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
+
+    imputer = FCMCentroidImputer()
+    imputer.fit(X_train)
+
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
+        imputer.transform(X_test)
+
+
+@pytest.mark.parametrize("X", dataframes_list)
+def test_fcmcentroidimputer_transform_imputes_missing_values(X):
+    imputer = FCMCentroidImputer()
+    imputer.fit(X.dropna())
+    result = imputer.transform(X)
+    assert not result.isna().any().any(), "Imputer should fill all missing values"
+
+
+def test_fcmcentroidimputer_transform_no_missing_returns_same():
+    X = pd.DataFrame({"a": [1.0, 2.0, 2.0], "b": [3.0, 4.0, 4.0]})
+    imputer = FCMCentroidImputer()
+    imputer.fit(X)
+    result = imputer.transform(X)
+    pd.testing.assert_frame_equal(X, result)
+
+
+def test_fcmcentroidimputer_fit_raises_if_too_many_clusters():
+    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMCentroidImputer(n_clusters=5)
+    with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
+        imputer.fit(X)
+
+
+def test_fcmcentroidimputer_fit_no_complete_rows():
+    X = pd.DataFrame({"a": [np.nan, np.nan], "b": [np.nan, np.nan]})
+    imputer = FCMCentroidImputer()
+    with pytest.raises(ValueError,
+                       match="X must contain at least one row with no missing values"):
+        imputer.fit(X)
+
+
+# ----- FCMParameterImputer -----------------------------------------------
+
+def test_fcmparameterimputer_fit_creates_attributes():
+    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMParameterImputer()
+    imputer.fit(X)
+    assert hasattr(imputer, "centers_")
+    assert hasattr(imputer, "memberships_")
+    assert hasattr(imputer, "feature_names_in_")
+
+
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_fcmparameterimputer_transform_single_row(X_train, X_test):
+    imputer = FCMParameterImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+
+
+@pytest.mark.parametrize("X", dataframes_list)
+def test_fcmparameterimputer_transform_imputes_values(X):
+    imputer = FCMParameterImputer()
+    imputer.fit(X.dropna())
+    result = imputer.transform(X)
+    assert not result.isna().any().any()
+
+
+def test_fcmparameterimputer_fit_raises_if_too_many_clusters():
+    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMParameterImputer(n_clusters=5)
+    with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
+        imputer.fit(X)
+
+
+def test_fcmparameterimputer_feature_names_in_assigned():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    imputer = FCMParameterImputer()
+    imputer.fit(X)
+    assert list(imputer.feature_names_in_) == list(X.columns)
+
+
+def test_fcmparameterimputer_transform_raises_if_columns_differ():
+    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
+
+    imputer = FCMParameterImputer()
+    imputer.fit(X_train)
+
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
+        imputer.transform(X_test)
+
+
+def test_fcmparameterimputer_transform_raises_if_not_fitted():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    imputer = FCMParameterImputer()
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
+
+
+# ----- FCMRoughParameterImputer -----------------------------------------------
+
+def test_fcmroughparameterimputer_fit_creates_clusters():
+    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMRoughParameterImputer()
+    imputer.fit(X)
+    assert hasattr(imputer, "centers_")
+    assert hasattr(imputer, "memberships_")
+    assert hasattr(imputer, "clusters_")
+
+
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_fcmroughparameterimputer_transform_single_row(X_train, X_test):
+    imputer = FCMRoughParameterImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+
+
+@pytest.mark.parametrize("X", dataframes_list)
+def test_fcmroughparameterimputer_transform_imputes_values(X):
+    imputer = FCMRoughParameterImputer(wl=1, wb=1, n_clusters=1, tau=0)
+    imputer.fit(X.dropna())
+    result = imputer.transform(X)
+    assert not result.isna().any().any()
+
+
+def test_fcmroughparameterimputer_fit_raises_if_too_many_clusters():
+    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    imputer = FCMRoughParameterImputer(n_clusters=5)
+    with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
+        imputer.fit(X)
+
+
+def test_fcmroughparameterimputer_transform_raises_if_not_fitted():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    imputer = FCMRoughParameterImputer(n_clusters=5)
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
+
+
+def test_fcmroughparameterimputer_transform_raises_if_columns_differ():
+    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
+
+    imputer = FCMRoughParameterImputer(n_clusters=2)
+    imputer.fit(X_train)
+
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
+        imputer.transform(X_test)
+
+
+@pytest.mark.parametrize("imputer_class", [
+    FCMCentroidImputer,
+    FCMParameterImputer,
+    FCMRoughParameterImputer,
+])
+@pytest.mark.parametrize("X", dataframes_list)
+@pytest.mark.parametrize("n_clusters,m,max_iter,tol", fcm_params_list)
+@pytest.mark.parametrize("random_state", [42, 99, 120])
+def test_imputers_same_random_state_reproducible(imputer_class, X, n_clusters, m, max_iter, tol, random_state):
+    imputer_1 = imputer_class(n_clusters=n_clusters, m=m, max_iter=max_iter, tol=tol, random_state=random_state)
+    imputer_2 = imputer_class(n_clusters=n_clusters, m=m, max_iter=max_iter, tol=tol, random_state=random_state)
+
+    imputer_1.fit(X)
+    imputer_2.fit(X)
+
+    result_1 = imputer_1.transform(X)
+    result_2 = imputer_2.transform(X)
+
+    pd.testing.assert_frame_equal(result_1, result_2, check_exact=False, atol=1e-8)
+
+
+# ----- _rough_kmeans_from_fcm -----------------------------------------------
+
+@pytest.mark.parametrize("X", dataframes_list)
+def test_rough_kmeans_from_fcm_shapes_and_types(X):
+    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
+    imputer = FCMRoughParameterImputer()
+    clusters = imputer._rough_kmeans_from_fcm(X, memberships, centers)
+
+    assert isinstance(clusters, list)
+    assert len(clusters) == 2
+    for lower, upper, center in clusters:
+        assert isinstance(center, np.ndarray)
+        assert center.shape == (X.shape[1],)
+
+
+def test_rough_kmeans_from_fcm_cluster_consistency():
+    X = np.vstack([
+        np.random.normal(0, 0.1, (5, 2)),
+        np.random.normal(5, 0.1, (5, 2))
+    ])
+    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
+    imputer = FCMRoughParameterImputer()
+    clusters = imputer._rough_kmeans_from_fcm(X, memberships, centers)
+
+    for lower, upper, _ in clusters:
+        assert isinstance(lower, np.ndarray)
+        assert isinstance(upper, np.ndarray)
+        assert lower.shape[1] == X.shape[1] if len(lower) > 0 else True
+
 
 # ----- FCMKIterativeImputer ---------------------------------------
 
@@ -31,6 +337,21 @@ def test_fcmkiimputer_find_best_k(St, random_col, original_value, max_k, random_
     assert isinstance(result1, int)
     assert result1 > 0
     assert result1 <= len(St)
+
+
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_fcmkiimputer_transform_single_row(X_train, X_test):
+    imputer = FCMKIterativeImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
 
 
 @pytest.mark.parametrize("train, test_row, num_neighbors, expected, random_state", [
@@ -325,6 +646,21 @@ def test_liiifcm_transform_before_fit():
     imputer = FCMInterpolationIterativeImputer()
     with pytest.raises(NotFittedError):
         imputer.transform(X)
+
+
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_liiifcm_transform_single_row(X_train, X_test):
+    imputer = FCMInterpolationIterativeImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
 
 
 @pytest.mark.parametrize("X_fit, X_transform", [
@@ -1027,6 +1363,21 @@ def test_fcmdti_transform(X, X_test, random_state, min_samples_leaf, learning_ra
     np.testing.assert_array_equal(result, result3)
 
 
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_fcmdti_transform_single_row(X_train, X_test):
+    imputer = FCMDTIterativeImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+
+
 @pytest.mark.parametrize("X", [
     pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
     pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
@@ -1057,265 +1408,3 @@ def test_fcmdti_transform_column_mismatch(X_fit, X_transform):
 
     with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
         imputer.transform(X_transform)
-
-
-dataframes_list = [
-    pd.DataFrame({
-        "a": [1.0, 2.0, 3.0, np.nan, 5.0],
-        "b": [5.0, 4.0, 3.0, 2.0, 1.0],
-    }),
-
-    pd.DataFrame({
-        "a": [np.nan, np.nan, 3.0, 4.0, 5.0],
-        "b": [np.nan, np.nan, 3.0, 2.0, 1.0],
-    }),
-
-    pd.DataFrame({
-        "a": [np.nan, np.nan, 3.0, 4.0, 5.0, 6.0],
-        "b": [np.nan, 2.0, 3.0, np.nan, 5.0, 6.0],
-        "c": [2.0, 3.0, 4.0, 5.0, 5.0, 6.0],
-    }),
-
-    pd.DataFrame({
-        "a": [np.nan, 2.0, -3.0, -4.0, -5.0, -6.0],
-        "b": [1.0, 2.0, np.nan, -4.0, -5.0, -6.0],
-        "c": [1.0, 2.0, -3.0, np.nan, -5.0, -6.0],
-    }),
-
-    pd.DataFrame({
-        "a": [1.0, 2.0, 3.0, np.nan, 5.0, 6.0, 7.0],
-        "b": [5.0, 4.0, 3.0, np.nan, 2.0, 1.0, 0.0],
-        "c": [9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0],
-        "d": [10.0, np.nan, 15.0, 16.0, 17.0, 18.0, 19.0],
-        "e": [9.0, np.nan, 7.0, 6.0, 5.0, np.nan, np.nan],
-    }),
-]
-
-fcm_params_list = [
-    (2, 2.0, 100, 1e-3),
-    (2, 1.5, 150, 1e-5),
-    (3, 2.5, 300, 1e-6),
-    (3, 3.0, 600, 1e-4),
-    (1, 3.0, 600, 1e-4),
-]
-
-
-# ----- FCMCentroidImputer -----------------------------------------------
-
-@pytest.mark.parametrize("n_clusters,m,max_iter,tol", fcm_params_list)
-def test_fcmcentroidimputer_init_parametrized(n_clusters, m, max_iter, tol):
-    imputer = FCMCentroidImputer(
-        n_clusters=n_clusters, m=m, max_iter=max_iter, tol=tol
-    )
-    assert imputer.n_clusters == n_clusters
-    assert imputer.m == m
-    assert imputer.max_iter == max_iter
-    assert imputer.tol == tol
-
-
-def test_fcmcentroidimputer_fit_creates_attributes():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    imputer = FCMCentroidImputer()
-    imputer.fit(X)
-    assert hasattr(imputer, "centers_")
-    assert hasattr(imputer, "memberships_")
-    assert imputer.centers_.shape[1] == X.shape[1]
-
-
-def test_fcmcentroidimputer_transform_raises_if_not_fitted():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
-                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
-    imputer = FCMCentroidImputer()
-    with pytest.raises(NotFittedError):
-        imputer.transform(X)
-
-
-def test_fcmcentroidimputer_transform_raises_if_columns_differ():
-    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
-
-    imputer = FCMCentroidImputer()
-    imputer.fit(X_train)
-
-    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
-        imputer.transform(X_test)
-
-
-@pytest.mark.parametrize("X", dataframes_list)
-def test_fcmcentroidimputer_transform_imputes_missing_values(X):
-    imputer = FCMCentroidImputer()
-    imputer.fit(X.dropna())
-    result = imputer.transform(X)
-    assert not result.isna().any().any(), "Imputer should fill all missing values"
-
-
-def test_fcmcentroidimputer_transform_no_missing_returns_same():
-    X = pd.DataFrame({"a": [1.0, 2.0, 2.0], "b": [3.0, 4.0, 4.0]})
-    imputer = FCMCentroidImputer()
-    imputer.fit(X)
-    result = imputer.transform(X)
-    pd.testing.assert_frame_equal(X, result)
-
-
-def test_fcmcentroidimputer_fit_raises_if_too_many_clusters():
-    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
-    imputer = FCMCentroidImputer(n_clusters=5)
-    with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
-        imputer.fit(X)
-
-
-def test_fcmcentroidimputer_fit_no_complete_rows():
-    X = pd.DataFrame({"a": [np.nan, np.nan], "b": [np.nan, np.nan]})
-    imputer = FCMCentroidImputer()
-    with pytest.raises(ValueError,
-                       match="X must contain at least one row with no missing values"):
-        imputer.fit(X)
-
-
-# ----- FCMParameterImputer -----------------------------------------------
-
-def test_fcmparameterimputer_fit_creates_attributes():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    imputer = FCMParameterImputer()
-    imputer.fit(X)
-    assert hasattr(imputer, "centers_")
-    assert hasattr(imputer, "memberships_")
-    assert hasattr(imputer, "feature_names_in_")
-
-
-@pytest.mark.parametrize("X", dataframes_list)
-def test_fcmparameterimputer_transform_imputes_values(X):
-    imputer = FCMParameterImputer()
-    imputer.fit(X.dropna())
-    result = imputer.transform(X)
-    assert not result.isna().any().any()
-
-
-def test_fcmparameterimputer_fit_raises_if_too_many_clusters():
-    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
-    imputer = FCMParameterImputer(n_clusters=5)
-    with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
-        imputer.fit(X)
-
-
-def test_fcmparameterimputer_feature_names_in_assigned():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
-                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
-    imputer = FCMParameterImputer()
-    imputer.fit(X)
-    assert list(imputer.feature_names_in_) == list(X.columns)
-
-
-def test_fcmparameterimputer_transform_raises_if_columns_differ():
-    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
-
-    imputer = FCMParameterImputer()
-    imputer.fit(X_train)
-
-    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
-        imputer.transform(X_test)
-
-
-def test_fcmparameterimputer_transform_raises_if_not_fitted():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
-                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
-    imputer = FCMParameterImputer()
-    with pytest.raises(NotFittedError):
-        imputer.transform(X)
-
-
-# ----- FCMRoughParameterImputer -----------------------------------------------
-
-def test_fcmroughparameterimputer_fit_creates_clusters():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    imputer = FCMRoughParameterImputer()
-    imputer.fit(X)
-    assert hasattr(imputer, "centers_")
-    assert hasattr(imputer, "memberships_")
-    assert hasattr(imputer, "clusters_")
-
-
-@pytest.mark.parametrize("X", dataframes_list)
-def test_fcmroughparameterimputer_transform_imputes_values(X):
-    imputer = FCMRoughParameterImputer(wl=1, wb=1, n_clusters=1, tau=0)
-    imputer.fit(X.dropna())
-    result = imputer.transform(X)
-    assert not result.isna().any().any()
-
-
-def test_fcmroughparameterimputer_fit_raises_if_too_many_clusters():
-    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
-    imputer = FCMRoughParameterImputer(n_clusters=5)
-    with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
-        imputer.fit(X)
-
-
-def test_fcmroughparameterimputer_transform_raises_if_not_fitted():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
-                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
-    imputer = FCMRoughParameterImputer(n_clusters=5)
-    with pytest.raises(NotFittedError):
-        imputer.transform(X)
-
-
-def test_fcmroughparameterimputer_transform_raises_if_columns_differ():
-    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
-
-    imputer = FCMRoughParameterImputer(n_clusters=2)
-    imputer.fit(X_train)
-
-    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
-        imputer.transform(X_test)
-
-
-@pytest.mark.parametrize("imputer_class", [
-    FCMCentroidImputer,
-    FCMParameterImputer,
-    FCMRoughParameterImputer,
-])
-@pytest.mark.parametrize("X", dataframes_list)
-@pytest.mark.parametrize("n_clusters,m,max_iter,tol", fcm_params_list)
-@pytest.mark.parametrize("random_state", [42, 99, 120])
-def test_imputers_same_random_state_reproducible(imputer_class, X, n_clusters, m, max_iter, tol, random_state):
-    imputer_1 = imputer_class(n_clusters=n_clusters, m=m, max_iter=max_iter, tol=tol, random_state=random_state)
-    imputer_2 = imputer_class(n_clusters=n_clusters, m=m, max_iter=max_iter, tol=tol, random_state=random_state)
-
-    imputer_1.fit(X)
-    imputer_2.fit(X)
-
-    result_1 = imputer_1.transform(X)
-    result_2 = imputer_2.transform(X)
-
-    pd.testing.assert_frame_equal(result_1, result_2, check_exact=False, atol=1e-8)
-
-
-# ----- _rough_kmeans_from_fcm -----------------------------------------------
-
-@pytest.mark.parametrize("X", dataframes_list)
-def test_rough_kmeans_from_fcm_shapes_and_types(X):
-    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
-    imputer = FCMRoughParameterImputer()
-    clusters = imputer._rough_kmeans_from_fcm(X, memberships, centers)
-
-    assert isinstance(clusters, list)
-    assert len(clusters) == 2
-    for lower, upper, center in clusters:
-        assert isinstance(center, np.ndarray)
-        assert center.shape == (X.shape[1],)
-
-
-def test_rough_kmeans_from_fcm_cluster_consistency():
-    X = np.vstack([
-        np.random.normal(0, 0.1, (5, 2)),
-        np.random.normal(5, 0.1, (5, 2))
-    ])
-    centers, memberships = fuzzy_c_means(X, n_clusters=2, random_state=0)
-    imputer = FCMRoughParameterImputer()
-    clusters = imputer._rough_kmeans_from_fcm(X, memberships, centers)
-
-    for lower, upper, _ in clusters:
-        assert isinstance(lower, np.ndarray)
-        assert isinstance(upper, np.ndarray)
-        assert lower.shape[1] == X.shape[1] if len(lower) > 0 else True

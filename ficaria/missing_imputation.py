@@ -724,7 +724,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             Fitted instance.
         """
 
-        X = check_input_dataset(X, require_numeric=True)
+        X = check_input_dataset(X, require_numeric=True, no_nan_columns=True)
         self.columns_ = X.columns
         return self
 
