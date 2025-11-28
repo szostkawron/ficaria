@@ -18,8 +18,8 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
     "params, expected_exception, expected_msg",
     [
         # n_clusters
-        ({"n_clusters": "3"}, TypeError, "n_clusters must be int, got"),
-        ({"n_clusters": [3]}, TypeError, "n_clusters must be int, got"),
+        ({"n_clusters": "3"}, TypeError, "n_clusters must be int or None, got"),
+        ({"n_clusters": [3]}, TypeError, "n_clusters must be int or None, got"),
         ({"n_clusters": 0}, ValueError, "n_clusters must be >= 1, got"),
 
         # max_clusters

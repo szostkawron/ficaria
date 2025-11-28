@@ -20,15 +20,15 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     Parameters
     ----------
-    k : int, default=3
+    n_features : int, default=3
         Number of features to keep in the transformed dataset.
-        Must be a positive integer and `k <= d`.
+        Must be a positive integer and `n_features <= max_features`.
 
     eps : float, default=0.5
         Normalization factor controlling the fuzzy neighbourhood radius
         for numeric features. Must be strictly positive.
 
-    d : int, default=10
+    max_features : int, default=10
         Maximum number of features that FIGFS is allowed to consider
         during the iterative selection process. Must be positive.
 
@@ -70,9 +70,9 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     Examples
     --------
-    >>> selector = FuzzyGranularitySelector(k=5, eps=0.3)
+    >>> selector = FuzzyGranularitySelector(n_features=5, eps=0.3)
     >>> selector.fit(X_train, y_train)
-    >>> X_reduced = selector.transform(X_train)
+    >>> X_reduced = selector.transform(X_test)
     """
 
     def __init__(self, n_features=3, eps=0.5, max_features=10, sigma=10, random_state=None):
