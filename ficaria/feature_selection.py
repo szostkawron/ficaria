@@ -50,10 +50,12 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         })
 
         if n_features > max_features:
-            raise ValueError("n_features must be a positive integer and less or equal max_features.")
+            raise ValueError(f"n_features must be <= max_features: {max_features}, got {n_features} instead")
 
-        if not isinstance(sigma, int) or not (1 <= sigma <= 100):
-            raise ValueError("sigma must be an integer in [1, 100].")
+        if not isinstance(sigma, int):
+            raise TypeError(f"sigma must be int, got {type(sigma).__name__} instead")
+        if sigma < 1 or sigma > 100:
+            raise ValueError(f"sigma must be in range [0, 100], got {sigma} instead")
 
         self.k = n_features
         self.eps = float(eps)
@@ -94,7 +96,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         X = check_input_dataset(X, allow_nan=False)
 
         if y is not None and isinstance(y, (np.ndarray, pd.Series, pd.DataFrame)) and len(y) != len(X):
-            raise ValueError("X and y must have the same number of rows.")
+            raise ValueError(f"y must have the same number of rows as X: ({len(X)}), got {len(y)} instead")
 
         i = 1
         while self.target_name_ in X.columns:
@@ -157,7 +159,8 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         X = check_input_dataset(X, allow_nan=False)
 
         if list(X.columns) != list(self.C_.keys()):
-            raise ValueError("Input X columns differ from those used in fit().")
+            raise ValueError(f"X.columns must match the columns seen during fit {list((self.C_.keys()))}, "
+                             f"got {list(X.columns)} instead")
 
         X_transformed = X.copy()
         final_cols = self.S_[:self.k]
@@ -555,9 +558,9 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         })
 
         if not isinstance(alpha, (int, float)):
-            raise TypeError(f"Invalid type for alpha: {type(alpha).__name__}. Must be int or float.")
+            raise TypeError(f"alpha must be int or float, got {type(alpha).__name__} instead")
         if not (0 < alpha <= 1):
-            raise ValueError(f"Invalid value for alpha: {alpha}. Must be in range (0, 1].")
+            raise ValueError(f"alpha must be in range (0, 1], got {alpha} instead")
 
         self.n_features = n_features
         self.alpha = alpha
@@ -581,7 +584,7 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
         if self.n_features > X.shape[1]:
             raise ValueError(
-                f"Invalid value for n_features: {self.n_features}. Must be lower than or equal number of columns ({X.shape[1]}).")
+                f"n_features must be ≤ number of columns in X: ({X.shape[1]}), got {self.n_features} instead")
 
         if self.k >= len(X):
             self.k = len(X) - 1
@@ -590,16 +593,16 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         self.feature_names_in_ = list(X.columns)
 
         if not isinstance(y, (pd.Series, np.ndarray, list)):
-            raise TypeError(f"Invalid type for y: {type(y).__name__}. Must be pandas Series, numpy array, or list.")
+            raise TypeError(f"y must be a pandas Series, numpy array, or list, got {type(y).__name__} instead")
 
         y = pd.Series(y)
         y = y.reset_index(drop=True)
 
         if y.isna().any():
-            raise ValueError("Target variable y contains missing values. Remove or impute them before fitting.")
+            raise ValueError("y must not contain missing values")
 
         if len(y) != len(X):
-            raise ValueError(f"Length mismatch: X has {len(X)} samples but y has {len(y)} entries.")
+            raise ValueError(f"y must have the same number of rows as X ({len(X)}), got {len(y)} rows instead")
 
         H = self._identify_high_density_region(X, y)
 
@@ -631,7 +634,8 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
                         attributes=["feature_names_in_", "W_", "feature_sequence_", "Rw_", "feature_importances_"])
 
         if list(X.columns) != list(self.feature_names_in_):
-            raise ValueError("Columns in transform do not match columns seen during fit")
+            raise ValueError(f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, "
+                             f"got {list(X.columns)} instead")
 
         X = check_input_dataset(X)
 

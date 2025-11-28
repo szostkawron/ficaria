@@ -3,7 +3,6 @@ import sys
 
 import pytest
 from sklearn.exceptions import NotFittedError
-from sklearn.utils.validation import check_is_fitted
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ficaria.feature_selection import *
@@ -108,6 +107,45 @@ def test_fit_invalid_input_types(sample_data):
     selector3.fit(ll, y)
 
 
+@pytest.mark.parametrize(
+    "value, expected_exception, expected_msg", [
+        ("txt", TypeError, "sigma must be int, got"),
+        ([26], TypeError, "sigma must be int, got"),
+        ([[35]], TypeError, "sigma must be int, got"),
+        (-4.6, TypeError, "sigma must be int, got"),
+        (0, ValueError, r"sigma must be in range \[0, 100\], got"),
+        (101, ValueError, r"sigma must be in range \[0, 100\], got"),
+    ])
+def test_fuzzygranularityselector_init_errors_sigma(value, expected_exception, expected_msg):
+    with pytest.raises(expected_exception, match=expected_msg):
+        FuzzyGranularitySelector(sigma=value)
+
+
+@pytest.mark.parametrize(
+    "n_features, max_features, expected_exception, expected_msg", [
+        (10, 1, ValueError, "n_features must be <= max_features:"),
+        (101, 100, ValueError, "n_features must be <= max_features:"),
+    ])
+def test_fuzzygranularityselector_init_errors_n_max_features(n_features, max_features, expected_exception,
+                                                             expected_msg):
+    with pytest.raises(expected_exception, match=expected_msg):
+        FuzzyGranularitySelector(n_features=n_features, max_features=max_features)
+
+
+@pytest.mark.parametrize(
+    "X, y, expected_exception, expected_msg", [
+        (np.zeros((5, 3)), np.zeros(4), ValueError, "y must have the same number of rows as X:"),
+        (pd.DataFrame(np.zeros((10, 2))), pd.Series(np.zeros(9)), ValueError,
+         "y must have the same number of rows as X:"),
+        (np.zeros((6, 2)), pd.DataFrame(np.zeros((5, 1))), ValueError, "y must have the same number of rows as X:"),
+    ]
+)
+def test_function_raises_error_if_y_length_mismatch(X, y, expected_exception, expected_msg):
+    selector = FuzzyGranularitySelector()
+    with pytest.raises(expected_exception, match=expected_msg):
+        selector.fit(X, y)
+
+
 def test_missing_values_in_X_raises(sample_data):
     X, y = sample_data
     X_nan = X.copy()
@@ -123,16 +161,16 @@ def test_inconsistent_columns_between_fit_and_transform(sample_data):
     selector.fit(X, y)
 
     X_bad_order = X[["b", "a", "c"]].copy()
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
         selector.transform(X_bad_order)
 
     X_missing = X.drop(columns=["c"])
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
         selector.transform(X_missing)
 
     X_extra = X.copy()
     X_extra["extra"] = [0, 0, 0, 0, 0]
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
         selector.transform(X_extra)
 
 
@@ -386,8 +424,11 @@ selector_params_list = [
 
 
 @pytest.mark.parametrize("alpha, expected_exception, expected_msg", [
-    ("xyz", TypeError, "Invalid type for alpha"),
-    (-0.1, ValueError, "Invalid value for alpha"),
+    ("xyz", TypeError, "alpha must be int or float, got"),
+    ([3], TypeError, "alpha must be int or float, got"),
+    (-0.1, ValueError, r"alpha must be in range \(0, 1\], got"),
+    (0, ValueError, r"alpha must be in range \(0, 1\], got"),
+    (1.5, ValueError, r"alpha must be in range \(0, 1\], got"),
 ])
 def test_fcmcentroidimputer_fit_raises_if_too_many_clusters(alpha, expected_exception, expected_msg):
     X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
@@ -415,7 +456,7 @@ def test_weightedfuzzyroughselector_fit_raises_if_y_has_missing_values():
     y = pd.Series([1, np.nan, 0])
     selector = WeightedFuzzyRoughSelector(n_features=1, k=2)
 
-    with pytest.raises(ValueError, match="Target variable y contains missing values"):
+    with pytest.raises(ValueError, match="y must not contain missing values"):
         selector.fit(X, y)
 
 
@@ -424,7 +465,7 @@ def test_weightedfuzzyroughselector_fit_raises_if_y_length_mismatch():
     y = pd.Series([0, 1])
     selector = WeightedFuzzyRoughSelector(n_features=1, k=2)
 
-    with pytest.raises(ValueError, match="Length mismatch: X has 3 samples but y has 2 entries"):
+    with pytest.raises(ValueError, match="y must have the same number of rows as X"):
         selector.fit(X, y)
 
 
@@ -436,7 +477,7 @@ def test_weightedfuzzyroughselector_transform_raises_if_columns_differ():
     selector = WeightedFuzzyRoughSelector(n_features=1, k=2)
     selector.fit(X_train, y)
 
-    with pytest.raises(ValueError, match="Columns in transform do not match columns seen during fit"):
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
         selector.transform(X_test)
 
 

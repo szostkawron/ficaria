@@ -49,7 +49,8 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
         if self.n_clusters > len(complete):
-            raise ValueError("n_clusters cannot be larger than the number of complete rows")
+            raise ValueError(
+                f"n_clusters must be ≤ the number of complete rows ({len(complete)}), got {self.n_clusters} instead")
 
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
@@ -72,7 +73,8 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         check_is_fitted(self, attributes=["centers_", "memberships_", "feature_names_in_"])
 
         if list(X.columns) != list(self.feature_names_in_):
-            raise ValueError("Columns in transform do not match columns seen during fit")
+            raise ValueError(
+                f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, got {list(X.columns)} instead")
 
         X = check_input_dataset(X, require_numeric=True)
         _, incomplete = split_complete_incomplete(X)
@@ -134,7 +136,8 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         complete, _ = split_complete_incomplete(X)
 
         if self.n_clusters > len(complete):
-            raise ValueError("n_clusters cannot be larger than the number of complete rows")
+            raise ValueError(
+                f"n_clusters must be ≤ the number of complete rows ({len(complete)}), got {self.n_clusters} instead")
 
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
@@ -159,7 +162,9 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         check_is_fitted(self, attributes=["centers_", "memberships_", "feature_names_in_"])
 
         if list(X.columns) != list(self.feature_names_in_):
-            raise ValueError("Columns in transform do not match columns seen during fit")
+            raise ValueError(
+                f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, "
+                f"got {list(X.columns)} instead")
 
         X = check_input_dataset(X, require_numeric=True).copy()
         _, incomplete = split_complete_incomplete(X)
@@ -224,7 +229,9 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         complete, _ = split_complete_incomplete(X)
 
         if self.n_clusters > len(complete):
-            raise ValueError("n_clusters cannot be larger than the number of complete rows")
+            raise ValueError(
+                f"n_clusters must be ≤ the number of complete rows ({len(complete)}), "
+                f"got {self.n_clusters} instead")
 
         complete_array = complete.to_numpy()
         self.centers_, self.memberships_ = fuzzy_c_means(
@@ -259,7 +266,9 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         check_is_fitted(self, attributes=["centers_", "memberships_", "clusters_", "feature_names_in_"])
 
         if list(X.columns) != list(self.feature_names_in_):
-            raise ValueError("Columns in transform do not match columns seen during fit")
+            raise ValueError(
+                f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, "
+                f"got {list(X.columns)} instead")
 
         X = check_input_dataset(X, require_numeric=True)
 
@@ -455,8 +464,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
         if not X.columns.equals(self.X_train_.columns):
             raise ValueError(
-                f"Invalid input: Input dataset columns do not match columns seen during fit"
-            )
+                f"X.columns must match the columns seen during fit {list(self.X_train_.columns)}, "
+                f"got {list(X.columns)} instead")
 
         X_imputed = self._FCKI_algorithm(X)
         return X_imputed
@@ -565,7 +574,9 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
             P = all_data.dropna(subset=A_mis)
             if P.empty:
-                raise ValueError(f"Invalid input: No rows with valid values found in columns: {A_mis}")
+                raise ValueError(
+                    f"For any row with missing values, there must be at least one row where all "
+                    f"those columns are complete, got none for columns {list(A_mis)} instead")
 
             P_ext = np.vstack([P.to_numpy(), xi.to_numpy()])
 
@@ -678,11 +689,13 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             'random_state': random_state
         })
 
-        if not isinstance(alpha, (int, float)) or alpha <= 0:
-            raise TypeError("Invalid alpha value: Expected a positive number.")
+        if not isinstance(alpha, (int, float)):
+            raise TypeError(f"alpha must be int or float, got {type(alpha).__name__} instead")
+        if alpha <= 0:
+            raise ValueError(f"alpha must be > 0, got {alpha} instead")
 
         if not isinstance(sigma, bool):
-            raise TypeError("Invalid sigma: Expected a boolean value.")
+            raise TypeError(f"sigma must be bool, got {type(sigma).__name__} instead")
 
         self.n_clusters = n_clusters
         self.m = m
@@ -711,14 +724,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             Fitted instance.
         """
 
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("Input must be a pandas DataFrame")
-        if X.empty:
-            raise ValueError("Input DataFrame is empty")
-        if not all(np.issubdtype(dt, np.number) for dt in X.dtypes):
-            raise TypeError("All columns must be numeric")
-
-        X = check_input_dataset(X)
+        X = check_input_dataset(X, require_numeric=True)
         self.columns_ = X.columns
         return self
 
@@ -739,7 +745,8 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         check_is_fitted(self, attributes=["columns_"])
 
         if list(X.columns) != list(self.columns_):
-            raise ValueError("Columns of input DataFrame differ from those used in fit")
+            raise ValueError(f"X.columns must match the columns seen during fit {list(self.columns_)}, "
+                             f"got {list(X.columns)} instead")
 
         X = check_input_dataset(X)
         missing_mask = X.isnull().reset_index(drop=True)
@@ -867,8 +874,10 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
             'learning_rate': learning_rate
         })
 
-        if not isinstance(alpha, (int, float)) or alpha <= 0:
-            raise TypeError('Invalid alpha value: Expected a numeric value greater than 0.')
+        if not isinstance(alpha, (int, float)):
+            raise TypeError(f"alpha must be int or float, got {type(alpha).__name__} instead")
+        if alpha <= 0:
+            raise ValueError(f"alpha must be > 0, got {alpha} instead")
 
         self.random_state = random_state
         self.min_samples_leaf = min_samples_leaf
@@ -882,14 +891,12 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         self.tol = tol
 
     def fit(self, X, y=None):
-        X = check_input_dataset(X, require_numeric=True)
+        X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         self.X_train_complete_, _ = split_complete_incomplete(X.copy())
 
-        if self.X_train_complete_.empty:
-            raise ValueError("Invalid input: Input dataset has no complete records")
-
         if self.X_train_complete_.shape[1] < 2:
-            raise ValueError("Invalid input: Input dataset has only one column")
+            raise ValueError(f"X must contain at least 2 columns, "
+                             f"got {self.X_train_complete_.shape[1]} column instead")
 
         self.imputer_ = SimpleImputer(strategy="mean")
         self.imputer_.fit(X)
@@ -913,8 +920,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
         if not X.columns.equals(self.X_train_complete_.columns):
             raise ValueError(
-                f"Invalid input: Input dataset columns do not match columns seen during fit"
-            )
+                f"X.columns must match the columns seen during fit {list(self.X_train_complete_.columns)}, "
+                f"got {list(X.columns)} instead")
         complete_X, incomplete_X = split_complete_incomplete(X.copy())
 
         if len(incomplete_X) == 0:
