@@ -480,6 +480,7 @@ def test_weightedfuzzyroughselector_transform_raises_if_columns_differ():
     with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
         selector.transform(X_test)
 
+
 def test_weightedfuzzyroughselector_transform_single_row(sample_data):
     X, y = sample_data
     selector = WeightedFuzzyRoughSelector(n_features=2)
@@ -493,6 +494,7 @@ def test_weightedfuzzyroughselector_transform_single_row(sample_data):
     assert X_trans.shape[0] == 1, "Transforming a single row should return exactly one row"
     assert X_trans.shape[1] > 0, "Transform result should contain at least one column"
     assert not X_trans.isnull().values.any(), "Transform result should not contain any NaN values"
+
 
 def test_weightedfuzzyroughselector_fit_creates_attributes():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0, 5.0], "b": [4.0, 5.0, 6.0, 7.0, 8.0]})

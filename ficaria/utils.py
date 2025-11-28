@@ -87,9 +87,9 @@ def validate_params(params):
 
     if 'n_clusters' in params:
         n_clusters = params['n_clusters']
-        if not isinstance(n_clusters, int):
-            raise TypeError(f"n_clusters must be int, got {type(n_clusters).__name__} instead")
-        if n_clusters < 1:
+        if n_clusters is not None and not isinstance(n_clusters, int):
+            raise TypeError(f"n_clusters must be int or None, got {type(n_clusters).__name__} instead")
+        if isinstance(n_clusters, int) and n_clusters < 1:
             raise ValueError(f"n_clusters must be >= 1, got {n_clusters} instead")
 
     if 'max_clusters' in params:

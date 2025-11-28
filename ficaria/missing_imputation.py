@@ -14,7 +14,7 @@ from .utils import *
 # FCMCentroidImputer
 # --------------------------------------
 class FCMCentroidImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, random_state=None):
+    def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, random_state=None):
         """
         Fuzzy C-Means centroid-based imputer.
 
@@ -48,6 +48,12 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
+
+        if self.n_clusters is None:
+            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
+                                                          max_iter=self.max_iter, tol=self.tol,
+                                                          max_clusters=len(complete))
+
         if self.n_clusters > len(complete):
             raise ValueError(
                 f"n_clusters must be ≤ the number of complete rows ({len(complete)}), got {self.n_clusters} instead")
@@ -71,12 +77,12 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
 
         check_is_fitted(self, attributes=["centers_", "memberships_", "feature_names_in_"])
+        X = check_input_dataset(X, require_numeric=True)
 
         if list(X.columns) != list(self.feature_names_in_):
             raise ValueError(
                 f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, got {list(X.columns)} instead")
 
-        X = check_input_dataset(X, require_numeric=True)
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -100,7 +106,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 # FCMParameterImputer
 # --------------------------------------
 class FCMParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, random_state=None):
+    def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, random_state=None):
         """
         Fuzzy C-Means Parameter-based Imputation.
         
@@ -135,6 +141,10 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
 
+        if self.n_clusters is None:
+            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
+                                                          max_iter=self.max_iter, tol=self.tol)
+
         if self.n_clusters > len(complete):
             raise ValueError(
                 f"n_clusters must be ≤ the number of complete rows ({len(complete)}), got {self.n_clusters} instead")
@@ -161,12 +171,13 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 
         check_is_fitted(self, attributes=["centers_", "memberships_", "feature_names_in_"])
 
+        X = check_input_dataset(X, require_numeric=True).copy()
+
         if list(X.columns) != list(self.feature_names_in_):
             raise ValueError(
                 f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, "
                 f"got {list(X.columns)} instead")
 
-        X = check_input_dataset(X, require_numeric=True).copy()
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -194,7 +205,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 # --------------------------------------
 
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
+    def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
         """
         Fuzzy C-Means Rough Parameter-based imputer.
         
@@ -227,6 +238,10 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
+
+        if self.n_clusters is None:
+            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
+                                                          max_iter=self.max_iter, tol=self.tol)
 
         if self.n_clusters > len(complete):
             raise ValueError(
@@ -265,12 +280,12 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
         check_is_fitted(self, attributes=["centers_", "memberships_", "clusters_", "feature_names_in_"])
 
+        X = check_input_dataset(X, require_numeric=True)
+
         if list(X.columns) != list(self.feature_names_in_):
             raise ValueError(
                 f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, "
                 f"got {list(X.columns)} instead")
-
-        X = check_input_dataset(X, require_numeric=True)
 
         _, incomplete = split_complete_incomplete(X)
 
@@ -415,9 +430,11 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
    similarity search enhances accuracy compared to standard KNN imputation.
     """
 
-    def __init__(self, max_clusters=10, m=2, max_FCM_iter=100, max_II_iter=30, max_k=20, tol=1e-5, random_state=None):
+    def __init__(self, n_clusters=None, max_clusters=10, m=2, max_FCM_iter=100, max_II_iter=30, max_k=20, tol=1e-5,
+                 random_state=None):
 
         validate_params({
+            'n_clusters': n_clusters,
             'max_clusters': max_clusters,
             'm': m,
             'max_FCM_iter': max_FCM_iter,
@@ -427,6 +444,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             'random_state': random_state
         })
 
+        self.n_clusters = n_clusters
         self.random_state = random_state
         self.max_clusters = max_clusters
         self.m = m
@@ -443,15 +461,25 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         X_filled = self.imputer_.fit_transform(self.X_train_)
         X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
 
-        self.optimal_c_ = find_optimal_clusters_fuzzy(X_filled, min_clusters=1, max_clusters=self.max_clusters,
-                                                      m=self.m, random_state=self.random_state,
-                                                      max_iter=self.max_FCM_iter, tol=self.tol)
+        if self.n_clusters is None:
+            self.n_clusters = find_optimal_clusters_fuzzy(X_filled, max_clusters=self.max_clusters,
+                                                          random_state=self.random_state, m=self.m,
+                                                          max_iter=self.max_FCM_iter, tol=self.tol)
+
+            # self.optimal_c_ = find_optimal_clusters_fuzzy(X_filled, min_clusters=1, max_clusters=self.max_clusters,
+            #                                               m=self.m, random_state=self.random_state,
+            #                                               max_iter=self.max_FCM_iter, tol=self.tol)
+
+        if self.n_clusters > len(X):
+            raise ValueError("n_clusters cannot be larger than the number of rows in X")
+
         self.np_rng_ = np.random.RandomState(self.random_state)
         np.random.seed(self.random_state)
 
         self.centers_, self.u_ = fuzzy_c_means(
             X_filled.values,
-            n_clusters=self.optimal_c_,
+            # n_clusters=self.optimal_c_,
+            n_clusters=self.n_clusters,
             m=self.m,
             random_state=self.random_state,
         )
@@ -460,7 +488,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         X = check_input_dataset(X, require_numeric=True, no_nan_rows=True)
-        check_is_fitted(self, attributes=["X_train_", "imputer_", "centers_", "u_", "optimal_c_", "np_rng_"])
+        check_is_fitted(self, attributes=["X_train_", "imputer_", "centers_", "u_", "np_rng_"])
 
         if not X.columns.equals(self.X_train_.columns):
             raise ValueError(
@@ -474,7 +502,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         """
         Select the optimal number of neighbors (n_features) that minimizes RMSE
         when imputing a masked value in a selected column.
-    
+
         Parameters:
             St (pd.DataFrame): Data with last row partially masked.
             random_col (int): Index of the masked column.
@@ -630,7 +658,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
         all_clusters = pd.DataFrame(columns=X.columns)
 
-        for i in range(self.optimal_c_):
+        for i in range(self.n_clusters):
             cluster_train_i = self.X_train_[fcm_labels_train == i]
             cluster_X_i = X[fcm_labels_X == i]
             imputed_cluster_X_I = self._KI_algorithm(cluster_X_i, cluster_train_i)
@@ -653,7 +681,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
 class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
-    def __init__(self, n_clusters=3, m=2.0, max_iter=100, max_outer_iter=20, alpha=2.0, tol=1e-5, stop_threshold=0.01,
+    def __init__(self, n_clusters=None, m=2.0, max_iter=100, max_outer_iter=20, alpha=2.0, tol=1e-5,
+                 stop_threshold=0.01,
                  sigma=False, random_state=None):
         """
         Linear-Interpolation Intuitionistic Fuzzy C-Means Iterative Imputer (LI-IIFCM).
@@ -666,7 +695,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        n_clusters : int, default=3
+        n_clusters : int or None, default=None
             Number of fuzzy clusters used by the IIFCM algorithm. Must be >= 2.
 
         m : float, default=2.0
@@ -755,6 +784,11 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
         X = check_input_dataset(X, require_numeric=True, no_nan_columns=True)
         self.columns_ = X.columns
+        complete, _ = split_complete_incomplete(X)
+
+        if self.n_clusters is None:
+            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
+                                                          max_iter=self.max_iter, tol=self.tol)
         return self
 
     def transform(self, X):
@@ -776,11 +810,12 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         """
         check_is_fitted(self, attributes=["columns_"])
 
+        X = check_input_dataset(X)
+
         if list(X.columns) != list(self.columns_):
             raise ValueError(f"X.columns must match the columns seen during fit {list(self.columns_)}, "
                              f"got {list(X.columns)} instead")
 
-        X = check_input_dataset(X)
         missing_mask = X.isnull().reset_index(drop=True)
         X_filled = X.interpolate(method='linear', limit_direction='both').reset_index(drop=True)
 
@@ -973,7 +1008,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         while AV > self.stop_threshold and count_iter < self.max_iter:
 
             for j in cols_with_nan:
-                leaf_for_j = [(idx, leaf_number) for (idx, j_key), leaf_number in incomplete_leaf_indices_dict.items()
+                leaf_for_j = [(idx, leaf_number) for (idx, j_key), leaf_number in
+                              incomplete_leaf_indices_dict.items()
                               if j_key == j]
                 leaf_numbers = list(dict.fromkeys([leaf[0] for _, leaf in leaf_for_j]))
 

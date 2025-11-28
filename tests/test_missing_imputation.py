@@ -501,35 +501,36 @@ def test_fcmkiimputer_FCKI_algorithm(X, X_train, n_clusters, random_state, m, ma
     assert result.isna().sum().sum() == 0
 
 
-@pytest.mark.parametrize("random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter", [
-    (42, 5, 1.1, 100, 30, 50),
-    (None, 8, 25, 80, 10, 100),
-    (123, 20, 3.1, 30, 20, 30)
+@pytest.mark.parametrize("random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters", [
+    (42, 5, 1.1, 100, 30, 50, 5),
+    (None, 8, 25, 80, 10, 100, None),
+    (123, 20, 3.1, 30, 20, 30, 10)
 ])
-def test_fcmkiimputer_init(random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter):
+def test_fcmkiimputer_init(random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters):
     imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_FCM_iter=max_FCM_iter,
-                                   max_k=max_k, max_II_iter=max_II_iter)
+                                   max_k=max_k, max_II_iter=max_II_iter, n_clusters=n_clusters)
     assert imputer.random_state == random_state
     assert imputer.max_clusters == max_clusters
     assert imputer.m == m
     assert max_FCM_iter == max_FCM_iter
     assert max_k == max_k
     assert max_II_iter == max_II_iter
+    assert n_clusters == n_clusters
 
 
-@pytest.mark.parametrize("X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter", [
+@pytest.mark.parametrize("X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters", [
     (pd.DataFrame({
         'a': [np.nan, 2.0, 3.0],
         'b': [4.0, 5.0, np.nan]
-    }), 42, 5, 1.5, 50, 20, 100),
+    }), 42, 5, 1.5, 50, 20, 100, None),
     (pd.DataFrame({
         'a': [1.0, 2.0],
         'b': [np.nan, 6.0]
-    }), 42, 10, 2, 30, 5, 100)
+    }), 42, 10, 2, 30, 5, 100, None)
 ])
-def test_fcmkiimputer_fit(X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter):
+def test_fcmkiimputer_fit(X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters):
     imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_FCM_iter=max_FCM_iter,
-                                   max_k=max_k, max_II_iter=max_II_iter)
+                                   max_k=max_k, max_II_iter=max_II_iter, n_clusters=n_clusters)
     imputer.fit(X)
 
     assert hasattr(imputer, "X_train_")
@@ -540,17 +541,13 @@ def test_fcmkiimputer_fit(X, random_state, max_clusters, m, max_FCM_iter, max_k,
 
     assert hasattr(imputer, "centers_")
     assert isinstance(imputer.centers_, np.ndarray)
-    assert imputer.centers_.shape[0] == imputer.optimal_c_
+    assert imputer.centers_.shape[0] == imputer.n_clusters
     assert imputer.centers_.shape[1] == X.shape[1]
 
     assert hasattr(imputer, "u_")
     assert isinstance(imputer.u_, np.ndarray)
     assert imputer.u_.shape[0] == X.shape[0]
-    assert imputer.u_.shape[1] == imputer.optimal_c_
-
-    assert hasattr(imputer, "optimal_c_")
-    assert isinstance(imputer.optimal_c_, int)
-    assert 1 <= imputer.optimal_c_ <= imputer.max_clusters
+    assert imputer.u_.shape[1] == imputer.n_clusters
 
     assert hasattr(imputer, "np_rng_")
     assert isinstance(imputer.np_rng_, np.random.RandomState)
@@ -803,6 +800,7 @@ def test_liiifcm_fit_transform(X):
 ])
 def test_liiifcm_ifcm_output_shapes(X):
     imputer = FCMInterpolationIterativeImputer()
+    imputer.fit(X)
     U_star, V_star, J_history = imputer._ifcm(X)
     assert isinstance(U_star, np.ndarray)
     assert isinstance(V_star, np.ndarray)
@@ -831,6 +829,7 @@ def test_liiifcm_ifcm_j_history_validity():
         'b': [0.4, 0.5, 0.6]
     })
     imputer = FCMInterpolationIterativeImputer(max_iter=10, random_state=42)
+    imputer.fit(X)
     U_star, V_star, J_history = imputer._ifcm(X)
 
     assert isinstance(J_history, list), "J_history should be a list"

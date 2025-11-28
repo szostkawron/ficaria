@@ -676,11 +676,11 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         check_is_fitted(self,
                         attributes=["feature_names_in_", "W_", "feature_sequence_", "Rw_", "feature_importances_"])
 
+        X = check_input_dataset(X)
+
         if list(X.columns) != list(self.feature_names_in_):
             raise ValueError(f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, "
                              f"got {list(X.columns)} instead")
-
-        X = check_input_dataset(X)
 
         selected_idx = self.feature_sequence_[:self.n_features]
         return X.iloc[:, selected_idx]
