@@ -10,34 +10,69 @@ from .utils import *
 
 class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
     """
-    Fuzzy Implication Granularity Feature Selection (FIGFS).
+    Fuzzy-Implication Granularity Feature Selector (FIGFS).
 
-    Selects an optimal feature subset using a fuzzy-implication-based
-    granularity similarity framework. Compatible with scikit-learn
-    classifiers.
+    Implements a fuzzy-implication-driven information granularity algorithm
+    for selecting the most informative feature subset. The method evaluates
+    both global and local granularity consistency, fuzzy neighbourhood
+    structure, and multi-level implication entropy. Compatible with
+    scikit-learn pipelines.
 
     Parameters
     ----------
-    n_features : int, default=3
-        Number of features to choose while transforming data
+    k : int, default=3
+        Number of features to keep in the transformed dataset.
+        Must be a positive integer and `k <= d`.
 
     eps : float, default=0.5
-        Controls fuzzy radius normalization (> 0).
+        Normalization factor controlling the fuzzy neighbourhood radius
+        for numeric features. Must be strictly positive.
 
-    max_features : int, default=3
-        Maximum number of features to consider (> 0).
+    d : int, default=10
+        Maximum number of features that FIGFS is allowed to consider
+        during the iterative selection process. Must be positive.
 
     sigma : int, default=10
-        Similarity scaling factor (1 <= sigma <= 100).
+        Percentile threshold used in the extended FIGFS mode to
+        control similarity and redundancy pruning. Must be in [1, 100].
 
     random_state : int or None, default=None
-        Random seed for reproducibility.
+        Seed for reproducibility of internal stochastic components.
+        If None, randomness is not fixed.
 
     Attributes
     ----------
-    S : list of int
-        Feature ordering after FIGFS fitting.
+    S_ : list of str
+        Ordered list of selected features after fitting. The order
+        reflects FIGFS importance ranking.
 
+    U_ : DataFrame
+        Internal working dataset combining input `X` and the target,
+        used during granularity calculations.
+
+    C_ : dict
+        Mapping of feature names to types ('numeric' or 'nominal').
+
+    D_ : dict
+        Mapping describing the target variable type.
+
+    similarity_matrices_ : dict of ndarray
+        Precomputed fuzzy similarity matrices for each feature.
+
+    fuzzy_adaptive_neighbourhood_radius_ : dict
+        Radius values used for fuzzy similarity truncation for numeric features.
+
+    D_partition_ : dict
+        Partition of the dataset induced by target values (one subset per class).
+
+    delta_cache_ : dict
+        Cache storing granule membership vectors and sizes.
+
+    Examples
+    --------
+    >>> selector = FuzzyGranularitySelector(k=5, eps=0.3)
+    >>> selector.fit(X_train, y_train)
+    >>> X_reduced = selector.transform(X_train)
     """
 
     def __init__(self, n_features=3, eps=0.5, max_features=10, sigma=10, random_state=None):
@@ -78,19 +113,25 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         """
-        Fit the FIGFS algorithm on the dataset and determine the optimal feature subset.
+        Fit the FIGFS selector on the input dataset.
 
         Parameters
         ----------
-        X : DataFrame, ndarray, or list of lists
-            Feature matrix.
-        y : Series, ndarray, DataFrame, or None, default=None
-            Target variable. If None, runs in unsupervised mode.
+        X : array-like of shape (n_samples, n_features)
+            Input feature matrix. Can be a pandas DataFrame, NumPy array,
+            or any structure convertible to a DataFrame. Must not contain NaN
+            values. Columns can be numeric or categorical.
+
+        y : array-like of shape (n_samples,), default=None
+            Target feature. Accepts pandas Series, NumPy arrays, or single-column
+            DataFrames. If None, an unsupervised mode is used where all samples
+            are assigned to a single dummy class.
 
         Returns
         -------
-        self : object
-            Fitted instance with selected optimal features in self.S_opt.
+        self : FuzzyGranularitySelector
+            Fitted selector with the learned feature ordering available
+            in `self.S_`.
         """
 
         X = check_input_dataset(X, allow_nan=False)
@@ -141,17 +182,19 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """
-        Transform input dataset using selected optimal feature subset.
+        Transform the input dataset using the selected FIGFS feature subset.
 
         Parameters
         ----------
-        X : DataFrame, ndarray, or list of lists
-            Input data with same structure as used in fit().
+        X : array-like of shape (n_samples, n_features)
+            Input dataset. Must contain the same columns and feature order
+            as the data used during `fit()`. Missing or reordered columns
+            will raise an error.
 
         Returns
         -------
-        DataFrame
-            Reduced dataset with optimal features.
+        X_transformed : DataFrame of shape (n_samples, k)
+            Dataset reduced to the selected `k` most informative features.
         """
         check_is_fitted(self, attributes=["U_", "n_", "C_", "m_", "D_", "fuzzy_adaptive_neighbourhood_radius_",
                                           "delta_cache_", "entropy_cache_", "D_partition_", "S_"])

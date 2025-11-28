@@ -656,27 +656,54 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
     def __init__(self, n_clusters=3, m=2.0, max_iter=100, max_outer_iter=20, alpha=2.0, tol=1e-5, stop_threshold=0.01,
                  sigma=False, random_state=None):
         """
-        Initialize Linear Interpolation Based Iterative Intuitionistic Fuzzy C-Means (LI-IIFCM).
+        Linear-Interpolation Intuitionistic Fuzzy C-Means Iterative Imputer (LI-IIFCM).
+
+        Implements an iterative imputation algorithm that combines linear interpolation
+        with intuitionistic fuzzy C-means (IIFCM). The method repeatedly estimates
+        missing values using cluster prototypes weighted by intuitionistic membership.
+        An optional IFCM-σ distance variant is supported to incorporate adaptive,
+        cluster-specific variance scaling.
+
         Parameters
         ----------
         n_clusters : int, default=3
-            Number of fuzzy clusters.
+            Number of fuzzy clusters used by the IIFCM algorithm. Must be >= 2.
+
         m : float, default=2.0
-            Fuzzification parameter controlling the level of fuzziness.
+            Fuzzification exponent controlling cluster softness. Must be > 1.
+
         alpha : float, default=2.0
-            Parameter influencing hesitation degree.
+            Parameter controlling hesitation in intuitionistic fuzzification. Must be > 0.
+
         max_iter : int, default=100
-            Maximum number of iterations for the internal IIFCM optimization loop.
+            Maximum iteration count for the internal IIFCM optimization loop.
+
         tol : float, default=1e-5
-            Tolerance value for convergence during IIFCM iterations.
+            Convergence tolerance for stopping IIFCM updates.
+
         max_outer_iter : int, default=20
-            Maximum number of iterations for the imputation process.
-        stop_threshold : float, default=0.01
-            Threshold for average relative change in missing values used to stop iteration early.
+            Maximum number of imputation refinement iterations.
+
+        stop_criteria : float, default=0.01
+            Threshold for the average relative change in re-estimated missing values
+            used to determine convergence of the outer loop.
+
         sigma : bool, default=False
-            If True, applies weighted IFCM-σ distance metric instead of standard Euclidean distance.
-        random_state int, Optional
-            Controls randomness.
+            If True, applies the IFCM-σ distance metric with adaptive variance scaling.
+
+        random_state : int or None, default=None
+            Random seed for reproducibility of the cluster initialization.
+
+        Attributes
+        ----------
+        columns_ : list of str
+            Column names of the fitted input dataset.
+
+        Examples
+        --------
+        >>> imputer = FCMInterpolationIterativeImputer(n_clusters=4, sigma=True)
+        >>> imputer.fit(X)
+        >>> X_imputed = imputer.transform(X)
         """
 
         validate_params({
@@ -709,19 +736,21 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         """
-        Fit the LI-IIFCM model on input data.
+        Fit the LI-IIFCM imputer on the dataset.
 
         Parameters
         ----------
-        X : pd.DataFrame
-            Input dataset with missing values.
+        X : DataFrame of shape (n_samples, n_features)
+            Input dataset containing missing values. All columns
+            must be numeric.
+
         y : None, optional
-            Present for compatibility with sklearn interface.
+            Ignored. Present for compatibility with the sklearn API.
 
         Returns
         -------
-        self : object
-            Fitted instance.
+        self : FCMInterpolationIterativeImputer
+            Fitted imputer with stored column metadata.
         """
 
         X = check_input_dataset(X, require_numeric=True, no_nan_columns=True)
@@ -730,17 +759,20 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """
-        Impute missing values using Linear Interpolation and Iterative Intuitionistic Fuzzy C-Means.
+        Impute missing values using linear interpolation followed by iterative
+        intuitionistic fuzzy C-means.
 
         Parameters
         ----------
-        X : pd.DataFrame
-            Input dataset with missing values.
+        X : DataFrame of shape (n_samples, n_features)
+            Input dataset containing missing values. Must have the same
+            column structure as the dataset used in `fit()`.
 
         Returns
         -------
-        pd.DataFrame
-            Dataset with missing values filled using LI-IIFCM algorithm.
+        X_filled : array-like of shape (n_samples, n_features_new)
+            The imputed dataset with missing values filled using the LI-IIFCM
+        algorithm.
         """
         check_is_fitted(self, attributes=["columns_"])
 
