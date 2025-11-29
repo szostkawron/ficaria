@@ -1,15 +1,10 @@
-from collections import defaultdict
-
-from pandas.api.types import is_numeric_dtype
-from scipy.spatial.distance import cdist
-from sklearn.base import BaseEstimator, TransformerMixin
 import numpy as np
 import pandas as pd
-from typing import Optional, Tuple, List
-from sklearn.compose import ColumnTransformer
-from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import OrdinalEncoder
-from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+from scipy.spatial.distance import cdist
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.experimental import enable_iterative_imputer
+from sklearn.impute import IterativeImputer, SimpleImputer
+from sklearn.tree import DecisionTreeRegressor
 from sklearn.utils.validation import check_is_fitted
 
 from .utils import *
@@ -19,19 +14,47 @@ from .utils import *
 # FCMCentroidImputer
 # --------------------------------------
 class FCMCentroidImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, random_state=None):
-        """
+    def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, random_state=None):
+        """"
         Fuzzy C-Means centroid-based imputer.
 
-        Each missing value is imputed using the value of the nearest cluster centroid,
-        based on the Euclidean distance between the incomplete object and cluster centroids.
-        
-        Parameters:
-            n_clusters (int): number of clusters
-            m (float): fuzziness parameter
-            max_iter (int): maximum number of FCM iterations
-            tol (float): convergence tolerance
+        Missing values are imputed using the centroid of the closest fuzzy cluster,
+        where the nearest cluster is determined by Euclidean distance between an
+        incomplete object and all FCM centroids.
+
+        Parameters
+        ----------
+        n_clusters : {int, None}, default=None
+            Number of fuzzy clusters used by the IIFCM algorithm.
+            Must be an integer >= 1, or None to enable automatic selection.
+
+        m : {int, float}, default=2.0
+            Fuzzification exponent controlling cluster softness.
+            Must be > 1.
+
+        max_iter : int, default=100
+            Maximum number of iterations used by the FCM clustering algorithm.
+            Must be > 1.
+
+        tol : {int, float}, default=1e-5
+            Convergence tolerance for stopping IIFCM updates.
+            Must be > 0.
+
+        random_state : {int, None}, default=None
+            Seed for reproducibility of internal stochastic components.
+            If None, randomness is not fixed.
+
+        Attributes
+        ----------
+
+
+        Examples
+        --------
+        >>> imputer = FCMCentroidImputer(n_clusters=4)
+        >>> imputer.fit(X_train)
+        >>> X_filled = imputer.transform(X_test)
         """
+
         validate_params({
             'n_clusters': n_clusters,
             'm': m,
@@ -48,12 +71,32 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         """
-        Fit the FCM imputer on complete data only.
+        Fit the imputer by applying FCM on complete rows only.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input dataset to fit the imputer.
+
+        y : None, default=None
+            Ignored. Included for compatibility with scikit-learn.
+
+        Returns
+        -------
+        self : FCMCentroidImputer
+            Fitted imputer ready for transformation.
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
+
+        if self.n_clusters is None:
+            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
+                                                          max_iter=self.max_iter, tol=self.tol,
+                                                          max_clusters=len(complete))
+
         if self.n_clusters > len(complete):
-            raise ValueError("n_clusters cannot be larger than the number of complete rows")
+            raise ValueError(
+                f"n_clusters must be ≤ the number of complete rows ({len(complete)}), got {self.n_clusters} instead")
 
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
@@ -70,16 +113,26 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """
-        Impute missing values using nearest cluster centroid.
+        Impute missing values by assigning each incomplete observation to the nearest FCM centroid.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dataset to impute.
+
+        Returns
+        -------
+        X_imputed : pandas DataFrame of shape (n_samples, n_features)
+            Fully imputed dataset containing no missing values.
         """
 
-        if not hasattr(self, "centers_") or not hasattr(self, "memberships_"):
-            raise AttributeError("fit must be called before transform.")
+        check_is_fitted(self, attributes=["centers_", "memberships_", "feature_names_in_"])
+        X = check_input_dataset(X, require_numeric=True)
 
         if list(X.columns) != list(self.feature_names_in_):
-            raise ValueError("Columns in transform do not match columns seen during fit")
+            raise ValueError(
+                f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, got {list(X.columns)} instead")
 
-        X = check_input_dataset(X, require_numeric=True)
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -103,18 +156,44 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 # FCMParameterImputer
 # --------------------------------------
 class FCMParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, m=2.0, max_iter=150, tol=1e-5, random_state=None):
+    def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, random_state=None):
         """
-        Fuzzy C-Means Parameter-based Imputation.
-        
-        Each missing value is imputed as a weighted sum of all cluster centroids,
-        where weights are given by the membership values of the object.
+        Fuzzy C-Means parameter-based imputer.
 
-        Parameters:
-            n_clusters (int): number of clusters
-            m (float): fuzziness parameter
-            max_iter (int): maximum number of FCM iterations
-            tol (float): convergence tolerance
+        Each missing value is imputed using a membership-weighted linear combination
+        of all cluster centroids, computed from FCM membership degrees.
+
+        Parameters
+        ----------
+        n_clusters : {int, None}, default=None
+            Number of fuzzy clusters used by the IIFCM algorithm.
+            Must be an integer >= 1, or None to enable automatic selection.
+
+        m : {int, float}, default=2.0
+            Fuzzification exponent controlling cluster softness.
+            Must be > 1.
+
+        max_iter : int, default=100
+            Maximum number of iterations used by the FCM clustering algorithm.
+            Must be > 1.
+
+        tol : {int, float}, default=1e-5
+            Convergence tolerance for stopping IIFCM updates.
+            Must be > 0.
+
+        random_state : {int, None}, default=None
+            Seed for reproducibility of internal stochastic components.
+            If None, randomness is not fixed.
+
+        Attributes
+        ----------
+
+
+        Examples
+        --------
+        >>> imputer = FCMParameterImputer(n_clusters=4)
+        >>> imputer.fit(X_train)
+        >>> X_filled = imputer.transform(X_test)
         """
         validate_params({
             'n_clusters': n_clusters,
@@ -132,13 +211,31 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         """
-        Fit the FCM imputer on complete data only.
+        Fit the imputer by performing FCM on complete rows only.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input dataset to fit the imputer.
+
+        y : None, default=None
+            Ignored. Included for compatibility with scikit-learn.
+
+        Returns
+        -------
+        self : FCMParameterImputer
+            Fitted imputer ready for transformation.
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
 
+        if self.n_clusters is None:
+            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
+                                                          max_iter=self.max_iter, tol=self.tol)
+
         if self.n_clusters > len(complete):
-            raise ValueError("n_clusters cannot be larger than the number of complete rows")
+            raise ValueError(
+                f"n_clusters must be ≤ the number of complete rows ({len(complete)}), got {self.n_clusters} instead")
 
         self.centers_, self.memberships_ = fuzzy_c_means(
             complete.to_numpy(),
@@ -155,17 +252,28 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """
-        Impute missing values using parameter-based FCM method.
-        Each missing value is the weighted sum of all centroids
-        based on membership values.
-        """
-        if not hasattr(self, "centers_") or not hasattr(self, "memberships_"):
-            raise AttributeError("fit must be called before transform.")
+        Impute missing values using membership-weighted centroid combinations.
 
-        if list(X.columns) != list(self.feature_names_in_):
-            raise ValueError("Columns in transform do not match columns seen during fit")
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dataset to impute.
+
+        Returns
+        -------
+        X_imputed : pandas DataFrame of shape (n_samples, n_features)
+            Fully imputed dataset containing no missing values.
+        """
+
+        check_is_fitted(self, attributes=["centers_", "memberships_", "feature_names_in_"])
 
         X = check_input_dataset(X, require_numeric=True).copy()
+
+        if list(X.columns) != list(self.feature_names_in_):
+            raise ValueError(
+                f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, "
+                f"got {list(X.columns)} instead")
+
         _, incomplete = split_complete_incomplete(X)
 
         if incomplete.empty:
@@ -191,13 +299,59 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 # --------------------------------------
 # FCMRoughParameterImputer
 # --------------------------------------
+
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=3, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
+    def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
         """
-        Fuzzy C-Means Rough Parameter-based imputer.
-        
-        Each missing value is imputed using information from the 
-        lower or upper approximation of the nearest fuzzy cluster.
+        Rough Fuzzy C-Means parameter-based imputer.
+
+        Missing values are imputed using the lower or upper approximation of the
+        nearest rough cluster generated from FCM memberships, enabling robust
+        handling of objects in boundary regions.
+
+        Parameters
+        ----------
+        n_clusters : {int, None}, default=None
+            Number of fuzzy clusters used by the IIFCM algorithm.
+            Must be an integer >= 1, or None to enable automatic selection.
+
+        m : {int, float}, default=2.0
+            Fuzzification exponent controlling cluster softness.
+            Must be > 1.
+
+        max_iter : int, default=100
+            Maximum number of iterations used by the FCM clustering algorithm.
+            Must be > 1.
+
+        tol : {int, float}, default=1e-5
+            Convergence tolerance for stopping IIFCM updates.
+            Must be > 0.
+
+        wl : {int, float},  default=0.6
+            Weight assigned to the lower approximation during centroid updates.
+            Must be in range (0, 1].
+
+        wb : {int, float},  default=0.4
+            Weight assigned to the boundary region.
+            Must be in range [0, 1].
+
+        tau : {int, float},  default=0.5
+            Threshold controlling assignment of samples to boundary sets.
+            Must be >= 0.
+
+        random_state : {int, None}, default=None
+            Seed for reproducibility of internal stochastic components.
+            If None, randomness is not fixed.
+
+        Attributes
+        ----------
+
+
+        Examples
+        --------
+        >>> imputer = FCMRoughParameterImputer(n_clusters=4)
+        >>> imputer.fit(X_train)
+        >>> X_filled = imputer.transform(X_test)
         """
         validate_params({
             'n_clusters': n_clusters,
@@ -221,13 +375,33 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         """
-        Fit the imputer on complete data.
+        Fit the imputer by computing FCM clusters and refining them
+        using Rough K-Means to obtain lower and upper cluster approximations.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input dataset to fit the imputer.
+
+        y : None, default=None
+            Ignored. Included for compatibility with scikit-learn.
+
+        Returns
+        -------
+        self : FCMParameterImputer
+            Fitted imputer ready for transformation.
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
 
+        if self.n_clusters is None:
+            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
+                                                          max_iter=self.max_iter, tol=self.tol)
+
         if self.n_clusters > len(complete):
-            raise ValueError("n_clusters cannot be larger than the number of complete rows")
+            raise ValueError(
+                f"n_clusters must be ≤ the number of complete rows ({len(complete)}), "
+                f"got {self.n_clusters} instead")
 
         complete_array = complete.to_numpy()
         self.centers_, self.memberships_ = fuzzy_c_means(
@@ -240,31 +414,43 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         )
 
         self.clusters_ = self._rough_kmeans_from_fcm(
-                    complete_array,
-                    self.memberships_,
-                    self.centers_,
-                    wl=self.wl,
-                    wb=self.wb,
-                    tau=self.tau,
-                    max_iter=self.max_iter,
-                    tol=self.tol
-                )
-        
+            complete_array,
+            self.memberships_,
+            self.centers_,
+            wl=self.wl,
+            wb=self.wb,
+            tau=self.tau,
+            max_iter=self.max_iter,
+            tol=self.tol
+        )
+
         self.feature_names_in_ = list(X.columns)
 
         return self
 
     def transform(self, X):
         """
-        Impute missing values using rough parameter-based FCM method.
-        """
-        if not hasattr(self, "centers_") or not hasattr(self, "memberships_") or not hasattr(self, "clusters_"):
-            raise AttributeError("fit must be called before transform")
+        Impute missing values using rough cluster approximations.
 
-        if list(X.columns) != list(self.feature_names_in_):
-            raise ValueError("Columns in transform do not match columns seen during fit")
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dataset to impute.
+
+        Returns
+        -------
+        X_imputed : pandas DataFrame of shape (n_samples, n_features)
+            Fully imputed dataset containing no missing values.
+        """
+
+        check_is_fitted(self, attributes=["centers_", "memberships_", "clusters_", "feature_names_in_"])
 
         X = check_input_dataset(X, require_numeric=True)
+
+        if list(X.columns) != list(self.feature_names_in_):
+            raise ValueError(
+                f"X.columns must match the columns seen during fit {list(self.feature_names_in_)}, "
+                f"got {list(X.columns)} instead")
 
         _, incomplete = split_complete_incomplete(X)
 
@@ -298,7 +484,6 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
                 X_imputed.at[idx, col] = np.mean(approx_data[:, col_idx])
 
         return X_imputed
-    
 
     def _rough_kmeans_from_fcm(self, X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter=100, tol=1e-4):
         """
@@ -328,7 +513,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
         if isinstance(X, pd.DataFrame):
             X = X.to_numpy()
-        
+
         n_samples = X.shape[0]
         n_clusters = center_init.shape[0]
         centers = center_init.copy()
@@ -398,159 +583,429 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
 
 # --------------------------------------
-# KIImputer
-# --------------------------------------
-class KIImputer(BaseEstimator, TransformerMixin):
-    """
-    KIImputer: Hybrid KNN + Iterative Imputer for Missing Data.
-
-    Implements the KI imputation method, which combines k-nearest neighbors (KNN)
-    and iterative imputation to estimate missing values. For each incomplete row,
-    the best number of neighbors (k) is selected by minimizing reconstruction error,
-    and the imputation is refined using a model-based iterative approach.
-    """
-
-    def __init__(self, random_state: Optional[int] = None, max_iter: int = 30):
-        if random_state is not None and not isinstance(random_state, int):
-            raise TypeError('Invalid random_state: Expected an integer or None')
-        if not isinstance(max_iter, int) or max_iter <= 1:
-            raise TypeError('Invalid max_iter: Expected a positive integer')
-
-        self.random_state = random_state
-        self.max_iter = max_iter
-        pass
-
-    def fit(self, X, y=None):
-        X = check_input_dataset(X)
-        self.X_train_ = X.copy()
-        self.np_rng_ = np.random.RandomState(self.random_state)
-        return self
-
-    def transform(self, X):
-        X = check_input_dataset(X)
-        check_is_fitted(self, attributes=["X_train_", "np_rng_"])
-        if not X.columns.equals(self.X_train_.columns):
-            raise ValueError(
-                f"Invalid input: Input dataset columns do not match columns seen during fit"
-            )
-
-        X_imputed = impute_KI(X, self.X_train_, np_rng=self.np_rng_, max_iter=self.max_iter)
-        return X_imputed
-
-# --------------------------------------
 # FCMKIterativeImputer
 # --------------------------------------
 class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
     """
-   Hybrid imputer combining fuzzy c-means clustering, k-nearest neighbors, and iterative imputation.
+    Hybrid imputer combining fuzzy c-means clustering, k-nearest neighbors, and iterative imputation.
 
-   FCKI improves missing data imputation by first clustering data with fuzzy c-means,
-   allowing points to belong to multiple clusters. It then performs KNN-based imputation
-   within clusters, followed by iterative imputation for refinement. This two-level
-   similarity search enhances accuracy compared to standard KNN imputation.
+    FCKI improves missing data imputation by first clustering data with fuzzy c-means,
+    allowing points to belong to multiple clusters. It then performs KNN-based imputation
+    within clusters, followed by iterative imputation for refinement. This two-level
+   `similarity search enhances accuracy compared to standard KNN imputation.
+
+    Parameters
+    ----------
+    n_clusters : {int, None}, default=None
+        Number of fuzzy clusters used by the FCMKII algorithm.
+        Must be an integer >= 1, or None to enable automatic selection.
+
+    max_clusters : int, default=10
+        Maximum number of clusters to test when searching for the optimal
+        cluster count.
+        Must be >= 1.
+
+    m : {int, float}, default=2
+        Fuzzifier exponent used in fuzzy c-means. Controls cluster "softness."
+        Must be > 1.
+
+    max_FCM_iter : int, default=100
+        Maximum number of iterations allowed for the FCM algorithm.
+        Must be >= 1.
+
+    max_II_iter : int, default=30
+        Maximum number of iterations for the iterative imputer.
+        Must be > 1.
+
+    max_k : int, default=20
+        Maximum possible number of neighbors evaluated during the adaptive
+        KNN step.
+        Must be >= 1.
+
+    tol : {int, float}, default=1e-5
+        Convergence tolerance for fuzzy c-means.
+        Must be > 0.
+
+    random_state : {int, None}, default=None
+        Seed for reproducibility of internal stochastic components.
+        If None, randomness is not fixed.
+
+    Attributes
+    ----------
+    X_train_ : pandas DataFrame of shape (n_samples, n_features)
+        A validated copy of the training data.
+
+    imputer_ : SimpleImputer
+        Mean-imputer used prior to FCM preprocessing and membership prediction.
+
+    centers_ : ndarray of shape (n_clusters, n_features)
+        Final cluster centers inferred by fuzzy c-means.
+
+    u_ : ndarray of shape (n_samples, n_clusters)
+        Membership matrix output by FCM for training data.
+
+    np_rng_ : numpy.random.RandomState
+        Random generator used during adaptive neighbor masking.
+
+    Examples
+    ----------
+    >>> imputer = FCMKIterativeImputer(max_clusters=5, random_state=42)
+    >>> imputer.fit(X_train)
+    >>> X_filled = imputer.transform(X_test)
     """
 
-    def __init__(self, random_state: Optional[int] = None, max_clusters: int = 10, m: float = 2, max_iter: int = 30):
-        if random_state is not None and not isinstance(random_state, int):
-            raise TypeError('Invalid random_state: Expected an integer or None')
+    def __init__(self, n_clusters=None, max_clusters=10, m=2, max_FCM_iter=100, max_II_iter=30, max_k=20, tol=1e-5,
+                 random_state=None):
 
-        if not isinstance(max_clusters, int) or max_clusters <= 1:
-            raise TypeError('Invalid max_clusters: Expected an integer greater than 1')
+        validate_params({
+            'n_clusters': n_clusters,
+            'max_clusters': max_clusters,
+            'm': m,
+            'max_FCM_iter': max_FCM_iter,
+            'max_II_iter': max_II_iter,
+            'max_k': max_k,
+            'tol': tol,
+            'random_state': random_state
+        })
 
-        if not isinstance(m, (int, float)) or m <= 1:
-            raise TypeError('Invalid m value: Expected a numeric value greater than 1')
-
-        if not isinstance(max_iter, int) or max_iter <= 1:
-            raise TypeError('Invalid max_iter: Expected a positive integer greater than 1')
-
+        self.n_clusters = n_clusters
         self.random_state = random_state
         self.max_clusters = max_clusters
         self.m = m
-        self.max_iter = max_iter
-        pass
+        self.max_FCM_iter = max_FCM_iter
+        self.max_II_iter = max_II_iter
+        self.max_k = max_k
+        self.tol = tol
 
     def fit(self, X, y=None):
-        X = check_input_dataset(X, require_numeric=True)
+        """
+        Fit the FCMKIterativeImputer to the data.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input dataset to fit the imputer.
+
+        y : None, default=None
+            Ignored. Included for compatibility with scikit-learn.
+
+        Returns
+        -------
+        self : FCMKIterativeImputer
+            Fitted estimator.
+        """
+        X = check_input_dataset(X, require_numeric=True, no_nan_columns=True)
         self.X_train_ = X.copy()
 
         self.imputer_ = SimpleImputer(strategy="mean")
         X_filled = self.imputer_.fit_transform(self.X_train_)
         X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
 
-        self.optimal_c_ = find_optimal_clusters_fuzzy(X_filled, min_clusters=1, max_clusters=self.max_clusters,
-                                                      m=self.m, random_state=self.random_state)
+        if self.n_clusters is None:
+            self.n_clusters = find_optimal_clusters_fuzzy(X_filled, max_clusters=self.max_clusters,
+                                                          random_state=self.random_state, m=self.m,
+                                                          max_iter=self.max_FCM_iter, tol=self.tol)
+
+        if self.n_clusters > len(X):
+            raise ValueError("n_clusters cannot be larger than the number of rows in X")
+
         self.np_rng_ = np.random.RandomState(self.random_state)
         np.random.seed(self.random_state)
 
         self.centers_, self.u_ = fuzzy_c_means(
             X_filled.values,
-            n_clusters=self.optimal_c_,
+            n_clusters=self.n_clusters,
             m=self.m,
             random_state=self.random_state,
         )
-
         return self
 
     def transform(self, X):
+        """
+        Impute missing values in X using the FCM + KNN + iterative imputation pipeline.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dataset to impute.
+
+        Returns
+        -------
+        X_imputed : pandas DataFrame of shape (n_samples, n_features)
+            Fully imputed dataset containing no missing values.
+        """
         X = check_input_dataset(X, require_numeric=True, no_nan_rows=True)
-        check_is_fitted(self, attributes=["X_train_", "imputer_", "centers_", "u_", "optimal_c_", "np_rng_"])
+        check_is_fitted(self, attributes=["X_train_", "imputer_", "centers_", "u_", "np_rng_"])
 
         if not X.columns.equals(self.X_train_.columns):
             raise ValueError(
-                f"Invalid input: Input dataset columns do not match columns seen during fit"
-            )
+                f"X.columns must match the columns seen during fit {list(self.X_train_.columns)}, "
+                f"got {list(X.columns)} instead")
 
-        X_imputed = impute_FCKI(X, self.X_train_, self.centers_, self.u_, self.optimal_c_, self.imputer_, self.m,
-                                self.np_rng_, self.random_state, max_iter=self.max_iter)
+        X_imputed = self._FCKI_algorithm(X)
         return X_imputed
 
+    def _find_best_k(self, St, random_col, original_value):
+        """
+        Select the optimal number of neighbors (n_features) that minimizes RMSE
+        when imputing a masked value in a selected column.
+
+        Parameters:
+            St (pd.DataFrame): Data with last row partially masked.
+            random_col (int): Index of the masked column.
+            original_value (float): True value before masking.
+
+        Returns:
+            int: Best value of n_features.
+        """
+        n = len(St)
+        if n <= 1:
+            return 1
+
+        xi = St.iloc[-1].to_numpy()
+        St_without_xi = St.iloc[:-1].to_numpy()
+
+        distances = [euclidean_distance(xi, row) for row in St_without_xi]
+        sorted_indices = np.argsort(distances)
+        sorted_rows = St_without_xi[sorted_indices]
+
+        max_k = min(n - 1, self.max_k)
+        k_values = range(1, max_k + 1)
+        rmse_list = []
+
+        for k in k_values:
+            top_k_rows = sorted_rows[:k]
+            col_values = top_k_rows[:, random_col]
+            col_values = col_values[~np.isnan(col_values)]
+
+            if len(col_values) > 0:
+                mean_value = np.mean(col_values)
+                rmse = np.sqrt((mean_value - original_value) ** 2)
+            else:
+                rmse = np.inf
+            rmse_list.append(rmse)
+
+        best_k = k_values[np.argmin(rmse_list)]
+        return best_k
+
+    def _get_neighbors(self, train, test_row, k):
+        """
+        Returns the n_features closest rows in `train` to `test_row`
+        using Euclidean distance (ignores NaNs).
+
+        Parameters:
+            train (list[list[float]]): Training data.
+            test_row (list[float]): Query point.
+            k (int): Number of neighbors to return.
+        Returns:
+            list: Closest n_features rows from `train`.
+        """
+        test = np.array(test_row)
+        distances = list()
+        for train_row in train:
+            dist = np.sqrt(np.nansum((test - np.array(train_row)) ** 2))
+            distances.append((train_row, dist))
+        distances.sort(key=lambda tup: tup[1])
+        neighbors = list()
+        for i in range(k):
+            neighbors.append(distances[i][0])
+        return neighbors
+
+    def _KI_algorithm(self, X, X_train=None):
+        """
+        Impute missing values using the KI method (KNN + Iterative Imputation).
+
+        Parameters:
+            X (pd.DataFrame): Data to impute.
+            X_train (pd.DataFrame): Optional reference data (default is None).
+
+        Returns:
+            pd.DataFrame: Imputed dataset (same shape and index as X).
+        """
+
+        X_incomplete_rows = X.copy()
+        X_mis = X_incomplete_rows[X_incomplete_rows.isnull().any(axis=1)]
+
+        if X_train is not None and not X.equals(X_train):
+            X_safe = X.copy()
+            X_train_safe = X_train.copy()
+
+            X_safe_reset = X_safe.reset_index(drop=True)
+            X_train_safe_reset = X_train_safe.reset_index(drop=True)
+
+            all_data = pd.concat([X_safe_reset, X_train_safe_reset], axis=0, ignore_index=True)
+            index_map = dict(zip(X.index, range(len(X))))
+        else:
+            all_data = X.reset_index(drop=True).copy()
+            index_map = dict(zip(X.index, range(len(X))))
+
+        mis_idx = X_mis.index.to_numpy()
+        imputed_values = []
+
+        for idx in mis_idx:
+            xi = X_incomplete_rows.loc[idx]
+
+            A_mis = [col for col in X.columns if pd.isnull(xi[col])]
+
+            P = all_data.dropna(subset=A_mis)
+            if P.empty:
+                raise ValueError(
+                    f"For any row with missing values, there must be at least one row where all "
+                    f"those columns are complete, got none for columns {list(A_mis)} instead")
+
+            P_ext = np.vstack([P.to_numpy(), xi.to_numpy()])
+
+            St = P_ext.copy()
+            St_Complete_Temp = St.copy()
+
+            A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
+            AV = St_Complete_Temp[-1, A_r]
+            while np.isnan(AV):
+                A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
+                AV = St_Complete_Temp[-1, A_r]
+            St[-1, A_r] = np.NaN
+
+            k = self._find_best_k(pd.DataFrame(St, columns=X.columns), A_r, AV)
+
+            xi_from_Pt = P_ext[-1, :].tolist()
+            Pt_without_xi = P_ext[:-1, :].tolist()
+
+            neighbors_xi = self._get_neighbors(Pt_without_xi, xi_from_Pt, k)
+            S = np.vstack([neighbors_xi, xi.to_numpy()])
+
+            imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_II_iter)
+            S_filled_EM = imputer.fit_transform(S)
+
+            xi_imputed = S_filled_EM[-1, :]
+            imputed_values.append(xi_imputed)
+
+            if idx in index_map:
+                all_data.iloc[index_map[idx]] = xi_imputed
+
+        if imputed_values:
+            X_incomplete_rows.loc[mis_idx, :] = np.vstack(imputed_values)
+
+        return X_incomplete_rows
+
+    def _FCKI_algorithm(self, X):
+        """
+        Impute missing values using the FCKI method (FCM + KNN + Iterative Imputation).
+
+        Parameters:
+            X (pd.DataFrame): Data to impute.
+
+        Returns:
+            np.ndarray: Imputed dataset.
+        """
+        X_filled = self.imputer_.transform(X)
+        X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
+        membership_matrix = fcm_predict(X_filled.values, self.centers_, self.m)
+        fcm_labels_train = self.u_.argmax(axis=1)
+        fcm_labels_X = membership_matrix.argmax(axis=1)
+
+        all_clusters = pd.DataFrame(columns=X.columns)
+
+        for i in range(self.n_clusters):
+            cluster_train_i = self.X_train_[fcm_labels_train == i]
+            cluster_X_i = X[fcm_labels_X == i]
+            imputed_cluster_X_I = self._KI_algorithm(cluster_X_i, cluster_train_i)
+            imputed_cluster_X_I = pd.DataFrame(imputed_cluster_X_I, columns=X.columns, index=cluster_X_i.index)
+            if len(all_clusters) == 0:
+                all_clusters = imputed_cluster_X_I
+            else:
+                all_clusters = pd.concat([all_clusters, imputed_cluster_X_I], axis=0)
+
+        all_clusters = all_clusters.loc[~all_clusters.index.duplicated(keep='last')]
+
+        all_clusters.sort_index(inplace=True)
+
+        return all_clusters
+
+
+# --------------------------------------
+# FCMInterpolationIterativeImputer
+# --------------------------------------
 
 class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
-    def __init__(self,n_clusters: int = 3,m: float = 2.0,alpha: float = 2.0,max_iter: int = 100,tol: float = 1e-5,max_outer_iter: int = 20,stop_criteria: float = 0.01,sigma: bool = False,random_state: Optional[int] = None,):
-        
+    def __init__(self, n_clusters=None, m=2.0, max_iter=100, max_outer_iter=20, alpha=2.0, tol=1e-5,
+                 stop_threshold=0.01, sigma=False, random_state=None):
         """
-        Initialize Linear Interpolation Based Iterative Intuitionistic Fuzzy C-Means (LI-IIFCM).
+        Linear-Interpolation Intuitionistic Fuzzy C-Means Iterative Imputer (LI-IIFCM).
+
+        Implements an iterative imputation algorithm that combines linear interpolation
+        with intuitionistic fuzzy C-means (IIFCM). The method repeatedly estimates
+        missing values using cluster prototypes weighted by intuitionistic membership.
+        An optional IFCM-σ distance variant is supported to incorporate adaptive,
+        cluster-specific variance scaling.
+
         Parameters
         ----------
-        n_clusters : int, default=3
-            Number of fuzzy clusters.
-        m : float, default=2.0
-            Fuzzification parameter controlling the level of fuzziness.
-        alpha : float, default=2.0
-            Parameter influencing hesitation degree.
+        n_clusters : {int, None}, default=None
+            Number of fuzzy clusters used by the IIFCM algorithm.
+            Must be an integer >= 1, or None to enable automatic selection.
+
+        m : {int, float}, default=2.0
+            Fuzzification exponent controlling cluster softness.
+            Must be > 1.
+
         max_iter : int, default=100
-            Maximum number of iterations for the internal IIFCM optimization loop.
-        tol : float, default=1e-5
-            Tolerance value for convergence during IIFCM iterations.
+            Maximum iteration count for the internal IIFCM optimization loop.
+            Must be > 1.
+
         max_outer_iter : int, default=20
-            Maximum number of iterations for the imputation process.
-        stop_criteria : float, default=0.01
-            Threshold for average relative change in missing values used to stop iteration early.
+            Maximum number of imputation refinement iterations.
+            Must be > 1.
+
+        alpha : {int, float}, default=2.0
+            Parameter controlling hesitation in intuitionistic fuzzification.
+            Must be > 0.
+
+        tol : {int, float}, default=1e-5
+            Convergence tolerance for stopping IIFCM updates.
+            Must be > 0.
+
+        stop_threshold : {int, float}, default=0.01
+            Threshold for the average relative change in re-estimated missing values
+            used to determine convergence of the outer loop.
+            Must be >= 0.
+
         sigma : bool, default=False
-            If True, applies weighted IFCM-σ distance metric instead of standard Euclidean distance.
-        random_state int, Optional
-            Controls randomness.
+            If True, applies the IFCM-σ distance metric with adaptive variance scaling.
+
+        random_state : {int, None}, default=None
+            Seed for reproducibility of internal stochastic components.
+            If None, randomness is not fixed.
+
+        Attributes
+        ----------
+        columns_ : list of str
+            Column names of the fitted input dataset.
+
+        Examples
+        --------
+        >>> imputer = FCMInterpolationIterativeImputer(n_clusters=4, sigma=True)
+        >>> imputer.fit(X_train)
+        >>> X_filled = imputer.transform(X_test)
         """
 
-        if not isinstance(n_clusters, int) or n_clusters < 2:
-            raise TypeError("Invalid n_clusters: Expected an integer greater than 1.")
-        if not isinstance(m, (int, float)) or m <= 1:
-            raise TypeError("Invalid m value: Expected a numeric value greater than 1.")
-        if not isinstance(alpha, (int, float)) or alpha <= 0:
-            raise TypeError("Invalid alpha value: Expected a positive number.")
-        if not isinstance(max_iter, int) or max_iter <= 0:
-            raise TypeError("Invalid max_iter: Expected a positive integer.")
-        if not isinstance(tol, (int, float)) or tol <= 0:
-            raise TypeError("Invalid tol: Expected a positive float.")
-        if not isinstance(max_outer_iter, int) or max_outer_iter <= 0:
-            raise TypeError("Invalid max_outer_iter: Expected a positive integer.")
-        if not isinstance(stop_criteria, (int, float)) or stop_criteria <= 0:
-            raise TypeError("Invalid stop_criteria: Expected a positive float.")
+        validate_params({
+            'n_clusters': n_clusters,
+            'm': m,
+            'max_iter': max_iter,
+            'max_outer_iter': max_outer_iter,
+            'tol': tol,
+            'stop_threshold': stop_threshold,
+            'random_state': random_state
+        })
+
+        if not isinstance(alpha, (int, float)):
+            raise TypeError(f"alpha must be int or float, got {type(alpha).__name__} instead")
+        if alpha <= 0:
+            raise ValueError(f"alpha must be > 0, got {alpha} instead")
+
         if not isinstance(sigma, bool):
-            raise TypeError("Invalid sigma: Expected a boolean value.")
-        if random_state is not None and not isinstance(random_state, int):
-            raise TypeError("Invalid random_state: Expected an integer or None.")
+            raise TypeError(f"sigma must be bool, got {type(sigma).__name__} instead")
 
         self.n_clusters = n_clusters
         self.m = m
@@ -558,64 +1013,60 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         self.max_iter = max_iter
         self.tol = tol
         self.max_outer_iter = max_outer_iter
-        self.stop_criteria = stop_criteria
+        self.stop_threshold = stop_threshold
         self.sigma = sigma
         self.random_state = random_state
 
-    def fit(self, X: pd.DataFrame, y: Optional[np.ndarray] = None) -> "FCMInterpolationIterativeImputer":
+    def fit(self, X, y=None):
         """
-        Fit the LI-IIFCM model on input data.
+        Fit the LI-IIFCM imputer on the dataset.
 
         Parameters
         ----------
-        X : pd.DataFrame
-            Input dataset with missing values.
-        y : None, optional
-            Present for compatibility with sklearn interface.
+        X : array-like of shape (n_samples, n_features)
+            Input dataset to fit the imputer.
+
+        y : None, default=None
+            Ignored. Included for compatibility with scikit-learn.
 
         Returns
         -------
-        self : object
-            Fitted instance.
+        self : FCMInterpolationIterativeImputer
+            Fitted imputer with stored column metadata.
         """
 
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("Input must be a pandas DataFrame")
-        if X.empty:
-            raise ValueError("Input DataFrame is empty")
-        if not all(np.issubdtype(dt, np.number) for dt in X.dtypes):
-            raise TypeError("All columns must be numeric")
-
-        X = check_input_dataset(X)
+        X = check_input_dataset(X, require_numeric=True, no_nan_columns=True)
         self.columns_ = X.columns
+        complete, _ = split_complete_incomplete(X)
+
+        if self.n_clusters is None:
+            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
+                                                          max_iter=self.max_iter, tol=self.tol)
         return self
 
-    def transform(self, X: pd.DataFrame) -> pd.DataFrame:
+    def transform(self, X):
         """
-        Impute missing values using Linear Interpolation and Iterative Intuitionistic Fuzzy C-Means.
+        Impute missing values using linear interpolation followed by iterative
+        intuitionistic fuzzy C-means.
 
         Parameters
         ----------
-        X : pd.DataFrame
-            Input dataset with missing values.
+        X : array-like of shape (n_samples, n_features)
+            Dataset to impute.
 
         Returns
         -------
-        pd.DataFrame
-            Dataset with missing values filled using LI-IIFCM algorithm.
+        X_filled : pandas DataFrame of shape (n_samples, n_features)
+            Fully imputed dataset containing no missing values.
         """
-        if not isinstance(X, pd.DataFrame):
-            raise TypeError("Input must be a pandas DataFrame")
-        if X.empty:
-            raise ValueError("Input DataFrame is empty")
-        if not hasattr(self, "columns_"):
-            raise AttributeError("You must call fit before transform")
-        if list(X.columns) != list(self.columns_):
-            raise ValueError("Columns of input DataFrame differ from those used in fit")
-
-
+        check_is_fitted(self, attributes=["columns_"])
 
         X = check_input_dataset(X)
+
+        if list(X.columns) != list(self.columns_):
+            raise ValueError(f"X.columns must match the columns seen during fit {list(self.columns_)}, "
+                             f"got {list(X.columns)} instead")
+
         missing_mask = X.isnull().reset_index(drop=True)
         X_filled = X.interpolate(method='linear', limit_direction='both').reset_index(drop=True)
 
@@ -635,14 +1086,14 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             else:
                 AvgV = 0
 
-            if AvgV <= self.stop_criteria:
+            if AvgV <= self.stop_threshold:
                 return X_new
 
             X_filled = X_new.copy()
 
         return X_filled
 
-    def _ifcm(self, data: pd.DataFrame) -> Tuple[np.ndarray, np.ndarray, List[float]]:
+    def _ifcm(self, data):
         """
         Method implementing Intuitionistic Fuzzy C-Means clustering.
         Optionally applies weighted distance metric (IFCM-σ) if sigma=True.
@@ -690,9 +1141,9 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
                 for j in range(self.n_clusters):
                     diff = np.linalg.norm(data[i] - V_star[j])
                     if self.sigma:
-                        D2 = diff**2
-                        sim = np.exp(-D2 / (2 * sigma_val**2))
-                        diff = 1 - sim 
+                        D2 = diff ** 2
+                        sim = np.exp(-D2 / (2 * sigma_val ** 2))
+                        diff = 1 - sim
 
                     dist[i, j] = diff
             dist = np.fmax(dist, 1e-10)
@@ -715,42 +1166,111 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
         return U_star, V_star, J_history
 
+
 # --------------------------------------
 # FCMDTIterativeImputer
 # --------------------------------------
 
 class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
     """
-    An iterative data imputer that combines Decision Trees and Fuzzy C-Means clustering
-    to estimate and refine missing values in mixed-type datasets (numerical and categorical).
+    Decision tree–guided fuzzy c-means iterative imputer.
+
+    This estimator performs missing-value imputation by first using decision
+    trees to predict missing entries based on complete rows, then iteratively
+    refining those predictions using localized fuzzy c-means clustering.
+    The model identifies leaf-specific subgroups, applies adaptive fuzzy
+    clustering within each subgroup, and updates imputed values with a
+    gradient-like correction. This hybrid approach effectively captures
+    non-linear relationships and local structure in fully numeric datasets.
+
+    Parameters
+    ----------
+    max_clusters : int, default=20
+        Maximum number of FCM clusters allowed during local clustering.
+        Must be >= 1.
+
+    m : {int, float}, default=2
+        Fuzzifier exponent for FCM. Controls cluster softness.
+        Must be > 1.
+
+    max_iter : int, default=100
+        Maximum number of global refinement iterations during transform.
+        Must be > 1.
+
+    max_FCM_iter : int, default=100
+        Maximum iterations for fuzzy c-means clustering.
+        Must be > 1.
+
+    tol : {int, float}, default=1e-5
+        Convergence tolerance for fuzzy c-means.
+        Must be > 0.
+
+    min_samples_leaf : int, default=3
+        Minimum samples per leaf in the decision tree regressors.
+        Must be > 0
+
+    learning_rate : {int, float}, default=0.1
+        Step size for local correction updates when adjusting imputed values.
+        Must be > 0.
+
+    stop_threshold : {int, float}, default=1.0
+        Stopping criterion. Iteration ends once the mean absolute update
+        across missing entries falls below this value.
+        Must be >= 0.
+
+    alpha : {int, float}, default=1.0
+        Weighting exponent used in the fuzzy silhouette index when selecting
+        the optimal number of clusters.
+        Must be > 0.
+
+    random_state : {int, None}, default=None
+        Seed for reproducibility of internal stochastic components.
+        If None, randomness is not fixed.
+
+    Attributes
+    ----------
+    X_train_complete_ : pandas DataFrame
+        Subset of training rows containing no missing values. Used to train
+        all feature-specific decision trees.
+
+    imputer_ : SimpleImputer
+        Mean imputer used internally for temporary filling of rows with
+        multiple missing values before applying decision-tree predictions.
+
+    trees_ : dict
+        Mapping from column name → fitted DecisionTreeRegressor used to
+        generate initial imputations.
+
+    leaf_indices_ : dict
+        Mapping from column name → array of leaf indices for training rows.
+        Used to form leaf-local subgroups during refinement.
+
+    Examples
+    ----------
+    >>> imputer = FCMDTIterativeImputer(max_clusters=10, random_state=0)
+    >>> imputer.fit(X_train)
+    >>> X_filled = imputer.transform(X_test)
     """
 
-    def __init__(self, random_state=None, min_samples_leaf=3, learning_rate=0.1, m=2, max_clusters=20, max_iter=100,
-                 stop_threshold=1.0,
-                 alpha=1.0):
-        if random_state is not None and not isinstance(random_state, int):
-            raise TypeError('Invalid random_state: Expected an integer or None.')
+    def __init__(self, max_clusters=20, m=2, max_iter=100, max_FCM_iter=100, tol=1e-5, min_samples_leaf=3,
+                 learning_rate=0.1, stop_threshold=1.0, alpha=1.0, random_state=None):
 
-        if not isinstance(min_samples_leaf, (int, float)) or min_samples_leaf <= 0:
-            raise TypeError('Invalid min_samples_leaf value: Expected a numeric value greater than 0.')
+        validate_params({
+            'max_clusters': max_clusters,
+            'm': m,
+            'max_iter': max_iter,
+            'max_FCM_iter': max_FCM_iter,
+            'tol': tol,
+            'stop_threshold': stop_threshold,
+            'random_state': random_state,
+            'min_samples_leaf': min_samples_leaf,
+            'learning_rate': learning_rate
+        })
 
-        if not isinstance(learning_rate, (float, int)) or (learning_rate <= 0):
-            raise TypeError('Invalid learning_rate value: Expected a numeric value greater than 0.')
-
-        if not isinstance(m, (int, float)) or m <= 1:
-            raise TypeError('Invalid m value: Expected a numeric value greater than 1.')
-
-        if not isinstance(max_clusters, int) or max_iter <= 1:
-            raise TypeError('Invalid max_clusters value: Expected an integer greater than 1.')
-
-        if not isinstance(max_iter, int) or max_iter <= 1:
-            raise TypeError('Invalid max_iter value: Expected an integer greater than 1.')
-
-        if not isinstance(stop_threshold, (int, float)) or stop_threshold < 0:
-            raise TypeError('Invalid stop_threshold value: Expected a numeric value >= 0.')
-
-        if not isinstance(alpha, (int, float)) or alpha <= 0:
-            raise TypeError('Invalid alpha value: Expected a numeric value greater than 0.')
+        if not isinstance(alpha, (int, float)):
+            raise TypeError(f"alpha must be int or float, got {type(alpha).__name__} instead")
+        if alpha <= 0:
+            raise ValueError(f"alpha must be > 0, got {alpha} instead")
 
         self.random_state = random_state
         self.min_samples_leaf = min_samples_leaf
@@ -760,34 +1280,41 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         self.max_iter = max_iter
         self.stop_threshold = stop_threshold
         self.alpha = alpha
+        self.max_FCM_iter = max_FCM_iter
+        self.tol = tol
 
     def fit(self, X, y=None):
-        X = check_input_dataset(X, require_numeric=False)
+        """
+        Fit the decision-tree and FCM-based imputer.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input dataset to fit the imputer.
+
+        y : None, default=None
+            Ignored. Included for compatibility with scikit-learn.
+
+        Returns
+        -------
+        self : FCMDTIterativeImputer
+            Fitted estimator.
+        """
+        X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         self.X_train_complete_, _ = split_complete_incomplete(X.copy())
 
-        if self.X_train_complete_.empty:
-            raise ValueError("Invalid input: Input dataset has no complete records")
-
         if self.X_train_complete_.shape[1] < 2:
-            raise ValueError("Invalid input: Input dataset has only one column")
+            raise ValueError(f"X must contain at least 2 columns, "
+                             f"got {self.X_train_complete_.shape[1]} column instead")
 
-        self.imputer_ = self._create_mixed_imputer(self.X_train_complete_)
+        self.imputer_ = SimpleImputer(strategy="mean")
+        self.imputer_.fit(X)
         self.trees_ = {}
         self.leaf_indices_ = {}
-        self.encoders_ = {}
         X_for_tree = self.X_train_complete_.copy()
-        cat_cols = X_for_tree.select_dtypes(exclude=["number"]).columns
-
-        for col in cat_cols:
-            enc = OrdinalEncoder()
-            X_for_tree[col] = enc.fit_transform(X_for_tree[[col]])
-            self.encoders_[col] = enc
 
         for j in self.X_train_complete_.columns:
-            if is_numeric_dtype(self.X_train_complete_[j]):
-                tree = DecisionTreeRegressor(min_samples_leaf=self.min_samples_leaf, random_state=self.random_state)
-            else:
-                tree = DecisionTreeClassifier(min_samples_leaf=self.min_samples_leaf, random_state=self.random_state)
+            tree = DecisionTreeRegressor(min_samples_leaf=self.min_samples_leaf, random_state=self.random_state)
 
             X_without_j_column = X_for_tree.drop(columns=[j])
             tree.fit(X_without_j_column, self.X_train_complete_[j])
@@ -797,13 +1324,27 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
-        X = check_input_dataset(X, require_numeric=False)
-        check_is_fitted(self, attributes=["X_train_complete_"])
+        """
+        Impute missing values using decision trees followed by iterative
+        fuzzy c-means refinement.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input dataset to fit the imputer.
+
+        Returns
+        -------
+        X_imputed : pandas DataFrame of shape (n_samples, n_features)
+            Fully imputed dataset containing no missing values.
+        """
+        X = check_input_dataset(X, require_numeric=True)
+        check_is_fitted(self, attributes=["X_train_complete_", "imputer_", "trees_", "leaf_indices_"])
 
         if not X.columns.equals(self.X_train_complete_.columns):
             raise ValueError(
-                f"Invalid input: Input dataset columns do not match columns seen during fit"
-            )
+                f"X.columns must match the columns seen during fit {list(self.X_train_complete_.columns)}, "
+                f"got {list(X.columns)} instead")
         complete_X, incomplete_X = split_complete_incomplete(X.copy())
 
         if len(incomplete_X) == 0:
@@ -812,10 +1353,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         mask_missing = incomplete_X.isna()
         cols_with_nan = incomplete_X.columns[incomplete_X.isna().any()]
 
-        if X.select_dtypes(exclude=["number"]).empty:
-            fcm_function = fuzzy_c_means
-        else:
-            fcm_function = fuzzy_c_means_categorical
+        fcm_function = fuzzy_c_means
 
         incomplete_leaf_indices_dict, imputed_X = self._initial_imputation_DT(incomplete_X.copy(), cols_with_nan)
 
@@ -826,7 +1364,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         while AV > self.stop_threshold and count_iter < self.max_iter:
 
             for j in cols_with_nan:
-                leaf_for_j = [(idx, leaf_number) for (idx, j_key), leaf_number in incomplete_leaf_indices_dict.items()
+                leaf_for_j = [(idx, leaf_number) for (idx, j_key), leaf_number in
+                              incomplete_leaf_indices_dict.items()
                               if j_key == j]
                 leaf_numbers = list(dict.fromkeys([leaf[0] for _, leaf in leaf_for_j]))
 
@@ -842,13 +1381,15 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return combined
 
     def _determine_optimal_n_clusters_FSI(self, X, fcm_function):
+        if len(X) < 2:
+            return 1
         c_values = list(range(1, min(len(X), self.max_clusters) + 1))
 
         FSI = []
         for c in c_values:
-            centers, u = fcm_function(X.to_numpy(), c, self.m, self.max_iter, random_state=self.random_state)
+            centers, u = fcm_function(X.to_numpy(), c, self.m, self.max_FCM_iter, random_state=self.random_state,
+                                      tol=self.tol)
             FSI.append(self._fuzzy_silhouette(X.to_numpy(), u, self.alpha))
-
         opt_c = c_values[np.argmax(FSI)]
         return opt_c
 
@@ -856,10 +1397,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         X = pd.DataFrame(X)
         only_numeric = all(pd.api.types.is_numeric_dtype(X[col]) for col in X.columns)
 
-        if only_numeric:
-            D = cdist(X.to_numpy().astype(float), X.to_numpy().astype(float), metric="euclidean")
-        else:
-            D = gower_matrix(X)
+        D = cdist(X.to_numpy().astype(float), X.to_numpy().astype(float), metric="euclidean")
 
         N, C = U.shape
         s = np.zeros(N)
@@ -892,32 +1430,11 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         FS = np.sum(weights * s) / np.sum(weights) if np.sum(weights) > 0 else 0.0
         return FS
 
-    def _create_mixed_imputer(self, X):
-        numeric_cols = X.select_dtypes(include=["number"]).columns
-        categorical_cols = X.select_dtypes(exclude=["number"]).columns
-
-        numeric_imputer = SimpleImputer(strategy="mean")
-        categorical_imputer = SimpleImputer(strategy="most_frequent")
-
-        preprocessor = ColumnTransformer(
-            transformers=[
-                ("num", numeric_imputer, numeric_cols),
-                ("cat", categorical_imputer, categorical_cols)
-            ],
-            remainder='passthrough'
-        )
-        preprocessor.set_output(transform="pandas")
-        preprocessor.fit(X)
-        return preprocessor
-
     def _calculate_AV(self, new_df, old_df, mask_missing):
         diffs = []
         for col in new_df.columns:
             mask_col = mask_missing[col]
-            if pd.api.types.is_numeric_dtype(new_df[col]):
-                diff = (new_df[col] - old_df[col]).abs()
-            else:
-                diff = new_df[col].ne(old_df[col]).astype(float)
+            diff = (new_df[col] - old_df[col]).abs()
             diff = diff[mask_col]
             diffs.append(diff)
         all_diffs = pd.concat(diffs)
@@ -940,22 +1457,11 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
                             xi_filled[col] = xi_filled[col].astype(self.X_train_complete_[col].dtype)
 
                         xi_imputed = self.imputer_.transform(xi_filled)
-                        xi_imputed.columns = self.imputer_.get_feature_names_out()
-                        xi_imputed.columns = [col.split("__")[-1] for col in xi_imputed.columns]
-                        xi_filled = xi_imputed[self.X_train_complete_.columns]
+                        xi_filled = pd.DataFrame(data=xi_imputed, columns=self.X_train_complete_.columns)
                         count_missing_values -= 1
                     tree = self.trees_[j]
 
                     xi_without_j = xi_filled.drop(columns=[j])
-
-                    for col, enc in self.encoders_.items():
-                        if col in xi_without_j.columns:
-                            val = xi_without_j[col].iloc[0]
-                            if isinstance(val, np.ndarray):
-                                val = val.item() if val.size == 1 else val[0]
-                            val_df = pd.DataFrame({col: [val]})
-                            xi_without_j[col] = enc.transform(val_df)[0, 0]
-
                     xi[j] = tree.predict(xi_without_j)
                     leaf_idx = tree.apply(xi_without_j)
                     incomplete_leaf_indices_dict[(idx, j)] = leaf_idx
@@ -972,8 +1478,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         records_in_leaf = pd.concat([complete_records_in_leaf, imputed_X.loc[matching_indices]])
 
         n_clusters = self._determine_optimal_n_clusters_FSI(records_in_leaf, fcm_function)
-        centers, u = fcm_function(records_in_leaf.to_numpy(), n_clusters, self.m, max_iter=self.max_iter,
-                                  random_state=self.random_state)
+        centers, u = fcm_function(records_in_leaf.to_numpy(), n_clusters, self.m, max_iter=self.max_FCM_iter,
+                                  tol=self.tol, random_state=self.random_state)
 
         col_j_idx = self.X_train_complete_.columns.get_loc(j)
         centers = np.asarray(centers)
@@ -981,16 +1487,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
         for i in matching_indices:
             i_local = local_indices[i]
-            if is_numeric_dtype(self.X_train_complete_[j]):
-                correction = self.learning_rate * (
-                        u[i_local, :] @ centers[:, col_j_idx] - imputed_X.loc[i, j])
-                imputed_X.loc[i, j] = imputed_X.loc[i, j] + correction
-            else:
-                u_i = u[i_local, :]
-                sums = defaultdict(float)
-                for k, cat in enumerate(centers[:, col_j_idx]):
-                    sums[cat] += u_i[k]
-                new_value = max(sums, key=sums.get)
-                imputed_X.loc[i, j] = new_value
+            correction = self.learning_rate * (
+                    u[i_local, :] @ centers[:, col_j_idx] - imputed_X.loc[i, j])
+            imputed_X.loc[i, j] = imputed_X.loc[i, j] + correction
 
         return imputed_X

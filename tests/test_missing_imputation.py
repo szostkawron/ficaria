@@ -2,1152 +2,11 @@ import os
 import sys
 
 import pytest
-from sklearn.impute import SimpleImputer
-import os, sys
 from sklearn.exceptions import NotFittedError
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ficaria.missing_imputation import *
 
-
-@pytest.mark.parametrize("random_state", [
-    42,
-    None,
-    123,
-
-])
-def test_kiimputer_init(random_state):
-    imputer = KIImputer(random_state=random_state)
-
-    assert imputer.random_state == random_state
-
-
-@pytest.mark.parametrize("random_state", [
-    "txt",
-    [24],
-    [[35]],
-    3.5
-])
-def test_kiimputer_init_errors_randomstate(random_state):
-    with pytest.raises(TypeError,
-                       match="Invalid random_state: Expected an integer or None"):
-        imputer = KIImputer(random_state=random_state)
-
-
-@pytest.mark.parametrize("max_iter", [
-    "txt",
-    [24],
-    [[35]],
-    3.5
-])
-def test_kiimputer_init_errors_maxiter(max_iter):
-    with pytest.raises(TypeError,
-                       match="Invalid max_iter: Expected a positive integer"):
-        imputer = KIImputer(max_iter=max_iter)
-
-
-@pytest.mark.parametrize("X, random_state", [
-    (pd.DataFrame({
-        'a': [np.nan, 2.0, 3.0],
-        'b': [4.0, 5.0, np.nan]
-    }), 42),
-    (pd.DataFrame({
-        'a': [1.0, 2.0],
-        'b': [np.nan, 6.0]
-    }), 42)
-])
-def test_kiimputer_fit(X, random_state):
-    imputer = KIImputer(random_state=random_state)
-    imputer.fit(X)
-
-    assert hasattr(imputer, 'X_train_')
-    pd.testing.assert_frame_equal(imputer.X_train_, X)
-
-    assert hasattr(imputer, 'np_rng_')
-    assert isinstance(imputer.np_rng_, np.random.RandomState)
-
-
-@pytest.mark.parametrize("X, X_test, random_state", [
-    (pd.DataFrame({
-        'a': [np.nan, 2.0, 3.0],
-        'b': [4.0, 5.0, np.nan]
-    }),
-     pd.DataFrame({
-         'a': [2.0, np.nan, 6.0],
-         'b': [8.0, 10.0, 12.0]
-     }),
-     42),
-    (pd.DataFrame({
-        'a': [1.0, 2.0],
-        'b': [np.nan, 6.0]
-    }),
-     pd.DataFrame({
-         'a': [3.0, np.nan],
-         'b': [9.0, 6.0]
-     }),
-     42)
-])
-def test_kiimputer_transform(X, X_test, random_state):
-    imputer = KIImputer(random_state=random_state)
-    imputer.fit(X)
-    result = imputer.transform(X_test)
-
-    imputer2 = KIImputer(random_state=random_state)
-    imputer2.fit(X)
-    result2 = imputer2.transform(X_test)
-
-    assert isinstance(result, pd.DataFrame)
-    assert result.shape == X_test.shape
-    assert result.isna().sum().sum() == 0
-    assert result.equals(result2)
-
-
-@pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
-    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
-])
-def test_kiimputer_transform_without_fit(X):
-    imputer = KIImputer(random_state=42)
-    with pytest.raises(NotFittedError):
-        imputer.transform(X)
-
-
-@pytest.mark.parametrize("X_fit, X_transform", [
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
-    ),
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
-    ),
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2]})
-    ),
-])
-def test_kiimputer_transform_column_mismatch(X_fit, X_transform):
-    imputer = KIImputer(random_state=42)
-    imputer.fit(X_fit)
-
-    with pytest.raises(ValueError, match="Invalid input: Input dataset columns do not match columns seen during fit"):
-        imputer.transform(X_transform)
-
-
-@pytest.mark.parametrize("random_state, max_clusters, m, max_iter", [
-    (42, 5, 1.1, 30),
-    (None, 8, 25, 10),
-    (123, 20, 3.1, 20)
-])
-def test_fcmkiimputer_init(random_state, max_clusters, m, max_iter):
-    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_iter=max_iter)
-    assert imputer.random_state == random_state
-    assert imputer.max_clusters == max_clusters
-    assert imputer.m == m
-    assert max_iter == imputer.max_iter
-
-
-@pytest.mark.parametrize("random_state", [
-    "txt",
-    [24],
-    [[35]],
-    3.5
-])
-def test_fcmkiimputer_init_errors_randomstate(random_state):
-    with pytest.raises(TypeError,
-                       match="Invalid random_state: Expected an integer or None"):
-        imputer = FCMKIterativeImputer(random_state=random_state)
-
-
-@pytest.mark.parametrize("max_clusters", [
-    "txt",
-    [24],
-    [[35]],
-    3.5,
-    0,
-    -5,
-    1,
-    None
-])
-def test_fcmkiimputer_init_errors_maxclusters(max_clusters):
-    with pytest.raises(TypeError,
-                       match="Invalid max_clusters: Expected an integer greater than 1"):
-        imputer = FCMKIterativeImputer(max_clusters=max_clusters)
-
-
-@pytest.mark.parametrize("m", [
-    "txt",
-    [24],
-    [[35]],
-    0,
-    0.5,
-    -5,
-    1,
-    None
-])
-def test_fcmkiimputer_init_errors_m(m):
-    with pytest.raises(TypeError,
-                       match="Invalid m value: Expected a numeric value greater than 1"):
-        imputer = FCMKIterativeImputer(m=m)
-
-
-@pytest.mark.parametrize("max_iter", [
-    "txt",
-    [24],
-    [[35]],
-    3.5,
-    None
-])
-def test_fcmkiimputer_init_errors_maxiter(max_iter):
-    with pytest.raises(TypeError,
-                       match="Invalid max_iter: Expected a positive integer greater than 1"):
-        imputer = FCMKIterativeImputer(max_iter=max_iter)
-
-
-@pytest.mark.parametrize("X, random_state, max_clusters, m, max_iter", [
-    (pd.DataFrame({
-        'a': [np.nan, 2.0, 3.0],
-        'b': [4.0, 5.0, np.nan]
-    }), 42, 5, 1.5, 100),
-    (pd.DataFrame({
-        'a': [1.0, 2.0],
-        'b': [np.nan, 6.0]
-    }), 42, 10, 2, 30)
-])
-def test_fcmkiimputer_fit(X, random_state, max_clusters, m, max_iter):
-    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_iter=max_iter)
-    imputer.fit(X)
-
-    assert hasattr(imputer, "X_train_")
-    pd.testing.assert_frame_equal(imputer.X_train_, X)
-
-    assert hasattr(imputer, "imputer_")
-    assert isinstance(imputer.imputer_, SimpleImputer)
-
-    assert hasattr(imputer, "centers_")
-    assert isinstance(imputer.centers_, np.ndarray)
-    assert imputer.centers_.shape[0] == imputer.optimal_c_
-    assert imputer.centers_.shape[1] == X.shape[1]
-
-    assert hasattr(imputer, "u_")
-    assert isinstance(imputer.u_, np.ndarray)
-    assert imputer.u_.shape[0] == X.shape[0]
-    assert imputer.u_.shape[1] == imputer.optimal_c_
-
-    assert hasattr(imputer, "optimal_c_")
-    assert isinstance(imputer.optimal_c_, int)
-    assert 1 <= imputer.optimal_c_ <= imputer.max_clusters
-
-    assert hasattr(imputer, "np_rng_")
-    assert isinstance(imputer.np_rng_, np.random.RandomState)
-
-
-@pytest.mark.parametrize("X, X_test, random_state, max_clusters, m", [
-    (pd.DataFrame({
-        'a': [np.nan, 2.0, 3.0],
-        'b': [4.0, 5.0, np.nan]
-    }),
-     pd.DataFrame({
-         'a': [2.0, np.nan, 6.0],
-         'b': [8.0, 10.0, 12.0]
-     }),
-     42, 5, 1.5),
-    (pd.DataFrame({
-        'a': [1.0, 2.0],
-        'b': [np.nan, 6.0]
-    }),
-     pd.DataFrame({
-         'a': [3.0, np.nan],
-         'b': [9.0, 6.0]
-     }),
-     42, 4, 2)
-])
-def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
-    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m)
-    imputer.fit(X)
-    result = imputer.transform(X_test)
-
-    imputer2 = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m)
-    imputer2.fit(X)
-    result2 = imputer2.transform(X_test)
-
-    assert isinstance(result, pd.DataFrame)
-    assert result.shape == X_test.shape
-    assert result.isna().sum().sum() == 0
-    assert result.equals(result2)
-
-
-## ---------FCMInterpolationIterativeImputer-------------------------
-
-
-@pytest.mark.parametrize("bad_X", [
-    pd.DataFrame(),  
-    np.array([]), 
-    None,  
-    "not a dataframe", 
-    [1, 2, 3],  
-    3.14,  
-    pd.DataFrame({'a': [0.1, 'bad', 0.3]}), 
-])
-def test_liiifcm_fit_invalid_input_types(bad_X):
-    imputer = FCMInterpolationIterativeImputer()
-    with pytest.raises((TypeError, ValueError)):
-        imputer.fit(bad_X)
-
-
-def test_liiifcm_transform_before_fit():
-    X = pd.DataFrame({'a': [0.1, np.nan, 0.5]})
-    imputer = FCMInterpolationIterativeImputer()
-    with pytest.raises(AttributeError, match="must call fit"):
-        imputer.transform(X)
-
-
-def test_liiifcm_sigma_branch():
-    X = pd.DataFrame({
-        'a': [0.1, 0.5, np.nan],
-        'b': [0.2, np.nan, 0.8]
-    })
-    imputer = FCMInterpolationIterativeImputer(n_clusters=3, sigma=True, random_state=42)
-    imputer.fit(X)
-    result = imputer.transform(X)
-    assert isinstance(result, pd.DataFrame)
-    assert result.shape == X.shape
-    assert not result.isnull().any().any()
-
-@pytest.mark.parametrize("random_state", [42, 0, None])
-def test_liiifcm_init_random_state(random_state):
-    imputer = FCMInterpolationIterativeImputer(random_state=random_state)
-    assert imputer.random_state == random_state
-
-
-@pytest.mark.parametrize("random_state", ["abc", [1], 3.14])
-def test_liiifcm_init_random_state_invalid(random_state):
-    with pytest.raises(TypeError, match="Invalid random_state: Expected an integer or None."):
-        FCMInterpolationIterativeImputer(random_state=random_state)
-
-
-@pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [np.nan, 0.2, 0.8], 'b': [0.5, np.nan, 0.7]}),
-])
-def test_liiifcm_reproducibility(X):
-    params = dict(
-        n_clusters=3,
-        m=2.0,
-        alpha=2.0,
-        max_iter=50,
-        tol=1e-4,
-        max_outer_iter=5,
-        stop_criteria=0.01,
-        sigma=False,
-        random_state=42
-    )
-
-    imputer1 = FCMInterpolationIterativeImputer(**params)
-    imputer2 = FCMInterpolationIterativeImputer(**params)
-
-    imputer1.fit(X)
-    imputer2.fit(X)
-
-    result1 = imputer1.transform(X)
-    result2 = imputer2.transform(X)
-
-    pd.testing.assert_frame_equal(result1, result2)
-
-
-@pytest.mark.parametrize("n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_criteria, sigma", [
-    (3, 2.0, 2.0, 100, 1e-5, 20, 0.01, False),
-    (5, 1.5, 3.0, 50, 1e-4, 10, 0.05, True),
-])
-def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_criteria, sigma):
-    imputer = FCMInterpolationIterativeImputer(
-        n_clusters=n_clusters,
-        m=m,
-        alpha=alpha,
-        max_iter=max_iter,
-        tol=tol,
-        max_outer_iter=max_outer_iter,
-        stop_criteria=stop_criteria,
-        sigma=sigma
-    )
-
-    assert imputer.n_clusters == n_clusters
-    assert imputer.m == m
-    assert imputer.alpha == alpha
-    assert imputer.max_iter == max_iter
-    assert imputer.tol == tol
-    assert imputer.max_outer_iter == max_outer_iter
-    assert imputer.stop_criteria == stop_criteria
-    assert imputer.sigma == sigma
-
-
-@pytest.mark.parametrize("param,value", [
-    ("n_clusters", 1),
-    ("m", 1.0),
-    ("alpha", -1),
-    ("max_iter", 0),
-    ("tol", -1e-5),
-    ("max_outer_iter", 0),
-    ("stop_criteria", 0),
-    ("sigma", "yes"),
-])
-def test_liiifcm_init_invalid(param, value):
-    kwargs = dict()
-    kwargs[param] = value
-    with pytest.raises(TypeError):
-        FCMInterpolationIterativeImputer(**kwargs)
-
-
-@pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [np.nan, 0.5, 1.0], 'b': [0.3, np.nan, 0.9]}),
-    pd.DataFrame({'x': [0.1, 0.2], 'y': [0.3, np.nan]}),
-])
-def test_liiifcm_fit_transform(X):
-    imputer = FCMInterpolationIterativeImputer(n_clusters=3)
-    imputer.fit(X)
-    assert hasattr(imputer, 'columns_')
-    result = imputer.transform(X)
-    assert isinstance(result, pd.DataFrame)
-    assert result.shape == X.shape
-    assert not result.isnull().any().any()
-
-
-@pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [0.1, 0.5, 0.9], 'b': [0.2, 0.4, 0.8]}),
-])
-def test_liiifcm_ifcm_output_shapes(X):
-    imputer = FCMInterpolationIterativeImputer()
-    U_star, V_star, J_history = imputer._ifcm(X)
-    assert isinstance(U_star, np.ndarray)
-    assert isinstance(V_star, np.ndarray)
-    assert isinstance(J_history, list)
-    assert U_star.shape[1] == imputer.n_clusters
-    assert V_star.shape[0] == imputer.n_clusters
-    assert V_star.shape[1] == X.shape[1]
-
-def test_liiifcm_transform_fails_on_different_columns():
-    X_fit = pd.DataFrame({'a': [0.1, 0.2, 0.3], 'b': [0.4, 0.5, 0.6]})
-    X_transform = pd.DataFrame({'x': [0.1, 0.2, 0.3], 'y': [0.4, 0.5, 0.6]})
-    
-    imputer = FCMInterpolationIterativeImputer()
-    imputer.fit(X_fit)
-
-    with pytest.raises(ValueError, match="Columns of input DataFrame differ from those used in fit"):
-        if not all(X_transform.columns == imputer.columns_):
-            raise ValueError("Columns of input DataFrame differ from those used in fit")
-        imputer.transform(X_transform)
-
-
-def test_liiifcm_ifcm_j_history_validity():
-    X = pd.DataFrame({
-        'a': [0.1, 0.2, 0.3],
-        'b': [0.4, 0.5, 0.6]
-    })
-    imputer = FCMInterpolationIterativeImputer(max_iter=10, random_state=42)
-    U_star, V_star, J_history = imputer._ifcm(X)
-
-    assert isinstance(J_history, list), "J_history should be a list"
-    assert len(J_history) > 0, "J_history should not be empty"
-    assert len(J_history) <= imputer.max_iter, "J_history length should not exceed max_iter"
-    assert all(isinstance(j, (float, np.floating)) for j in J_history), "J_history elements should be floats"
-    assert np.all(np.isfinite(J_history)), "J_history should not contain NaN or inf values"
-    assert result.isna().sum().sum() == 0
-    assert result.equals(result2)
-
-##################
-
-@pytest.mark.parametrize("X, n_clusters, alpha", [
-    (pd.DataFrame({
-        "x1": [2.0, 2.0, 2.0],
-        "x2": [5.0, 5.0, 5.0]
-    }), 2, 1),
-    (pd.DataFrame({
-        "x1": [1.0, 2.0, 3.0],
-        "x2": [6.0, 5.0, 4.0]
-    }), 2, 1.2),
-    (pd.DataFrame({
-        "num1": [1, 2, 3, 4],
-        "cat1": ["A", "B", "A", "B"]
-    }), 2, 0.8),
-    (pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", "A", "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", "X", "Y", "X"]
-    }), 3, 1.1),
-    (pd.DataFrame({
-        "cat1": ["A"],
-        "cat2": ["X"]
-    }), 1, 1.1),
-])
-def test_fcmdti_fuzzy_silhouette(X, n_clusters, alpha):
-    imputer = FCMDTIterativeImputer()
-    centers, u = fuzzy_c_means_categorical(X, n_clusters)
-    FSI = imputer._fuzzy_silhouette(X, u, alpha)
-    assert isinstance(FSI, float)
-    assert FSI >= -1 and FSI <= 1
-    FSI2 = imputer._fuzzy_silhouette(X, u, alpha)
-    assert FSI == FSI2
-
-
-def test_fcmdti_fuzzy_silhouette_extreme_U():
-    X = pd.DataFrame({"num": [1, 2]})
-    u_full = np.ones((2, 1))
-    u_equal = np.array([[0.5, 0.5],
-                        [0.5, 0.5]])
-    imputer = FCMDTIterativeImputer()
-    fs_full = imputer._fuzzy_silhouette(X, u_full)
-    fs_equal = imputer._fuzzy_silhouette(X, u_equal)
-    assert fs_full == 0.0
-    assert -1 <= fs_equal <= 1
-
-
-def test_fcmdti_fuzzy_silhouette_zero_distance():
-    X = pd.DataFrame({"num": [1, 1, 1]})
-    u = np.array([[0.5, 0.5],
-                  [0.5, 0.5],
-                  [0.5, 0.5]])
-    imputer = FCMDTIterativeImputer()
-    fs = imputer._fuzzy_silhouette(X, u)
-    assert fs == 0.0
-
-
-@pytest.mark.parametrize("X, max_clusters, random_state", [
-    (pd.DataFrame({
-        "x1": [2.0, 2.0, 2.0],
-        "x2": [5.0, 5.0, 5.0]
-    }), 10, 42),
-    (pd.DataFrame({
-        "x1": [1.0, 2.0, 3.0],
-        "x2": [6.0, 5.0, 4.0]
-    }), 15, 30),
-    (pd.DataFrame({
-        "num1": [1, 2, 3, 4],
-        "cat1": ["A", "B", "A", "B"]
-    }), 20, 123),
-    (pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", "A", "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", "X", "Y", "X"]
-    }), 5, 30),
-    (pd.DataFrame({
-        "cat1": ["A"],
-        "cat2": ["X"]
-    }), 30, 100),
-])
-def test_fcmdti_determine_optimal_n_clusters_FSI(X, max_clusters, random_state):
-    imputer = FCMDTIterativeImputer(random_state=random_state, max_clusters=max_clusters)
-    imputer.fit(X)
-    if X.select_dtypes(exclude=["number"]).empty:
-        fcm_function = fuzzy_c_means
-    else:
-        fcm_function = fuzzy_c_means_categorical
-
-    n_clusters = imputer._determine_optimal_n_clusters_FSI(X, fcm_function)
-    assert isinstance(n_clusters, int)
-    assert n_clusters > 0 and n_clusters <= min(len(X), max_clusters)
-    n_clusters2 = imputer._determine_optimal_n_clusters_FSI(X, fcm_function)
-    assert n_clusters == n_clusters2
-    if len(X) == 1 or (X.nunique(axis=0) == 1).all():
-        assert n_clusters == 1
-
-
-def test_fcmdti_create_mixed_imputer():
-    X = pd.DataFrame({
-        "num1": [1, 2, 3, 4],
-        "cat1": ["A", "B", "A", "B"]
-    })
-    mixed_imputer = FCMDTIterativeImputer()._create_mixed_imputer(X)
-    assert isinstance(mixed_imputer, ColumnTransformer)
-    assert set(mixed_imputer.transformers[0][2]) == {"num1"}
-    assert set(mixed_imputer.transformers[1][2]) == {"cat1"}
-
-
-@pytest.mark.parametrize("X", [
-    pd.DataFrame({
-        "num1": [1, np.nan, 5, 3, np.nan],
-        "cat1": ["A", "B", np.nan, "A", np.nan]
-    }),
-    pd.DataFrame({
-        "num2": [10, 20, np.nan, 30, 40],
-        "cat2": [np.nan, "X", "Y", "X", "X"]
-    }),
-    pd.DataFrame({
-        "num3": [np.nan, np.nan, 2, 4, 6],
-        "cat3": ["C", "C", np.nan, "D", "C"]
-    }),
-    pd.DataFrame({
-        "x1": [1.0, 2.0, 3.0],
-        "x2": [6.0, 5.0, 4.0]
-    }),
-    pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", "A", "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", "X", "Y", "X"]
-    }),
-])
-def test_fcmdti_create_mixed_imputer_fill_missing(X):
-    imputer = FCMDTIterativeImputer()._create_mixed_imputer(X)
-    X_transformed = imputer.transform(X)
-    X_transformed.columns = imputer.get_feature_names_out()
-    X_transformed.columns = [col.split("__")[-1] for col in X_transformed.columns]
-    X_transformed_df = X_transformed[X.columns]
-
-    assert not X_transformed_df.isna().any().any()
-
-    for col in X.columns:
-        mask = X[col].isna()
-        if is_numeric_dtype(X[col]):
-            mean_val = X[col].mean(skipna=True)
-            assert np.all(np.isclose(X_transformed_df.loc[mask, col], mean_val))
-        else:
-            mode_val = X[col].mode()[0]
-            assert np.all(X_transformed_df.loc[mask, col] == mode_val)
-
-    X_transformed2 = imputer.transform(X)
-
-    np.testing.assert_array_equal(X_transformed, X_transformed2)
-
-
-@pytest.mark.parametrize("new_df, old_df, mask_missing, expected", [
-    (pd.DataFrame({
-        "num1": [1, 2, 5, 3, 8],
-        "cat1": ["A", "B", "A", "A", "B"]
-    }),
-     pd.DataFrame({
-         "num1": [1, 2, 6, 3, 8],
-         "cat1": ["A", "B", "A", "A", "B"]
-     }),
-     pd.DataFrame({
-         "num1": [False, False, True, False, False],
-         "cat1": [False, False, False, False, False]
-     }), 1
-    ),
-    (pd.DataFrame({
-        "num1": [1, 2, 5, 3, 8],
-        "cat1": ["A", "B", "A", "A", "B"]
-    }),
-     pd.DataFrame({
-         "num1": [1, 2, 5, 3, 8],
-         "cat1": ["A", "A", "A", "A", "B"]
-     }),
-     pd.DataFrame({
-         "num1": [False, False, False, False, False],
-         "cat1": [False, True, False, False, False]
-     }), 1
-    ),
-    (pd.DataFrame({
-        "num1": [1, 2, 5, 3, 8],
-        "cat1": ["A", "B", "A", "A", "B"]
-    }),
-     pd.DataFrame({
-         "num1": [1, 2, 7, 3, 8],
-         "cat1": ["A", "A", "A", "A", "B"]
-     }),
-     pd.DataFrame({
-         "num1": [False, False, True, False, False],
-         "cat1": [False, True, False, False, False]
-     }), 1.5
-    ),
-    (pd.DataFrame({
-        "num1": [1, 2, 5, 3, 8],
-        "cat1": ["A", "B", "A", "A", "B"]
-    }),
-     pd.DataFrame({
-         "num1": [1, 2, 5, 3, 8],
-         "cat1": ["A", "B", "A", "A", "B"]
-     }),
-     pd.DataFrame({
-         "num1": [False, False, False, False, False],
-         "cat1": [False, False, False, False, False]
-     }), 0
-    ),
-    (pd.DataFrame({
-        "num1": [1, 2, 5, 3, 8],
-        "cat1": ["A", "B", "A", "A", "B"]
-    }),
-     pd.DataFrame({
-         "num1": [1, 2, 5, 3, 8],
-         "cat1": ["A", "B", "A", "A", "B"]
-     }),
-     pd.DataFrame({
-         "num1": [True, True, True, True, True],
-         "cat1": [True, True, True, True, True]
-     }), 0
-    ),
-    (
-            pd.DataFrame({
-                "num1": [1, 2, 3],
-                "cat1": ["A", "B", "C"]
-            }),
-            pd.DataFrame({
-                "num1": [1, 3, 6],
-                "cat1": ["A", "X", "C"]
-            }),
-            pd.DataFrame({
-                "num1": [True, True, True],
-                "cat1": [True, True, True]
-            }),
-            ((0 + 1 + 3) / 3 + (0 + 1 + 0) / 3) / 2
-    ),
-    (
-            pd.DataFrame({
-                "cat1": ["A", "B", "C"]
-            }),
-            pd.DataFrame({
-                "cat1": ["A", "X", "C"]
-            }),
-            pd.DataFrame({
-                "cat1": [True, True, True]
-            }),
-            1 / 3
-    ),
-    (
-            pd.DataFrame({
-                "num1": [1, 2, 3],
-                "num2": [5, 5, 5]
-            }),
-            pd.DataFrame({
-                "num1": [1, 3, 6],
-                "num2": [5, 5, 5]
-            }),
-            pd.DataFrame({
-                "num1": [True, True, True],
-                "num2": [True, True, True]
-            }),
-            ((0 + 1 + 3) / 3 + (0 + 0 + 0) / 3) / 2
-    ),
-    (
-            pd.DataFrame({
-                "num1": [1, 2, 3],
-                "cat1": ["A", "B", "C"]
-            }),
-            pd.DataFrame({
-                "num1": [1, 4, 3],
-                "cat1": ["A", "X", "C"]
-            }),
-            pd.DataFrame({
-                "num1": [False, True, False],
-                "cat1": [False, True, False]
-            }),
-            (abs(2) + 1) / 2
-    ),
-
-])
-def test_fcmdti_calculate_AV(new_df, old_df, mask_missing, expected):
-    AV = FCMDTIterativeImputer()._calculate_AV(new_df, old_df, mask_missing)
-    assert isinstance(AV, float)
-    assert AV == pytest.approx(expected)
-
-
-@pytest.mark.parametrize("X, random_state", [
-    (pd.DataFrame({
-        "num1": [1, np.nan, 5, 3, np.nan, 8],
-        "cat1": ["A", "B", np.nan, "A", np.nan, "B"]
-    }), 42),
-    (pd.DataFrame({
-        "num2": [10, 20, np.nan, 30, 40],
-        "cat2": [np.nan, "X", "Y", "X", "Y"]
-    }), 110),
-    (pd.DataFrame({
-        "num3": [np.nan, np.nan, 2, 4, 6],
-        "cat3": ["C", "C", np.nan, "D", "C"]
-    }), 0),
-    (pd.DataFrame({
-        "x1": [1.0, 2.0, 3.0],
-        "x2": [6.0, 5.0, 4.0]
-    }), 23),
-    (pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", np.nan, "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", np.nan, "Y", "X"]
-    }), 42),
-    (pd.DataFrame({
-        "num1": [1.0, np.nan, 3.0, 4.0],
-        "num2": [10.0, 20.0, 30.0, 40.0]
-    }), 42),
-])
-def test_fcmdti_initial_imputation_DT(X, random_state):
-    imputer = FCMDTIterativeImputer(random_state=random_state)
-    imputer.fit(X)
-    _, incomplete_X = split_complete_incomplete(X)
-    cols_with_nan = incomplete_X.columns[incomplete_X.isna().any()]
-    leaf_indices, imputed_X = imputer._initial_imputation_DT(incomplete_X.copy(), cols_with_nan)
-
-    assert isinstance(leaf_indices, dict)
-    assert imputed_X.isna().sum().sum() == 0
-    assert isinstance(imputed_X, pd.DataFrame)
-    assert list(imputed_X.columns) == list(X.columns)
-    for col in cols_with_nan:
-        missing_rows = X[col].isna().to_numpy().nonzero()[0]
-        for r in missing_rows:
-            assert (r, col) in leaf_indices
-    assert len(imputed_X) == len(incomplete_X)
-
-    leaf_indices2, imputed_X2 = imputer._initial_imputation_DT(incomplete_X.copy(), cols_with_nan)
-    assert imputed_X.equals(imputed_X2)
-    assert leaf_indices == leaf_indices2
-
-
-@pytest.mark.parametrize("X, j, k, random_state", [
-    (pd.DataFrame({
-        "num1": [1, np.nan, 5, 3, np.nan, 8, 10, 2, 13],
-        "cat1": ["A", "B", np.nan, "A", np.nan, "B", "A", "C", "A"]
-    }), "num1", 1, 42),
-    (pd.DataFrame({
-        "num2": [10, 20, np.nan, 30, 40, 100, 50],
-        "cat2": [np.nan, "X", "Y", "X", "Y", "X", "Y"]
-    }), "cat2", 1, 100),
-    (pd.DataFrame({
-        "num3": [np.nan, np.nan, 2, 4, 6],
-        "cat3": ["C", "C", np.nan, "D", "C"]
-    }), "num3", 0, 0),
-    (pd.DataFrame({
-        "cat1": ["A", "B", "A", "C", "A", "B", "C"],
-        "cat2": ["X", "X", "Y", "Y", np.nan, "Y", "X"]
-    }), "cat2", 1, 23),
-    (pd.DataFrame({
-        "num1": [1.0, np.nan, 3.0, 4.0],
-        "num2": [10.0, 20.0, 30.0, 40.0]
-    }), "num1", 0, 42)
-])
-def test_fcmdti_improve_imputations_in_leaf(X, j, k, random_state):
-    imputer = FCMDTIterativeImputer(min_samples_leaf=2, random_state=random_state)
-    imputer.fit(X)
-    _, incomplete_X = split_complete_incomplete(X)
-    cols_with_nan = incomplete_X.columns[incomplete_X.isna().any()]
-    if X.select_dtypes(exclude=["number"]).empty:
-        fcm_function = fuzzy_c_means
-    else:
-        fcm_function = fuzzy_c_means_categorical
-    leaf_indices, imputed_X = imputer._initial_imputation_DT(incomplete_X, cols_with_nan)
-    imputed_X_after = imputer._improve_imputations_in_leaf(k, j, leaf_indices, imputed_X, fcm_function)
-    assert imputed_X_after.isna().sum().sum() == 0
-    assert isinstance(imputed_X_after, pd.DataFrame)
-    assert imputed_X_after.shape == imputed_X.shape
-    assert all(imputed_X_after.index == imputed_X.index)
-
-    for col in imputed_X_after.select_dtypes(include="object").columns:
-        categories = X[col].dropna().astype(str).str.strip().unique()
-        imputed_values = imputed_X_after[col].astype(str).str.strip()
-        assert all(imputed_values.isin(categories))
-
-    imputed_X_after2 = imputer._improve_imputations_in_leaf(k, j, leaf_indices, imputed_X, fcm_function)
-    assert imputed_X_after2.equals(imputed_X)
-
-
-@pytest.mark.parametrize(
-    "random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter, stop_threshold, alpha", [
-        (42, 0.1, 0.1, 1.1, 3, 10, 0, 0.1),
-        (None, 5, 1, 2.0, 20, 100, 1, 0.5),
-        (123, 10, 0.5, 1.5, 100, 50, 0.5, 0.9)
-
-    ])
-def test_fcmdti_init(random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter, stop_threshold, alpha):
-    imputer = FCMDTIterativeImputer(random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter,
-                                    stop_threshold, alpha)
-
-    assert imputer.random_state == random_state
-    assert imputer.min_samples_leaf == min_samples_leaf
-    assert imputer.learning_rate == learning_rate
-    assert imputer.m == m
-    assert imputer.max_clusters == max_clusters
-    assert imputer.max_iter == max_iter
-    assert imputer.stop_threshold == stop_threshold
-    assert imputer.alpha == alpha
-
-
-@pytest.mark.parametrize("random_state", [
-    "txt",
-    [24],
-    [[35]],
-    3.5
-])
-def test_fcmdti_init_errors_randomstate(random_state):
-    with pytest.raises(TypeError,
-                       match="Invalid random_state: Expected an integer or None"):
-        imputer = FCMDTIterativeImputer(random_state=random_state)
-
-
-invalid_values = ["txt", [24], [[35]], 3.5, 0, -5, 1]
-params_to_test = ["max_iter", "max_clusters"]
-
-
-@pytest.mark.parametrize("param_name,value", [(p, v) for p in params_to_test for v in invalid_values])
-def test_fcmdti_init_errors(param_name, value):
-    kwargs = {param_name: value}
-    with pytest.raises(TypeError, match=f"Invalid {param_name} value: Expected an integer greater than 1."):
-        imputer = FCMDTIterativeImputer(**kwargs)
-
-
-@pytest.mark.parametrize("m", [
-    "txt",
-    [24],
-    [[35]],
-    0,
-    0.5,
-    -5,
-    1
-])
-def test_fcmdti_init_errors_m(m):
-    with pytest.raises(TypeError,
-                       match="Invalid m value: Expected a numeric value greater than 1"):
-        imputer = FCMDTIterativeImputer(m=m)
-
-
-invalid_values = ["txt", [24], [[35]], -3.5, -5]
-params_to_test = ["min_samples_leaf", "learning_rate", "stop_threshold", "alpha"]
-
-
-@pytest.mark.parametrize("param_name,value", [(p, v) for p in params_to_test for v in invalid_values])
-def test_fcmdti_init_errors(param_name, value):
-    kwargs = {param_name: value}
-    with pytest.raises(TypeError, match=f"Invalid {param_name} value: Expected a numeric value"):
-        imputer = FCMDTIterativeImputer(**kwargs)
-
-
-@pytest.mark.parametrize("X, random_state,min_samples_leaf,learning_rate,m,max_clusters,max_iter,stop_threshold,alpha",
-                         [
-                             (
-                                     pd.DataFrame({
-                                         "num1": [1, 2, 3, np.nan, 5],
-                                         "num2": [5, 4, np.nan, 2, 1],
-                                         "cat": ["a", "b", "b", "a", np.nan]
-                                     }),
-                                     42, 2, 0.1, 2, 3, 10, 0.0, 1.0
-                             ),
-                             (
-                                     pd.DataFrame({
-                                         "num1": [10, 20, np.nan, 40],
-                                         "num2": [np.nan, 1, 2, 3],
-                                         "cat": ["x", "y", "x", np.nan]
-                                     }),
-                                     7, 3, 0.5, 3, 40, 20, 0.01, 2.0
-                             ),
-                             (
-                                     pd.DataFrame({
-                                         "num1": [np.nan, np.nan, 1, 2, 5, 7],
-                                         "num2": [1, 2, np.nan, 6, 10, 4],
-                                         "cat": [np.nan, "b", "c", "a", "b", "c"]
-                                     }),
-                                     1, 1, 0.2, 2, 10, 50, 0.1, 0.5
-                             )
-                         ])
-def test_fcmdti_fit_sets_attributes(X, random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter,
-                                    stop_threshold, alpha):
-    imputer = FCMDTIterativeImputer(random_state=random_state, min_samples_leaf=min_samples_leaf,
-                                    learning_rate=learning_rate, m=m, max_clusters=max_clusters, max_iter=max_iter,
-                                    stop_threshold=stop_threshold, alpha=alpha)
-    imputer.fit(X)
-
-    assert hasattr(imputer, 'X_train_complete_')
-    assert hasattr(imputer, 'imputer_')
-    assert hasattr(imputer, 'trees_')
-    assert hasattr(imputer, 'leaf_indices_')
-    assert hasattr(imputer, 'encoders_')
-
-    assert isinstance(imputer.trees_, dict) and len(imputer.trees_) > 0
-    assert isinstance(imputer.leaf_indices_, dict) and len(imputer.leaf_indices_) > 0
-    assert isinstance(imputer.encoders_, dict)
-    assert set(imputer.encoders_.keys()) == set(X.select_dtypes(exclude=["number"]).columns)
-    assert set(imputer.trees_.keys()) == set(X.columns)
-    assert set(imputer.leaf_indices_.keys()) == set(X.columns)
-
-
-@pytest.mark.parametrize("X", [
-    (
-            pd.DataFrame({
-                "num1": [1, np.nan, 3, np.nan, 5],
-                "num2": [np.nan, 4, np.nan, 2, 1],
-                "cat": ["a", "b", "b", "a", np.nan]
-            })
-    ),
-    (
-            pd.DataFrame({
-                "num1": [10, np.nan, np.nan, 40],
-                "num2": [np.nan, 1, 2, 3],
-                "cat": ["x", "y", "x", np.nan]
-            })
-    ),
-    (
-            pd.DataFrame({
-                "num1": [np.nan, np.nan, 1],
-                "num2": [1, 2, np.nan],
-                "cat": [np.nan, "b", "c"]
-            })
-    )
-])
-def test_fcmdti_fit_error_no_complete(X):
-    imputer = FCMDTIterativeImputer()
-    with pytest.raises(ValueError, match="Invalid input: Input dataset has no complete records"):
-        imputer.fit(X)
-
-
-@pytest.mark.parametrize("X", [
-    (
-            pd.DataFrame({
-                "num1": [1, np.nan, 3, np.nan, 5],
-            })
-    ),
-    (
-            pd.DataFrame({
-                "num1": [np.nan, 1, 2, 3],
-            })
-    ),
-    (
-            pd.DataFrame({
-                "cat": [np.nan, "b", "c"]
-            })
-    )
-])
-def test_fcmdti_fit_error_one_column(X):
-    imputer = FCMDTIterativeImputer()
-    with pytest.raises(ValueError, match="Invalid input: Input dataset has only one column"):
-        imputer.fit(X)
-
-
-@pytest.mark.parametrize(
-    "X,X_test, random_state,min_samples_leaf,learning_rate,m,max_clusters,max_iter,stop_threshold,alpha", [
-        (
-                pd.DataFrame({
-                    "num1": [1, 2, 3, 7, 5],
-                    "num2": [5, 4, 3, 2, 1],
-                    "cat": ["a", "b", "b", "a", np.nan]
-                }),
-                pd.DataFrame({
-                    "num1": [np.nan, 2, 3, np.nan, 5],
-                    "num2": [5, 4, np.nan, 2, 1],
-                    "cat": [np.nan, "b", "b", "a", np.nan]
-                }),
-                42, 2, 0.1, 2, 5, 10, 0.0, 1.0
-        ),
-        (
-                pd.DataFrame({
-                    "num1": [10, 20, 50, 40],
-                    "num2": [np.nan, 1, 2, 3],
-                    "cat": ["x", "y", "x", "y"]
-                }),
-                pd.DataFrame({
-                    "num1": [10, 20, np.nan, 40],
-                    "num2": [np.nan, 1, np.nan, 3],
-                    "cat": ["x", np.nan, "x", np.nan]
-                }),
-                7, 3, 0.5, 3, 20, 100, 0.01, 2.0
-        ),
-        (
-                pd.DataFrame({
-                    "num1": [np.nan, 10, 1, 2, 5, 7],
-                    "num2": [1, 2, 5, 6, 10, 4],
-                    "cat1": [np.nan, "b", "c", "a", "b", "c"],
-                    "cat2": ["z", "x", "z", "x", "y", "y"]
-                }),
-                pd.DataFrame({
-                    "num1": [np.nan, np.nan, 1, 2, np.nan, 7],
-                    "num2": [1, 2, np.nan, 6, np.nan, 4],
-                    "cat1": [np.nan, "b", "c", np.nan, "b", "c"],
-                    "cat2": ["z", "x", np.nan, "x", "y", np.nan]
-                }),
-                1, 1, 0.2, 2, 3, 15, 0.1, 0.5
-        ),
-        (
-                pd.DataFrame({
-                    "num1": [np.nan, 10, 1, 2, 5, 7],
-                    "num2": [1, 2, 5, 6, 10, 4],
-                    "cat1": [np.nan, "b", "c", "a", "b", "c"],
-                    "cat2": ["z", "x", "z", "x", "y", "y"]
-                }),
-                pd.DataFrame({
-                    "num1": [1, 5, 1, 2, 8, 7],
-                    "num2": [1, 2, 5, 6, 3, 4],
-                    "cat1": ["a", "b", "c", "a", "b", "c"],
-                    "cat2": ["z", "x", "y", "x", "y", "z"]
-                }),
-                1, 1, 0.2, 2, 15, 50, 0.1, 0.5
-        )
-    ])
-def test_fcmdti_transform(X, X_test, random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter,
-                          stop_threshold, alpha):
-    imputer = FCMDTIterativeImputer(random_state=random_state, min_samples_leaf=min_samples_leaf,
-                                    learning_rate=learning_rate, m=m, max_clusters=max_clusters, max_iter=max_iter,
-                                    stop_threshold=stop_threshold, alpha=alpha)
-    imputer.fit(X)
-    result = imputer.transform(X)
-
-    result2 = imputer.transform(X)
-
-    imputer = FCMDTIterativeImputer(random_state=random_state, min_samples_leaf=min_samples_leaf,
-                                    learning_rate=learning_rate, m=m, max_clusters=max_clusters, max_iter=max_iter,
-                                    stop_threshold=stop_threshold, alpha=alpha)
-    imputer.fit(X)
-    result3 = imputer.transform(X)
-
-    assert isinstance(result, pd.DataFrame)
-    assert result.shape == X_test.shape
-    assert set(result.columns) == set(X.columns)
-    assert all(result.dtypes == X.dtypes)
-    assert result.isna().sum().sum() == 0
-    np.testing.assert_array_equal(result, result2)
-    np.testing.assert_array_equal(result, result3)
-
-
-@pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
-    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
-])
-def test_fcmdti_transform_without_fit(X):
-    imputer = FCMDTIterativeImputer(random_state=42)
-    with pytest.raises(NotFittedError):
-        imputer.transform(X)
-
-
-@pytest.mark.parametrize("X_fit, X_transform", [
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
-    ),
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
-    ),
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2]})
-    ),
-])
-def test_fcmdti_transform_column_mismatch(X_fit, X_transform):
-    imputer = FCMDTIterativeImputer(random_state=42)
-    imputer.fit(X_fit)
-
-    with pytest.raises(ValueError, match="Invalid input: Input dataset columns do not match columns seen during fit"):
-        imputer.transform(X_transform)
-
-
-#######################################
-
-@pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
-    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
-])
-def test_fcmkiimputer_transform_without_fit(X):
-    imputer = FCMKIterativeImputer(random_state=42)
-    with pytest.raises(NotFittedError):
-        imputer.transform(X)
-
-
-@pytest.mark.parametrize("X_fit, X_transform", [
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
-    ),
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
-    ),
-    (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2]})
-    ),
-])
-def test_fcmkiimputer_transform_column_mismatch(X_fit, X_transform):
-    imputer = FCMKIterativeImputer(random_state=42)
-    imputer.fit(X_fit)
-
-    with pytest.raises(ValueError, match="Invalid input: Input dataset columns do not match columns seen during fit"):
-        imputer.transform(X_transform)
 dataframes_list = [
     pd.DataFrame({
         "a": [1.0, 2.0, 3.0, np.nan, 5.0],
@@ -1185,6 +44,7 @@ fcm_params_list = [
     (2, 1.5, 150, 1e-5),
     (3, 2.5, 300, 1e-6),
     (3, 3.0, 600, 1e-4),
+    (1, 3.0, 600, 1e-4),
 ]
 
 
@@ -1210,11 +70,26 @@ def test_fcmcentroidimputer_fit_creates_attributes():
     assert imputer.centers_.shape[1] == X.shape[1]
 
 
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_fcmcentroidimputer_transform_single_row(X_train, X_test):
+    imputer = FCMCentroidImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+
+
 def test_fcmcentroidimputer_transform_raises_if_not_fitted():
     X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
                       "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
     imputer = FCMCentroidImputer()
-    with pytest.raises(AttributeError, match="fit must be called before transform"):
+    with pytest.raises(NotFittedError):
         imputer.transform(X)
 
 
@@ -1225,7 +100,7 @@ def test_fcmcentroidimputer_transform_raises_if_columns_differ():
     imputer = FCMCentroidImputer()
     imputer.fit(X_train)
 
-    with pytest.raises(ValueError, match="Columns in transform do not match columns seen during fit"):
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
         imputer.transform(X_test)
 
 
@@ -1248,14 +123,15 @@ def test_fcmcentroidimputer_transform_no_missing_returns_same():
 def test_fcmcentroidimputer_fit_raises_if_too_many_clusters():
     X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
     imputer = FCMCentroidImputer(n_clusters=5)
-    with pytest.raises(ValueError, match="n_clusters cannot be larger than the number of complete rows"):
+    with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
         imputer.fit(X)
 
 
 def test_fcmcentroidimputer_fit_no_complete_rows():
     X = pd.DataFrame({"a": [np.nan, np.nan], "b": [np.nan, np.nan]})
     imputer = FCMCentroidImputer()
-    with pytest.raises(ValueError, match="No complete rows found for fitting"):
+    with pytest.raises(ValueError,
+                       match="X must contain at least one row with no missing values"):
         imputer.fit(X)
 
 
@@ -1270,6 +146,21 @@ def test_fcmparameterimputer_fit_creates_attributes():
     assert hasattr(imputer, "feature_names_in_")
 
 
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_fcmparameterimputer_transform_single_row(X_train, X_test):
+    imputer = FCMParameterImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+
+
 @pytest.mark.parametrize("X", dataframes_list)
 def test_fcmparameterimputer_transform_imputes_values(X):
     imputer = FCMParameterImputer()
@@ -1281,7 +172,7 @@ def test_fcmparameterimputer_transform_imputes_values(X):
 def test_fcmparameterimputer_fit_raises_if_too_many_clusters():
     X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
     imputer = FCMParameterImputer(n_clusters=5)
-    with pytest.raises(ValueError, match="n_clusters cannot be larger than the number of complete rows"):
+    with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
         imputer.fit(X)
 
 
@@ -1291,6 +182,25 @@ def test_fcmparameterimputer_feature_names_in_assigned():
     imputer = FCMParameterImputer()
     imputer.fit(X)
     assert list(imputer.feature_names_in_) == list(X.columns)
+
+
+def test_fcmparameterimputer_transform_raises_if_columns_differ():
+    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
+
+    imputer = FCMParameterImputer()
+    imputer.fit(X_train)
+
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
+        imputer.transform(X_test)
+
+
+def test_fcmparameterimputer_transform_raises_if_not_fitted():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    imputer = FCMParameterImputer()
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
 
 
 # ----- FCMRoughParameterImputer -----------------------------------------------
@@ -1304,9 +214,24 @@ def test_fcmroughparameterimputer_fit_creates_clusters():
     assert hasattr(imputer, "clusters_")
 
 
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_fcmroughparameterimputer_transform_single_row(X_train, X_test):
+    imputer = FCMRoughParameterImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+
+
 @pytest.mark.parametrize("X", dataframes_list)
 def test_fcmroughparameterimputer_transform_imputes_values(X):
-    imputer = FCMRoughParameterImputer()
+    imputer = FCMRoughParameterImputer(wl=1, wb=1, n_clusters=1, tau=0)
     imputer.fit(X.dropna())
     result = imputer.transform(X)
     assert not result.isna().any().any()
@@ -1315,8 +240,27 @@ def test_fcmroughparameterimputer_transform_imputes_values(X):
 def test_fcmroughparameterimputer_fit_raises_if_too_many_clusters():
     X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
     imputer = FCMRoughParameterImputer(n_clusters=5)
-    with pytest.raises(ValueError, match="n_clusters cannot be larger than the number of complete rows"):
+    with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
         imputer.fit(X)
+
+
+def test_fcmroughparameterimputer_transform_raises_if_not_fitted():
+    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    imputer = FCMRoughParameterImputer(n_clusters=5)
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
+
+
+def test_fcmroughparameterimputer_transform_raises_if_columns_differ():
+    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
+
+    imputer = FCMRoughParameterImputer(n_clusters=2)
+    imputer.fit(X_train)
+
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
+        imputer.transform(X_test)
 
 
 @pytest.mark.parametrize("imputer_class", [
@@ -1368,45 +312,1098 @@ def test_rough_kmeans_from_fcm_cluster_consistency():
         assert isinstance(lower, np.ndarray)
         assert isinstance(upper, np.ndarray)
         assert lower.shape[1] == X.shape[1] if len(lower) > 0 else True
+
+
+# ----- FCMKIterativeImputer ---------------------------------------
+
+@pytest.mark.parametrize("St, random_col, original_value, max_k, random_state", [
+    (
+            pd.DataFrame({
+                'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
+                'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
+                'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]}),
+            1, 85, 20, 102),
+    (
+            pd.DataFrame({
+                'age': [25, 26, np.nan, 51, 53, 72, 75],
+                'income': [50000, 55000, 80000, 85000, 90000, 120000, np.nan]}),
+            0, 125000, 15, 42)
+])
+def test_fcmkiimputer_find_best_k(St, random_col, original_value, max_k, random_state):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_k=max_k)
+    result1 = imputer._find_best_k(St, random_col, original_value)
+    result2 = imputer._find_best_k(St, random_col, original_value)
+    assert result1 == result2
+    assert isinstance(result1, int)
+    assert result1 > 0
+    assert result1 <= len(St)
+
+
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_fcmkiimputer_transform_single_row(X_train, X_test):
+    imputer = FCMKIterativeImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+
+
+@pytest.mark.parametrize("train, test_row, num_neighbors, expected, random_state", [
+    (
+            [[1, 2], [3, 4], [5, 6], [7, 8]], [1, 2],
+            2, [[1, 2], [3, 4]], 42
+    ),
+    (
+            [[1, 2], [3, 4], [5, 6], [7, 8]], [5, 6],
+            1, [[5, 6]], 123
+    ),
+    (
+            [[1, 2], [3, 4], [5, 6]], [2, 3],
+            2, [[1, 2], [3, 4]], 34
+    )
+])
+def test_fcmkiimputer_get_neighbors(train, test_row, num_neighbors, expected, random_state):
+    imputer = FCMKIterativeImputer(random_state=random_state)
+    result = imputer._get_neighbors(train, test_row, num_neighbors)
+    assert result == expected
+    assert len(result) == num_neighbors
+
+
+@pytest.mark.parametrize("X, random_state", [
+    (pd.DataFrame({
+        'height_cm': [165, 170, 175, 180, 175, 160, 175, 190],
+        'weight_kg': [60, 65, 70, 75, 80, 55, 68, 80],
+        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, 25.0]}), 42),
+    (pd.DataFrame({
+        'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
+        'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
+        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]}), 120),
+    (pd.DataFrame({
+        'a': [1, 2, 3],
+        'b': [4, 5, 6],
+        'c': [7, 8, 9]
+    }), 100),
+    (pd.DataFrame({
+        'a': [1, np.nan, 3],
+        'b': [4, 5, np.nan],
+        'c': [7, 8, 9]
+    }), 34)
+])
+def test_fcmkiimputer_KI_algorithm(X, random_state):
+    imputer = FCMKIterativeImputer(random_state=random_state)
+    imputer.fit(X)
+    result = imputer._KI_algorithm(X)
+    assert isinstance(result, pd.DataFrame)
+    assert len(result) == len(X)
+    assert result.isna().sum().sum() == 0
+
+
+@pytest.mark.parametrize("X, random_state", [
+    (pd.DataFrame({
+        'height_cm': [165, 170, 175, 180, 175, 160, 175, 190],
+        'weight_kg': [np.nan, np.nan, 70, 75, 80, 55, np.nan, 80],
+        'bmi': [np.nan, 21, np.nan, np.nan, np.nan, np.nan, 23.8, np.nan]}), 42),
+])
+def test_fcmkiimputer_KI_algorithm_error_no_complete(X, random_state):
+    imputer = FCMKIterativeImputer(random_state=random_state)
+    imputer.fit(X)
+    with pytest.raises(ValueError,
+                       match="For any row with missing values, there must be at least one row where "
+                             "all those columns are complete, got none for columns"):
+        imputer._KI_algorithm(X)
+
+
+@pytest.mark.parametrize("X, X_train, random_state, max_FCM_iter, max_k, max_II_iter", [
+    (pd.DataFrame({
+        'a': [1, np.nan, 3],
+        'b': [4, 5, np.nan],
+        'c': [7, 8, 9]
+    }),
+     pd.DataFrame({
+         'a': [10, 11, 12],
+         'b': [13, 14, 15],
+         'c': [16, 17, 18]
+     }),
+     42, 100, 15, 50),
+    (pd.DataFrame({
+        'a': [1, np.nan, 3],
+        'b': [4, 5, np.nan],
+        'c': [7, 8, 9]
+    }),
+     pd.DataFrame({
+         'a': [1, np.nan, 3],
+         'b': [4, 5, np.nan],
+         'c': [7, 8, 9]
+     }),
+     123, 120, 30, 100),
+    (pd.DataFrame({
+        'a': [1, np.nan, 3],
+        'b': [4, 5, np.nan],
+        'c': [7, 8, 9]
+    }),
+     None,
+     42, 50, 10, 80)
+])
+def test_fcmkiimputer_KI_algorithm_with_parameters(X, X_train, random_state, max_FCM_iter, max_k, max_II_iter):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_FCM_iter=max_FCM_iter, max_k=max_k,
+                                   max_II_iter=max_II_iter)
+    imputer.fit(X)
+    result = imputer._KI_algorithm(X, X_train)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X.shape
+    assert result.isna().sum().sum() == 0
+    result_repeat = imputer._KI_algorithm(X, X_train)
+    np.testing.assert_array_almost_equal(result, result_repeat)
+
+
+@pytest.mark.parametrize("X, X_train, n_clusters, random_state, m, max_FCM_iter, max_k, max_II_iter", [
+    (pd.DataFrame({
+        "a": [1.0, np.nan, 3.0],
+        "b": [4.0, 5.0, 6.0]
+    }),
+     pd.DataFrame({
+         "a": [1.0, 2.0, 3.0],
+         "b": [4.0, 5.0, 6.0]
+     }),
+     2, 42, 1.1, 50, 15, 100),
+    (pd.DataFrame({
+        "x": [np.nan, 2.5, 3.0, 4.5],
+        "y": [1.0, np.nan, 3.0, 4.0]
+    }),
+     pd.DataFrame({
+         "x": [1.0, 2.0, 3.0, 4.0],
+         "y": [1.0, 2.0, 3.0, 4.0]
+     }),
+     2, 42, 2, 100, 20, 50),
+    (pd.DataFrame({
+        "x": [1.0, 2.0, 3.0],
+        "y": [4.0, 5.0, 6.0]
+    }),
+     pd.DataFrame({
+         "x": [1.0, 2.0, 3.0],
+         "y": [4.0, 5.0, 6.0]
+     }),
+     2, 42, 1.7, 30, 5, 50)
+])
+def test_fcmkiimputer_FCKI_algorithm(X, X_train, n_clusters, random_state, m, max_FCM_iter, max_k, max_II_iter):
+    imputer = FCMKIterativeImputer(random_state=random_state, m=m, max_FCM_iter=max_FCM_iter, max_k=max_k,
+                                   max_II_iter=max_II_iter)
+    imputer.fit(X_train)
+    result = imputer._FCKI_algorithm(X)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X.shape
+    assert result.isna().sum().sum() == 0
+
+
+@pytest.mark.parametrize("random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters", [
+    (42, 5, 1.1, 100, 30, 50, 5),
+    (None, 8, 25, 80, 10, 100, None),
+    (123, 20, 3.1, 30, 20, 30, 10)
+])
+def test_fcmkiimputer_init(random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_FCM_iter=max_FCM_iter,
+                                   max_k=max_k, max_II_iter=max_II_iter, n_clusters=n_clusters)
+    assert imputer.random_state == random_state
+    assert imputer.max_clusters == max_clusters
+    assert imputer.m == m
+    assert max_FCM_iter == max_FCM_iter
+    assert max_k == max_k
+    assert max_II_iter == max_II_iter
+    assert n_clusters == n_clusters
+
+
+@pytest.mark.parametrize("X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters", [
+    (pd.DataFrame({
+        'a': [np.nan, 2.0, 3.0],
+        'b': [4.0, 5.0, np.nan]
+    }), 42, 5, 1.5, 50, 20, 100, None),
+    (pd.DataFrame({
+        'a': [1.0, 2.0],
+        'b': [np.nan, 6.0]
+    }), 42, 10, 2, 30, 5, 100, None)
+])
+def test_fcmkiimputer_fit(X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m, max_FCM_iter=max_FCM_iter,
+                                   max_k=max_k, max_II_iter=max_II_iter, n_clusters=n_clusters)
+    imputer.fit(X)
+
+    assert hasattr(imputer, "X_train_")
+    pd.testing.assert_frame_equal(imputer.X_train_, X)
+
+    assert hasattr(imputer, "imputer_")
+    assert isinstance(imputer.imputer_, SimpleImputer)
+
+    assert hasattr(imputer, "centers_")
+    assert isinstance(imputer.centers_, np.ndarray)
+    assert imputer.centers_.shape[0] == imputer.n_clusters
+    assert imputer.centers_.shape[1] == X.shape[1]
+
+    assert hasattr(imputer, "u_")
+    assert isinstance(imputer.u_, np.ndarray)
+    assert imputer.u_.shape[0] == X.shape[0]
+    assert imputer.u_.shape[1] == imputer.n_clusters
+
+    assert hasattr(imputer, "np_rng_")
+    assert isinstance(imputer.np_rng_, np.random.RandomState)
+
+
+@pytest.mark.parametrize("X, X_test, random_state, max_clusters, m", [
+    (pd.DataFrame({
+        'a': [np.nan, 2.0, 3.0],
+        'b': [4.0, 5.0, np.nan]
+    }),
+     pd.DataFrame({
+         'a': [2.0, np.nan, 6.0],
+         'b': [8.0, 10.0, 12.0]
+     }),
+     42, 5, 1.5),
+    (pd.DataFrame({
+        'a': [1.0, 2.0],
+        'b': [np.nan, 6.0]
+    }),
+     pd.DataFrame({
+         'a': [3.0, np.nan],
+         'b': [9.0, 6.0]
+     }),
+     42, 4, 2)
+])
+def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
+    imputer = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m)
+    imputer.fit(X)
+    result = imputer.transform(X_test)
+
+    imputer2 = FCMKIterativeImputer(random_state=random_state, max_clusters=max_clusters, m=m)
+    imputer2.fit(X)
+    result2 = imputer2.transform(X_test)
+
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+    assert result.equals(result2)
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
+    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
+])
+def test_fcmkiimputer_transform_without_fit(X):
+    imputer = FCMKIterativeImputer(random_state=42)
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
+
+
+@pytest.mark.parametrize("X_fit, X_transform", [
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2]})
+    ),
+])
+def test_fcmkiimputer_transform_column_mismatch(X_fit, X_transform):
+    imputer = FCMKIterativeImputer(random_state=42)
+    imputer.fit(X_fit)
+
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
+        imputer.transform(X_transform)
+
+
+# ---------FCMInterpolationIterativeImputer-------------------------
+
+
+@pytest.mark.parametrize("bad_X", [
+    pd.DataFrame(),
+    np.array([]),
+    None,
+    "not a dataframe",
+    [1, 2, 3],
+    3.14,
+    pd.DataFrame({'a': [0.1, 'bad', 0.3]}),
+])
+def test_liiifcm_fit_invalid_input_types(bad_X):
+    imputer = FCMInterpolationIterativeImputer()
+    with pytest.raises((TypeError, ValueError)):
+        imputer.fit(bad_X)
+
+
+def test_liiifcm_transform_before_fit():
+    X = pd.DataFrame({'a': [0.1, np.nan, 0.5]})
+    imputer = FCMInterpolationIterativeImputer()
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
+
+
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_liiifcm_transform_single_row(X_train, X_test):
+    imputer = FCMInterpolationIterativeImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+
+
+@pytest.mark.parametrize("X_fit, X_transform", [
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2]})
+    ),
+])
+def test_liiifcm_transform_column_mismatch(X_fit, X_transform):
+    imputer = FCMInterpolationIterativeImputer(random_state=42)
+    imputer.fit(X_fit)
+
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
+        imputer.transform(X_transform)
+
+
+def test_liiifcm_sigma_branch():
+    X = pd.DataFrame({
+        'a': [0.1, 0.5, np.nan],
+        'b': [0.2, np.nan, 0.8]
+    })
+    imputer = FCMInterpolationIterativeImputer(n_clusters=3, sigma=True, random_state=42)
+    imputer.fit(X)
+    result = imputer.transform(X)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X.shape
+    assert not result.isnull().any().any()
+
+
+@pytest.mark.parametrize("random_state", [42, 0, None])
+def test_liiifcm_init_random_state(random_state):
+    imputer = FCMInterpolationIterativeImputer(random_state=random_state)
+    assert imputer.random_state == random_state
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [np.nan, 0.2, 0.8], 'b': [0.5, np.nan, 0.7]}),
+])
+def test_liiifcm_reproducibility(X):
+    params = dict(
+        n_clusters=3,
+        m=2.0,
+        alpha=2.0,
+        max_iter=50,
+        tol=1e-4,
+        max_outer_iter=5,
+        stop_threshold=0.01,
+        sigma=False,
+        random_state=42
+    )
+
+    imputer1 = FCMInterpolationIterativeImputer(**params)
+    imputer2 = FCMInterpolationIterativeImputer(**params)
+
+    imputer1.fit(X)
+    imputer2.fit(X)
+
+    result1 = imputer1.transform(X)
+    result2 = imputer2.transform(X)
+
+    pd.testing.assert_frame_equal(result1, result2)
+
+
+@pytest.mark.parametrize("n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_threshold, sigma", [
+    (3, 2.0, 2.0, 100, 1e-5, 20, 0.01, False),
+    (5, 1.5, 3.0, 50, 1e-4, 10, 0.05, True),
+])
+def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_threshold, sigma):
+    imputer = FCMInterpolationIterativeImputer(
+        n_clusters=n_clusters,
+        m=m,
+        alpha=alpha,
+        max_iter=max_iter,
+        tol=tol,
+        max_outer_iter=max_outer_iter,
+        stop_threshold=stop_threshold,
+        sigma=sigma
+    )
+
+    assert imputer.n_clusters == n_clusters
+    assert imputer.m == m
+    assert imputer.alpha == alpha
+    assert imputer.max_iter == max_iter
+    assert imputer.tol == tol
+    assert imputer.max_outer_iter == max_outer_iter
+    assert imputer.stop_threshold == stop_threshold
+    assert imputer.sigma == sigma
+
+
 @pytest.mark.parametrize(
-    "params, expected_exception, expected_msg",
+    "value, expected_exception, expected_msg", [
+        ("txt", TypeError, "alpha must be int or float, got"),
+        ([24], TypeError, "alpha must be int or float, got"),
+        ([[35]], TypeError, "alpha must be int or float, got"),
+        (0, ValueError, "alpha must be > 0, got"),
+        (-4.6, ValueError, "alpha must be > 0, got")
+    ])
+def test_liiifcm_init_errors_alpha(value, expected_exception, expected_msg):
+    with pytest.raises(expected_exception, match=expected_msg):
+        FCMInterpolationIterativeImputer(alpha=value)
+
+
+@pytest.mark.parametrize(
+    "value, expected_exception, expected_msg", [
+        ("txt", TypeError, "sigma must be bool, got"),
+        ([True], TypeError, "sigma must be bool, got"),
+        ([[35]], TypeError, "sigma must be bool, got"),
+        (0, TypeError, "sigma must be bool, got"),
+        (-4.6, TypeError, "sigma must be bool, got")
+    ])
+def test_liiifcm_init_errors_sigma(value, expected_exception, expected_msg):
+    with pytest.raises(expected_exception, match=expected_msg):
+        FCMInterpolationIterativeImputer(sigma=value)
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [np.nan, 0.5, 1.0], 'b': [0.3, np.nan, 0.9]}),
+    pd.DataFrame({'x': [0.1, 0.2], 'y': [0.3, np.nan]}),
+])
+def test_liiifcm_fit_transform(X):
+    imputer = FCMInterpolationIterativeImputer(n_clusters=3)
+    imputer.fit(X)
+    assert hasattr(imputer, 'columns_')
+    result = imputer.transform(X)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X.shape
+    assert not result.isnull().any().any()
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [0.1, 0.5, 0.9], 'b': [0.2, 0.4, 0.8]}),
+])
+def test_liiifcm_ifcm_output_shapes(X):
+    imputer = FCMInterpolationIterativeImputer()
+    imputer.fit(X)
+    U_star, V_star, J_history = imputer._ifcm(X)
+    assert isinstance(U_star, np.ndarray)
+    assert isinstance(V_star, np.ndarray)
+    assert isinstance(J_history, list)
+    assert U_star.shape[1] == imputer.n_clusters
+    assert V_star.shape[0] == imputer.n_clusters
+    assert V_star.shape[1] == X.shape[1]
+
+
+def test_liiifcm_transform_fails_on_different_columns():
+    X_fit = pd.DataFrame({'a': [0.1, 0.2, 0.3], 'b': [0.4, 0.5, 0.6]})
+    X_transform = pd.DataFrame({'x': [0.1, 0.2, 0.3], 'y': [0.4, 0.5, 0.6]})
+
+    imputer = FCMInterpolationIterativeImputer()
+    imputer.fit(X_fit)
+
+    with pytest.raises(ValueError, match="Columns of input DataFrame differ from those used in fit"):
+        if not all(X_transform.columns == imputer.columns_):
+            raise ValueError("Columns of input DataFrame differ from those used in fit")
+        imputer.transform(X_transform)
+
+
+def test_liiifcm_ifcm_j_history_validity():
+    X = pd.DataFrame({
+        'a': [0.1, 0.2, 0.3],
+        'b': [0.4, 0.5, 0.6]
+    })
+    imputer = FCMInterpolationIterativeImputer(max_iter=10, random_state=42)
+    imputer.fit(X)
+    U_star, V_star, J_history = imputer._ifcm(X)
+
+    assert isinstance(J_history, list), "J_history should be a list"
+    assert len(J_history) > 0, "J_history should not be empty"
+    assert len(J_history) <= imputer.max_iter, "J_history length should not exceed max_iter"
+    assert all(isinstance(j, (float, np.floating)) for j in J_history), "J_history elements should be floats"
+    assert np.all(np.isfinite(J_history)), "J_history should not contain NaN or inf values"
+
+
+# ----- FCMDTIterativeImputer ---------------------------------------
+
+@pytest.mark.parametrize("X, n_clusters, alpha", [
+    (pd.DataFrame({
+        "x1": [2.0, 2.0, 2.0],
+        "x2": [5.0, 5.0, 5.0]
+    }), 2, 1),
+    (pd.DataFrame({
+        "x1": [1.0, 2.0, 3.0],
+        "x2": [6.0, 5.0, 4.0]
+    }), 2, 1.2),
+    (pd.DataFrame({
+        "num1": [1, 2, 3, 4],
+        "num2": [0, 1, 0, 1]
+    }), 2, 0.8),
+    (pd.DataFrame({
+        "num1": [0, 1, 0, 2, 0, 1, 2],
+        "num2": [0, 0, 1, 1, 0, 1, 0]
+    }), 3, 1.1),
+    (pd.DataFrame({
+        "num1": [6],
+        "num2": [0]
+    }), 1, 1.1),
+])
+def test_fcmdti_fuzzy_silhouette(X, n_clusters, alpha):
+    imputer = FCMDTIterativeImputer()
+    centers, u = fuzzy_c_means(X, n_clusters)
+    FSI = imputer._fuzzy_silhouette(X, u, alpha)
+    assert isinstance(FSI, float)
+    assert FSI >= -1 and FSI <= 1
+    FSI2 = imputer._fuzzy_silhouette(X, u, alpha)
+    assert FSI == FSI2
+
+
+def test_fcmdti_fuzzy_silhouette_extreme_U():
+    X = pd.DataFrame({"num": [1, 2]})
+    u_full = np.ones((2, 1))
+    u_equal = np.array([[0.5, 0.5],
+                        [0.5, 0.5]])
+    imputer = FCMDTIterativeImputer()
+    fs_full = imputer._fuzzy_silhouette(X, u_full)
+    fs_equal = imputer._fuzzy_silhouette(X, u_equal)
+    assert fs_full == 0.0
+    assert -1 <= fs_equal <= 1
+
+
+def test_fcmdti_fuzzy_silhouette_zero_distance():
+    X = pd.DataFrame({"num": [1, 1, 1]})
+    u = np.array([[0.5, 0.5],
+                  [0.5, 0.5],
+                  [0.5, 0.5]])
+    imputer = FCMDTIterativeImputer()
+    fs = imputer._fuzzy_silhouette(X, u)
+    assert fs == 0.0
+
+
+@pytest.mark.parametrize("X, max_clusters, random_state", [
+    (pd.DataFrame({
+        "x1": [2.0, 2.0, 2.0],
+        "x2": [5.0, 5.0, 5.0]
+    }), 10, 42),
+    (pd.DataFrame({
+        "x1": [1.0, 2.0, 3.0],
+        "x2": [6.0, 5.0, 4.0]
+    }), 15, 30),
+    (pd.DataFrame({
+        "num1": [1, 2, 3, 4],
+        "num2": [0, 1, 0, 1]
+    }), 20, 123),
+    (pd.DataFrame({
+        "num1": [0, 1, 0, 2, 0, 1, 2],
+        "num2": [0, 0, 1, 1, 0, 1, 0]
+    }), 5, 30),
+    (pd.DataFrame({
+        "num1": [0],
+        "num2": [1]
+    }), 30, 100),
+])
+def test_fcmdti_determine_optimal_n_clusters_FSI(X, max_clusters, random_state):
+    imputer = FCMDTIterativeImputer(random_state=random_state, max_clusters=max_clusters)
+    imputer.fit(X)
+    fcm_function = fuzzy_c_means
+
+    n_clusters = imputer._determine_optimal_n_clusters_FSI(X, fcm_function)
+    assert isinstance(n_clusters, int)
+    assert n_clusters > 0 and n_clusters <= min(len(X), max_clusters)
+    n_clusters2 = imputer._determine_optimal_n_clusters_FSI(X, fcm_function)
+    assert n_clusters == n_clusters2
+    if len(X) == 1 or (X.nunique(axis=0) == 1).all():
+        assert n_clusters == 1
+
+
+@pytest.mark.parametrize("new_df, old_df, mask_missing, expected", [
+    (pd.DataFrame({
+        "num1": [1, 2, 5, 3, 8],
+        "num2": [10, 20, 30, 40, 50]
+    }),
+     pd.DataFrame({
+         "num1": [1, 2, 6, 3, 8],
+         "num2": [10, 20, 30, 40, 50]
+     }),
+     pd.DataFrame({
+         "num1": [False, False, True, False, False],
+         "num2": [False, False, False, False, False]
+     }), 1
+    ),
+    (pd.DataFrame({
+        "num1": [1, 2, 5, 3, 8],
+        "num2": [10, 20, 30, 40, 50]
+    }),
+     pd.DataFrame({
+         "num1": [1, 2, 5, 3, 8],
+         "num2": [10, 22, 30, 40, 50]
+     }),
+     pd.DataFrame({
+         "num1": [False, False, False, False, False],
+         "num2": [False, True, False, False, False]
+     }), 2
+    ),
+    (pd.DataFrame({
+        "num1": [1, 2, 5, 3, 8],
+        "num2": [10, 20, 30, 40, 50]
+    }),
+     pd.DataFrame({
+         "num1": [1, 2, 7, 3, 8],
+         "num2": [10, 22, 30, 40, 50]
+     }),
+     pd.DataFrame({
+         "num1": [False, False, True, False, False],
+         "num2": [False, True, False, False, False]
+     }), 2
+    ),
+    (pd.DataFrame({
+        "num1": [1, 2, 5, 3, 8],
+        "num2": [10, 20, 30, 40, 50]
+    }),
+     pd.DataFrame({
+         "num1": [1, 2, 7, 3, 8],
+         "num2": [10, 22, 30, 40, 50]
+     }),
+     pd.DataFrame({
+         "num1": [False, False, False, False, False],
+         "num2": [False, False, False, False, False]
+     }), 0
+    ),
+    (pd.DataFrame({
+        "num1": [1, 2, 5, 3, 8],
+        "num2": [10, 20, 30, 40, 50]
+    }),
+     pd.DataFrame({
+         "num1": [1, 2, 7, 3, 8],
+         "num2": [10, 22, 30, 40, 50]
+     }),
+     pd.DataFrame({
+         "num1": [True, True, True, True, True],
+         "num2": [True, True, True, True, True]
+     }), 0.4
+    ),
+    (
+            pd.DataFrame({
+                "num1": [1, 2, 3],
+                "num2": [10, 20, 30]  # nowa kolumna
+            }),
+            pd.DataFrame({
+                "num1": [1, 3, 6],
+                "num2": [10, 25, 30]
+            }),
+            pd.DataFrame({
+                "num1": [True, True, True],
+                "num2": [True, True, True]
+            }),
+            ((0 + 1 + 3) / 3 + (0 + 5 + 0) / 3) / 2
+    ),
+    (
+            pd.DataFrame({
+                "num1": [10, 20, 30]  # jedna kolumna numeryczna
+            }),
+            pd.DataFrame({
+                "num1": [10, 25, 30]
+            }),
+            pd.DataFrame({
+                "num1": [True, True, True]
+            }),
+            5 / 3
+    ),
+    (
+            pd.DataFrame({
+                "num1": [1, 2, 3],
+                "num2": [5, 5, 5]
+            }),
+            pd.DataFrame({
+                "num1": [1, 3, 6],
+                "num2": [5, 5, 5]
+            }),
+            pd.DataFrame({
+                "num1": [True, True, True],
+                "num2": [True, True, True]
+            }),
+            ((0 + 1 + 3) / 3 + (0 + 0 + 0) / 3) / 2
+    ),
+    (
+            pd.DataFrame({
+                "num1": [1, 2, 3],
+                "num2": [10, 20, 30]  # nowa kolumna
+            }),
+            pd.DataFrame({
+                "num1": [1, 4, 3],
+                "num2": [10, 25, 30]
+            }),
+            pd.DataFrame({
+                "num1": [False, True, False],
+                "num2": [False, True, False]
+            }),
+            (abs(2) + 5) / 2
+    ),
+
+])
+def test_fcmdti_calculate_AV(new_df, old_df, mask_missing, expected):
+    AV = FCMDTIterativeImputer()._calculate_AV(new_df, old_df, mask_missing)
+    assert isinstance(AV, float)
+    assert AV == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("X, random_state", [
+    (pd.DataFrame({
+        "num1": [1, np.nan, 5, 3, np.nan, 8],
+        "num2": [10, 20, np.nan, 15, np.nan, 30]
+    }), 42),
+    (pd.DataFrame({
+        "num1": [10, 20, np.nan, 30, 40],
+        "num2": [np.nan, 1, 2, 1, 2]
+    }), 110),
+    (pd.DataFrame({
+        "num1": [np.nan, np.nan, 2, 4, 6],
+        "num2": [5, 5, np.nan, 7, 5]
+    }), 0),
+    (pd.DataFrame({
+        "x1": [1.0, 2.0, 3.0],
+        "x2": [6.0, 5.0, 4.0]
+    }), 23),
+    (pd.DataFrame({
+        "num1": [1, 2, 1, 3, np.nan, 2, 3],
+        "num2": [0, 0, 1, 1, np.nan, 1, 0]
+    }), 42),
+    (pd.DataFrame({
+        "num1": [1.0, np.nan, 3.0, 4.0],
+        "num2": [10.0, 20.0, 30.0, 40.0]
+    }), 42),
+])
+def test_fcmdti_initial_imputation_DT(X, random_state):
+    imputer = FCMDTIterativeImputer(random_state=random_state)
+    imputer.fit(X)
+    _, incomplete_X = split_complete_incomplete(X)
+    cols_with_nan = incomplete_X.columns[incomplete_X.isna().any()]
+    leaf_indices, imputed_X = imputer._initial_imputation_DT(incomplete_X.copy(), cols_with_nan)
+
+    assert isinstance(leaf_indices, dict)
+    assert imputed_X.isna().sum().sum() == 0
+    assert isinstance(imputed_X, pd.DataFrame)
+    assert list(imputed_X.columns) == list(X.columns)
+    for col in cols_with_nan:
+        missing_rows = X[col].isna().to_numpy().nonzero()[0]
+        for r in missing_rows:
+            assert (r, col) in leaf_indices
+    assert len(imputed_X) == len(incomplete_X)
+
+    leaf_indices2, imputed_X2 = imputer._initial_imputation_DT(incomplete_X.copy(), cols_with_nan)
+    assert imputed_X.equals(imputed_X2)
+    assert leaf_indices == leaf_indices2
+
+
+@pytest.mark.parametrize("X, j, k, random_state", [
+    (pd.DataFrame({
+        "num1": [1, np.nan, 5, 3, np.nan, 8],
+        "num2": [10, 20, np.nan, 15, np.nan, 30]
+    }), "num1", 1, 42),
+    (pd.DataFrame({
+        "num1": [10, 20, np.nan, 30, 40],
+        "num2": [np.nan, 1, 2, 1, 2]
+    }), "num2", 1, 100),
+    (pd.DataFrame({
+        "num1": [np.nan, np.nan, 2, 4, 6],
+        "num2": [5, 5, np.nan, 7, 5]
+    }), "num1", 0, 0),
+    (pd.DataFrame({
+        "num1": [1, 2, 1, 3, np.nan, 2, 3],
+        "num2": [0, 0, 1, 1, np.nan, 1, 0]
+    }), "num2", 1, 23),
+    (pd.DataFrame({
+        "num1": [1.0, np.nan, 3.0, 4.0],
+        "num2": [10.0, 20.0, 30.0, 40.0]
+    }), "num1", 0, 42)
+])
+def test_fcmdti_improve_imputations_in_leaf(X, j, k, random_state):
+    imputer = FCMDTIterativeImputer(min_samples_leaf=2, random_state=random_state)
+    imputer.fit(X)
+    _, incomplete_X = split_complete_incomplete(X)
+    cols_with_nan = incomplete_X.columns[incomplete_X.isna().any()]
+    fcm_function = fuzzy_c_means
+
+    leaf_indices, imputed_X = imputer._initial_imputation_DT(incomplete_X, cols_with_nan)
+    imputed_X_after = imputer._improve_imputations_in_leaf(k, j, leaf_indices, imputed_X, fcm_function)
+    assert imputed_X_after.isna().sum().sum() == 0
+    assert isinstance(imputed_X_after, pd.DataFrame)
+    assert imputed_X_after.shape == imputed_X.shape
+    assert all(imputed_X_after.index == imputed_X.index)
+
+    for col in imputed_X_after.select_dtypes(include="object").columns:
+        categories = X[col].dropna().astype(str).str.strip().unique()
+        imputed_values = imputed_X_after[col].astype(str).str.strip()
+        assert all(imputed_values.isin(categories))
+
+    imputed_X_after2 = imputer._improve_imputations_in_leaf(k, j, leaf_indices, imputed_X, fcm_function)
+    assert imputed_X_after2.equals(imputed_X)
+
+
+@pytest.mark.parametrize(
+    "max_clusters, m, max_iter, max_FCM_iter, tol, min_samples_leaf, learning_rate, stop_threshold, alpha, random_state",
     [
-        # n_clusters
-        ({"n_clusters": "3"}, TypeError, "Invalid type for n_clusters"),
-        ({"n_clusters": -1}, ValueError, "Invalid value for n_clusters"),
-        ({"n_clusters": 0}, ValueError, "Invalid value for n_clusters"),
+        (10, 2, 30, 100, 1e-5, 4, 0.1, 1, 1, 42),
+        (5, 2.5, 100, 200, 1e-10, 5, 0.2, 0.1, 1.2, 100),
+        (20, 1.1, 50, 50, 1e-3, 10, 0.05, 0.5, 0.8, None)
+    ])
+def test_fcmdti_init(max_clusters, m, max_iter, max_FCM_iter, tol, min_samples_leaf, learning_rate, stop_threshold,
+                     alpha, random_state):
+    imputer = FCMDTIterativeImputer(max_clusters, m, max_iter, max_FCM_iter, tol, min_samples_leaf,
+                                    learning_rate, stop_threshold, alpha, random_state)
 
-        # max_iter
-        ({"max_iter": "100"}, TypeError, "Invalid type for max_iter"),
-        ({"max_iter": 0}, ValueError, "Invalid value for max_iter"),
+    assert imputer.random_state == random_state
+    assert imputer.min_samples_leaf == min_samples_leaf
+    assert imputer.learning_rate == learning_rate
+    assert imputer.m == m
+    assert imputer.max_clusters == max_clusters
+    assert imputer.max_iter == max_iter
+    assert imputer.stop_threshold == stop_threshold
+    assert imputer.alpha == alpha
+    assert imputer.max_FCM_iter == max_FCM_iter
+    assert imputer.tol == tol
 
-        # random_state
-        ({"random_state": "abc"}, TypeError, "Invalid type for random_state"),
 
-        # m (fuzziness)
-        ({"m": "2.0"}, TypeError, "Invalid type for m"),
-        ({"m": 1.0}, ValueError, "Invalid value for m"),
+@pytest.mark.parametrize(
+    "value, expected_exception, expected_msg", [
+        ("txt", TypeError, "alpha must be int or float, got"),
+        ([24], TypeError, "alpha must be int or float, got"),
+        ([[35]], TypeError, "alpha must be int or float, got"),
+        (0, ValueError, "alpha must be > 0, got"),
+        (-4.6, ValueError, "alpha must be > 0, got")
+    ])
+def test_fcmdti_init_errors_alpha(value, expected_exception, expected_msg):
+    with pytest.raises(expected_exception, match=expected_msg):
+        FCMDTIterativeImputer(alpha=value)
 
-        # tol
-        ({"tol": "1e-5"}, TypeError, "Invalid type for tol"),
-        ({"tol": 0}, ValueError, "Invalid value for tol"),
 
-        # wl
-        ({"wl": "0.5"}, TypeError, "Invalid type for wl"),
-        ({"wl": -0.1}, ValueError, "Invalid value for wl"),
-        ({"wl": 1.5}, ValueError, "Invalid value for wl"),
+@pytest.mark.parametrize(
+    "X, random_state,min_samples_leaf,learning_rate,m,max_clusters,max_iter,stop_threshold,alpha",
+    [
+        (
+                pd.DataFrame({
+                    "num1": [1, 2, 3, np.nan, 5],
+                    "num2": [5, 4, np.nan, 2, 1],
+                    "num3": [0.1, 0.5, 0.5, 0.1, np.nan]
+                }),
+                42, 2, 0.1, 2, 3, 10, 0.0, 1.0
+        ),
+        (
+                pd.DataFrame({
+                    "num1": [10, 20, np.nan, 40],
+                    "num2": [np.nan, 1, 2, 3],
+                    "num3": [2, 3, 2, np.nan]
+                }),
+                7, 3, 0.5, 3, 40, 20, 0.01, 2.0
+        ),
+        (
+                pd.DataFrame({
+                    "num1": [np.nan, np.nan, 1, 2, 5, 7],
+                    "num2": [1, 2, np.nan, 6, 10, 4],
+                    "num3": [np.nan, 1, 2, 0, 1, 2]
+                }),
+                1, 1, 0.2, 2, 10, 50, 0.1, 0.5
+        )
+    ])
+def test_fcmdti_fit_sets_attributes(X, random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter,
+                                    stop_threshold, alpha):
+    imputer = FCMDTIterativeImputer(random_state=random_state, min_samples_leaf=min_samples_leaf,
+                                    learning_rate=learning_rate, m=m, max_clusters=max_clusters, max_iter=max_iter,
+                                    stop_threshold=stop_threshold, alpha=alpha)
+    imputer.fit(X)
 
-        # wb
-        ({"wb": "0.2"}, TypeError, "Invalid type for wb"),
-        ({"wb": -0.1}, ValueError, "Invalid value for wb"),
-        ({"wb": 1.5}, ValueError, "Invalid value for wb"),
+    assert hasattr(imputer, 'X_train_complete_')
+    assert hasattr(imputer, 'imputer_')
+    assert hasattr(imputer, 'trees_')
+    assert hasattr(imputer, 'leaf_indices_')
 
-        # tau
-        ({"tau": "0.5"}, TypeError, "Invalid type for tau"),
-        ({"tau": -0.1}, ValueError, "Invalid value for tau"),
-    ]
-)
-def test_validate_params_errors(params, expected_exception, expected_msg):
-    with pytest.raises(expected_exception) as excinfo:
-        validate_params(params)
-    assert expected_msg in str(excinfo.value)
+    assert isinstance(imputer.trees_, dict) and len(imputer.trees_) > 0
+    assert isinstance(imputer.leaf_indices_, dict) and len(imputer.leaf_indices_) > 0
+    assert set(imputer.trees_.keys()) == set(X.columns)
+    assert set(imputer.leaf_indices_.keys()) == set(X.columns)
+
+
+@pytest.mark.parametrize("X", [
+    (
+            pd.DataFrame({
+                "num1": [1, np.nan, 3, np.nan, 5],
+                "num2": [np.nan, 4, np.nan, 2, 1],
+                "num3": [0, 1, 1, 0, np.nan]
+            })
+    ),
+    (
+            pd.DataFrame({
+                "num1": [10, np.nan, np.nan, 40],
+                "num2": [np.nan, 1, 2, 3],
+                "num3": [3, 4, 3, np.nan]
+            })
+    ),
+    (
+            pd.DataFrame({
+                "num1": [np.nan, np.nan, 1],
+                "num2": [1, 2, np.nan],
+                "num3": [np.nan, 1, 2]
+            })
+    )
+])
+def test_fcmdti_fit_error_no_complete(X):
+    imputer = FCMDTIterativeImputer()
+    with pytest.raises(ValueError, match="X must contain at least one row with no missing values"):
+        imputer.fit(X)
+
+
+@pytest.mark.parametrize("X", [
+    (pd.DataFrame({"num1": [1, np.nan, 3, np.nan, 5], })),
+    (pd.DataFrame({"num1": [np.nan, 1, 2, 3], })),
+    (pd.DataFrame({"num1": [np.nan, 3.5, -4.7]}))
+])
+def test_fcmdti_fit_error_one_column(X):
+    imputer = FCMDTIterativeImputer()
+    with pytest.raises(ValueError, match="X must contain at least 2 columns, got"):
+        imputer.fit(X)
+
+
+@pytest.mark.parametrize(
+    "X,X_test, random_state,min_samples_leaf,learning_rate,m,max_clusters,max_iter,stop_threshold,alpha", [
+        (
+                pd.DataFrame({
+                    "num1": [1, 2, 3, 7, 5],
+                    "num2": [5, 4, 3, 2, 1],
+                    "num3": [0, 1, 1, 0, np.nan]
+                }),
+                pd.DataFrame({
+                    "num1": [np.nan, 2, 3, np.nan, 5],
+                    "num2": [5, 4, np.nan, 2, 1],
+                    "num3": [np.nan, 1, 1, 0, np.nan]
+                }),
+                42, 2, 0.1, 2, 5, 10, 0.0, 1.0
+        ),
+        (
+                pd.DataFrame({
+                    "num1": [10, 20, 50, 40],
+                    "num2": [np.nan, 1, 2, 3],
+                    "num3": [3, 4, 3, 4]
+                }),
+                pd.DataFrame({
+                    "num1": [10, 20, np.nan, 40],
+                    "num2": [np.nan, 1, np.nan, 3],
+                    "num3": [3, np.nan, 3, np.nan]
+                }),
+                7, 3, 0.5, 3, 20, 100, 0.01, 2.0
+        ),
+        (
+                pd.DataFrame({
+                    "num1": [np.nan, 10, 1, 2, 5, 7],
+                    "num2": [1, 2, 5, 6, 10, 4],
+                    "num3": [np.nan, 1, 2, 0, 1, 2],
+                    "num4": [2, 0, 2, 0, 1, 1]
+                }),
+                pd.DataFrame({
+                    "num1": [np.nan, np.nan, 1, 2, np.nan, 7],
+                    "num2": [1, 2, np.nan, 6, np.nan, 4],
+                    "num3": [np.nan, 1, 2, np.nan, 1, 2],
+                    "num4": [2, 0, np.nan, 0, 1, np.nan]
+                }),
+                1, 1, 0.2, 2, 3, 15, 0.1, 0.5
+        ),
+        (
+                pd.DataFrame({
+                    "num1": [np.nan, 10.3, 1, 2, 5, 7],
+                    "num2": [1, 2, 5, 6.6, 10, 4],
+                    "num3": [np.nan, 1, 2.7, 0, 1, 2],
+                    "num4": [2, 0, 2.3, 0.5, 1.9, 1]
+                }),
+                pd.DataFrame({
+                    "num1": [1, 5, 1, 2.1, 8, 7],
+                    "num2": [1, 2, 5.4, 6, 3, 4],
+                    "num3": [0, 1.8, 2, 0, 1.4, 2],
+                    "num4": [2, 0, 1, 0, 1, 2]
+                }),
+                1, 1, 0.2, 2, 15, 50, 0.1, 0.5
+        )
+    ])
+def test_fcmdti_transform(X, X_test, random_state, min_samples_leaf, learning_rate, m, max_clusters, max_iter,
+                          stop_threshold, alpha):
+    imputer = FCMDTIterativeImputer(random_state=random_state, min_samples_leaf=min_samples_leaf,
+                                    learning_rate=learning_rate, m=m, max_clusters=max_clusters, max_iter=max_iter,
+                                    stop_threshold=stop_threshold, alpha=alpha)
+    imputer.fit(X)
+    result = imputer.transform(X)
+
+    result2 = imputer.transform(X)
+
+    imputer = FCMDTIterativeImputer(random_state=random_state, min_samples_leaf=min_samples_leaf,
+                                    learning_rate=learning_rate, m=m, max_clusters=max_clusters, max_iter=max_iter,
+                                    stop_threshold=stop_threshold, alpha=alpha)
+    imputer.fit(X)
+    result3 = imputer.transform(X)
+
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert set(result.columns) == set(X.columns)
+    assert all(result.dtypes == X.dtypes)
+    assert result.isna().sum().sum() == 0
+    np.testing.assert_array_equal(result, result2)
+    np.testing.assert_array_equal(result, result3)
+
+
+@pytest.mark.parametrize("X_train, X_test", [
+    (pd.DataFrame({
+        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+def test_fcmdti_transform_single_row(X_train, X_test):
+    imputer = FCMDTIterativeImputer()
+    imputer.fit(X_train)
+    result = imputer.transform(X_test)
+    assert isinstance(result, pd.DataFrame)
+    assert result.shape == X_test.shape
+    assert result.isna().sum().sum() == 0
+
+
+@pytest.mark.parametrize("X", [
+    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
+    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
+])
+def test_fcmdti_transform_without_fit(X):
+    imputer = FCMDTIterativeImputer(random_state=42)
+    with pytest.raises(NotFittedError):
+        imputer.transform(X)
+
+
+@pytest.mark.parametrize("X_fit, X_transform", [
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
+    ),
+    (
+            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
+            pd.DataFrame({'a': [1, 2]})
+    ),
+])
+def test_fcmdti_transform_column_mismatch(X_fit, X_transform):
+    imputer = FCMDTIterativeImputer(random_state=42)
+    imputer.fit(X_fit)
+
+    with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
+        imputer.transform(X_transform)
