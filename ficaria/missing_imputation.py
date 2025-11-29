@@ -15,19 +15,46 @@ from .utils import *
 # --------------------------------------
 class FCMCentroidImputer(BaseEstimator, TransformerMixin):
     def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, random_state=None):
-        """
+        """"
         Fuzzy C-Means centroid-based imputer.
 
-        Each missing value is imputed using the value of the nearest cluster centroid,
-        based on the Euclidean distance between the incomplete object and cluster centroids.
-        
-        Parameters:
-            n_clusters (int): number of clusters
-            m (float): fuzziness parameter
-            max_iter (int): maximum number of FCM iterations
-            tol (float): convergence tolerance
-            random_state (int): random seed
+        Missing values are imputed using the centroid of the closest fuzzy cluster,
+        where the nearest cluster is determined by Euclidean distance between an
+        incomplete object and all FCM centroids.
+
+        Parameters
+        ----------
+        n_clusters : {int, None}, default=None
+            Number of fuzzy clusters used by the IIFCM algorithm.
+            Must be an integer >= 1, or None to enable automatic selection.
+
+        m : {int, float}, default=2.0
+            Fuzzification exponent controlling cluster softness.
+            Must be > 1.
+
+        max_iter : int, default=100
+            Maximum number of iterations used by the FCM clustering algorithm.
+            Must be > 1.
+
+        tol : {int, float}, default=1e-5
+            Convergence tolerance for stopping IIFCM updates.
+            Must be > 0.
+
+        random_state : {int, None}, default=None
+            Seed for reproducibility of internal stochastic components.
+            If None, randomness is not fixed.
+
+        Attributes
+        ----------
+
+
+        Examples
+        --------
+        >>> imputer = FCMCentroidImputer(n_clusters=4)
+        >>> imputer.fit(X_train)
+        >>> X_filled = imputer.transform(X_test)
         """
+
         validate_params({
             'n_clusters': n_clusters,
             'm': m,
@@ -44,7 +71,20 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         """
-        Fit the FCM imputer on complete data only.
+        Fit the imputer by applying FCM on complete rows only.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input dataset to fit the imputer.
+
+        y : None, default=None
+            Ignored. Included for compatibility with scikit-learn.
+
+        Returns
+        -------
+        self : FCMCentroidImputer
+            Fitted imputer ready for transformation.
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
@@ -73,7 +113,17 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """
-        Impute missing values using nearest cluster centroid.
+        Impute missing values by assigning each incomplete observation to the nearest FCM centroid.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dataset to impute.
+
+        Returns
+        -------
+        X_imputed : pandas DataFrame of shape (n_samples, n_features)
+            Fully imputed dataset containing no missing values.
         """
 
         check_is_fitted(self, attributes=["centers_", "memberships_", "feature_names_in_"])
@@ -108,17 +158,42 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 class FCMParameterImputer(BaseEstimator, TransformerMixin):
     def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, random_state=None):
         """
-        Fuzzy C-Means Parameter-based Imputation.
-        
-        Each missing value is imputed as a weighted sum of all cluster centroids,
-        where weights are given by the membership values of the object.
+        Fuzzy C-Means parameter-based imputer.
 
-        Parameters:
-            n_clusters (int): number of clusters
-            m (float): fuzziness parameter
-            max_iter (int): maximum number of FCM iterations
-            tol (float): convergence tolerance
-            random_state (int): random seed
+        Each missing value is imputed using a membership-weighted linear combination
+        of all cluster centroids, computed from FCM membership degrees.
+
+        Parameters
+        ----------
+        n_clusters : {int, None}, default=None
+            Number of fuzzy clusters used by the IIFCM algorithm.
+            Must be an integer >= 1, or None to enable automatic selection.
+
+        m : {int, float}, default=2.0
+            Fuzzification exponent controlling cluster softness.
+            Must be > 1.
+
+        max_iter : int, default=100
+            Maximum number of iterations used by the FCM clustering algorithm.
+            Must be > 1.
+
+        tol : {int, float}, default=1e-5
+            Convergence tolerance for stopping IIFCM updates.
+            Must be > 0.
+
+        random_state : {int, None}, default=None
+            Seed for reproducibility of internal stochastic components.
+            If None, randomness is not fixed.
+
+        Attributes
+        ----------
+
+
+        Examples
+        --------
+        >>> imputer = FCMParameterImputer(n_clusters=4)
+        >>> imputer.fit(X_train)
+        >>> X_filled = imputer.transform(X_test)
         """
         validate_params({
             'n_clusters': n_clusters,
@@ -136,7 +211,20 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         """
-        Fit the FCM imputer on complete data only.
+        Fit the imputer by performing FCM on complete rows only.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input dataset to fit the imputer.
+
+        y : None, default=None
+            Ignored. Included for compatibility with scikit-learn.
+
+        Returns
+        -------
+        self : FCMParameterImputer
+            Fitted imputer ready for transformation.
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
@@ -164,9 +252,17 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """
-        Impute missing values using parameter-based FCM method.
-        Each missing value is the weighted sum of all centroids
-        based on membership values.
+        Impute missing values using membership-weighted centroid combinations.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dataset to impute.
+
+        Returns
+        -------
+        X_imputed : pandas DataFrame of shape (n_samples, n_features)
+            Fully imputed dataset containing no missing values.
         """
 
         check_is_fitted(self, attributes=["centers_", "memberships_", "feature_names_in_"])
@@ -207,10 +303,55 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
     def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
         """
-        Fuzzy C-Means Rough Parameter-based imputer.
-        
-        Each missing value is imputed using information from the 
-        lower or upper approximation of the nearest fuzzy cluster.
+        Rough Fuzzy C-Means parameter-based imputer.
+
+        Missing values are imputed using the lower or upper approximation of the
+        nearest rough cluster generated from FCM memberships, enabling robust
+        handling of objects in boundary regions.
+
+        Parameters
+        ----------
+        n_clusters : {int, None}, default=None
+            Number of fuzzy clusters used by the IIFCM algorithm.
+            Must be an integer >= 1, or None to enable automatic selection.
+
+        m : {int, float}, default=2.0
+            Fuzzification exponent controlling cluster softness.
+            Must be > 1.
+
+        max_iter : int, default=100
+            Maximum number of iterations used by the FCM clustering algorithm.
+            Must be > 1.
+
+        tol : {int, float}, default=1e-5
+            Convergence tolerance for stopping IIFCM updates.
+            Must be > 0.
+
+        wl : {int, float},  default=0.6
+            Weight assigned to the lower approximation during centroid updates.
+            Must be in range (0, 1].
+
+        wb : {int, float},  default=0.4
+            Weight assigned to the boundary region.
+            Must be in range [0, 1].
+
+        tau : {int, float},  default=0.5
+            Threshold controlling assignment of samples to boundary sets.
+            Must be >= 0.
+
+        random_state : {int, None}, default=None
+            Seed for reproducibility of internal stochastic components.
+            If None, randomness is not fixed.
+
+        Attributes
+        ----------
+
+
+        Examples
+        --------
+        >>> imputer = FCMRoughParameterImputer(n_clusters=4)
+        >>> imputer.fit(X_train)
+        >>> X_filled = imputer.transform(X_test)
         """
         validate_params({
             'n_clusters': n_clusters,
@@ -234,7 +375,21 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y=None):
         """
-        Fit the imputer on complete data.
+        Fit the imputer by computing FCM clusters and refining them
+        using Rough K-Means to obtain lower and upper cluster approximations.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input dataset to fit the imputer.
+
+        y : None, default=None
+            Ignored. Included for compatibility with scikit-learn.
+
+        Returns
+        -------
+        self : FCMParameterImputer
+            Fitted imputer ready for transformation.
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
@@ -275,7 +430,17 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """
-        Impute missing values using rough parameter-based FCM method.
+        Impute missing values using rough cluster approximations.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dataset to impute.
+
+        Returns
+        -------
+        X_imputed : pandas DataFrame of shape (n_samples, n_features)
+            Fully imputed dataset containing no missing values.
         """
 
         check_is_fitted(self, attributes=["centers_", "memberships_", "clusters_", "feature_names_in_"])
@@ -820,8 +985,8 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         Examples
         --------
         >>> imputer = FCMInterpolationIterativeImputer(n_clusters=4, sigma=True)
-        >>> imputer.fit(X)
-        >>> X_imputed = imputer.transform(X)
+        >>> imputer.fit(X_train)
+        >>> X_filled = imputer.transform(X_test)
         """
 
         validate_params({

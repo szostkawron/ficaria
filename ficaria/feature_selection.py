@@ -22,21 +22,24 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
     ----------
     n_features : int, default=3
         Number of features to keep in the transformed dataset.
-        Must be a positive integer and `n_features <= max_features`.
+        Must be >= 1 and `n_features <= max_features`.
 
-    eps : float, default=0.5
+    eps : {int, float}, default=0.5
         Normalization factor controlling the fuzzy neighbourhood radius
         for numeric features. Must be strictly positive.
+        Must be > 0.
 
     max_features : int, default=10
         Maximum number of features that FIGFS is allowed to consider
-        during the iterative selection process. Must be positive.
+        during the iterative selection process.
+        Must be >= 1.
 
     sigma : int, default=10
         Percentile threshold used in the extended FIGFS mode to
-        control similarity and redundancy pruning. Must be in [1, 100].
+        control similarity and redundancy pruning.
+        Must be in range[1, 100].
 
-    random_state : int or None, default=None
+    random_state : {int, None}, default=None
         Seed for reproducibility of internal stochastic components.
         If None, randomness is not fixed.
 
@@ -118,13 +121,10 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Input feature matrix. Can be a pandas DataFrame, NumPy array,
-            or any structure convertible to a DataFrame. Must not contain NaN
-            values. Columns can be numeric or categorical.
+            Input dataset to fit the selector.
 
         y : array-like of shape (n_samples,), default=None
-            Target feature. Accepts pandas Series, NumPy arrays, or single-column
-            DataFrames. If None, an unsupervised mode is used where all samples
+            Target feature. If None, an unsupervised mode is used where all samples
             are assigned to a single dummy class.
 
         Returns
@@ -188,8 +188,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         ----------
         X : array-like of shape (n_samples, n_features)
             Input dataset. Must contain the same columns and feature order
-            as the data used during `fit()`. Missing or reordered columns
-            will raise an error.
+            as the data used during `fit()`.
 
         Returns
         -------
@@ -585,13 +584,55 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 # --------------------------------------
 class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
     """
-        Initialize the WeightedFuzzyRoughSelector with selection and similarity parameters.
+    Feature selector based on weighted fuzzy-rough sets and density-based sample selection.
 
-        Parameters:
-            n_features (int): number of features to retain after selection
-            alpha (float): smoothing parameter used in the fuzzy similarity kernel
-            k (int): number of nearest neighbors used in the density estimation process
-        """
+    This estimator computes fuzzy similarity relations for individual features
+    and feature subsets using a hybrid distance measure, evaluates relevance
+    and redundancy, computes feature weights, and builds a greedy weighted
+    feature ranking. It supports numerical, categorical, and mixed data, as
+    well as missing values, and incorporates a density-based region H to
+    improve robustness to noise and outliers.
+
+    Parameters
+    ----------
+    n_features : int
+        Number of top-ranked features to retain after selection.
+        Must be >= 1.
+
+    alpha : {int, float}, default=0.5
+        Smoothing parameter used in the fuzzy similarity kernel
+        Must be in range (0, 1].
+
+    k : int, default=5
+        Number of nearest neighbors used during density estimation.
+        Must be > 1.
+
+    Attributes
+    ----------
+    W_ : ndarray of shape (n_features_total, n_features_total)
+        Final diagonal weight matrix computed from normalized feature weights.
+
+    selected_features_ : list of int
+        Indices of selected features (after transform).
+
+    feature_importances_ : pd.DataFrame
+        Sorted feature ranking containing original feature names and importance scores.
+
+    feature_sequence_ : list of int
+        Full greedy ranking of all features produced during fit.
+
+    distance_cache_ : dict
+        Cache storing computed pairwise distance matrices to avoid recomputation.
+
+    Rw_ : ndarray of shape (n_features_total, n_features_total)
+        Diagonal matrix representing weighted feature relevance after logistic scaling.
+
+    Examples
+    --------
+    >>> selector = WeightedFuzzyRoughSelector(n_features=5)
+    >>> selector.fit(X_train, y_train)
+    >>> X_reduced = selector.transform(X_test)
+    """
 
     def __init__(self, n_features, alpha=0.5, k=5):
 
@@ -618,11 +659,20 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def fit(self, X, y):
         """
-        Fit the feature selector by computing relevance, redundancy, and weighted feature ranking.
+        Fit the fuzzy-rough feature selector on the input dataset.
 
-        Parameters:
-            X (pd.DataFrame): input dataset containing all features
-            y (array-like): target labels corresponding to each sample in X
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features_original)
+            Input dataset to fit the selector.
+
+        y : array-like of shape (n_samples,)
+            Target class labels.
+
+        Returns
+        -------
+        self : WeightedFuzzyRoughSelector
+            Fitted selector ready for feature transformation.
         """
 
         if self.n_features > X.shape[1]:
@@ -667,10 +717,17 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """
-        Transform X by retaining only the top-ranked n_features selected during fitting.
+        Reduce the input dataset to the top `n_features` selected during fitting.
 
-        Parameters:
-            X (pd.DataFrame): input dataset with the same columns as seen during fit
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features_original)
+            Input dataset containing the same columns and order as during `fit`.
+
+        Returns
+        -------
+        X_transformed : pd.DataFrame of shape (n_samples, n_features)
+            Dataset restricted to the highest-ranked features.
         """
 
         check_is_fitted(self,
