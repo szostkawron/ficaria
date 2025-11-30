@@ -711,8 +711,6 @@ def test_liiifcm_reproducibility(X):
         alpha=2.0,
         max_iter=50,
         tol=1e-4,
-        max_outer_iter=5,
-        stop_threshold=0.01,
         sigma=False,
         random_state=42
     )
@@ -740,8 +738,6 @@ def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_
         alpha=alpha,
         max_iter=max_iter,
         tol=tol,
-        max_outer_iter=max_outer_iter,
-        stop_threshold=stop_threshold,
         sigma=sigma
     )
 
@@ -750,9 +746,7 @@ def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_
     assert imputer.alpha == alpha
     assert imputer.max_iter == max_iter
     assert imputer.tol == tol
-    assert imputer.max_outer_iter == max_outer_iter
-    assert imputer.stop_threshold == stop_threshold
-    assert imputer.sigma == sigma
+    assert imputer.is_sigma == sigma
 
 
 @pytest.mark.parametrize(
@@ -799,15 +793,18 @@ def test_liiifcm_fit_transform(X):
     pd.DataFrame({'a': [0.1, 0.5, 0.9], 'b': [0.2, 0.4, 0.8]}),
 ])
 def test_liiifcm_ifcm_output_shapes(X):
-    imputer = FCMInterpolationIterativeImputer()
+    imputer = FCMInterpolationIterativeImputer(n_clusters=3)
     imputer.fit(X)
-    U_star, V_star, J_history = imputer._ifcm(X)
-    assert isinstance(U_star, np.ndarray)
-    assert isinstance(V_star, np.ndarray)
-    assert isinstance(J_history, list)
-    assert U_star.shape[1] == imputer.n_clusters
-    assert V_star.shape[0] == imputer.n_clusters
-    assert V_star.shape[1] == X.shape[1]
+
+    data = X.to_numpy()
+    _, incomplete = split_complete_incomplete(X)
+    missing_mask = X.isna().to_numpy()
+
+    centers = imputer._ifcm(data, incomplete, missing_mask)
+
+    assert isinstance(centers, np.ndarray)
+    assert centers.shape[0] == imputer.n_clusters
+    assert centers.shape[1] == X.shape[1]  
 
 
 def test_liiifcm_transform_fails_on_different_columns():
@@ -822,21 +819,6 @@ def test_liiifcm_transform_fails_on_different_columns():
             raise ValueError("Columns of input DataFrame differ from those used in fit")
         imputer.transform(X_transform)
 
-
-def test_liiifcm_ifcm_j_history_validity():
-    X = pd.DataFrame({
-        'a': [0.1, 0.2, 0.3],
-        'b': [0.4, 0.5, 0.6]
-    })
-    imputer = FCMInterpolationIterativeImputer(max_iter=10, random_state=42)
-    imputer.fit(X)
-    U_star, V_star, J_history = imputer._ifcm(X)
-
-    assert isinstance(J_history, list), "J_history should be a list"
-    assert len(J_history) > 0, "J_history should not be empty"
-    assert len(J_history) <= imputer.max_iter, "J_history length should not exceed max_iter"
-    assert all(isinstance(j, (float, np.floating)) for j in J_history), "J_history elements should be floats"
-    assert np.all(np.isfinite(J_history)), "J_history should not contain NaN or inf values"
 
 
 # ----- FCMDTIterativeImputer ---------------------------------------

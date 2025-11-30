@@ -928,8 +928,9 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
 class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
-    def __init__(self, n_clusters=None, m=2.0, max_iter=100, max_outer_iter=20, alpha=2.0, tol=1e-5,
-                 stop_threshold=0.01, sigma=False, random_state=None):
+    def __init__(self, n_clusters=None, m=2.0, max_iter=100, alpha=0.85, tol=1e-5,
+                 sigma=False, random_state=None):
+        
         """
         Linear-Interpolation Intuitionistic Fuzzy C-Means Iterative Imputer (LI-IIFCM).
 
@@ -953,22 +954,13 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             Maximum iteration count for the internal IIFCM optimization loop.
             Must be > 1.
 
-        max_outer_iter : int, default=20
-            Maximum number of imputation refinement iterations.
-            Must be > 1.
-
-        alpha : {int, float}, default=2.0
+        alpha : {int, float}, default=0.85
             Parameter controlling hesitation in intuitionistic fuzzification.
             Must be > 0.
 
         tol : {int, float}, default=1e-5
             Convergence tolerance for stopping IIFCM updates.
             Must be > 0.
-
-        stop_threshold : {int, float}, default=0.01
-            Threshold for the average relative change in re-estimated missing values
-            used to determine convergence of the outer loop.
-            Must be >= 0.
 
         sigma : bool, default=False
             If True, applies the IFCM-σ distance metric with adaptive variance scaling.
@@ -982,6 +974,13 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         columns_ : list of str
             Column names of the fitted input dataset.
 
+        centers_ : ndarray of shape (n_clusters, n_features)
+            Learned cluster obtained after convergence of the IIFCM algorithm.
+
+        sigma_ : ndarray of shape (n_clusters, n_features) or None
+            Adaptive, feature-wise variance estimates for each cluster,
+            used only when `sigma=True`.
+
         Examples
         --------
         >>> imputer = FCMInterpolationIterativeImputer(n_clusters=4, sigma=True)
@@ -993,9 +992,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             'n_clusters': n_clusters,
             'm': m,
             'max_iter': max_iter,
-            'max_outer_iter': max_outer_iter,
             'tol': tol,
-            'stop_threshold': stop_threshold,
             'random_state': random_state
         })
 
@@ -1012,9 +1009,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         self.alpha = alpha
         self.max_iter = max_iter
         self.tol = tol
-        self.max_outer_iter = max_outer_iter
-        self.stop_threshold = stop_threshold
-        self.sigma = sigma
+        self.is_sigma = sigma
         self.random_state = random_state
 
     def fit(self, X, y=None):
@@ -1037,12 +1032,22 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
         X = check_input_dataset(X, require_numeric=True, no_nan_columns=True)
         self.columns_ = X.columns
-        complete, _ = split_complete_incomplete(X)
+        complete, incomplete = split_complete_incomplete(X)
 
         if self.n_clusters is None:
             self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
                                                           max_iter=self.max_iter, tol=self.tol)
+    
+        X_filled = X.copy()
+        X_filled = X_filled.interpolate(method='linear', axis=0, limit_direction='both')
+
+        data = X_filled.to_numpy().copy()
+
+        missing_mask = X.isna().values
+        self.centers_ = self._ifcm(data, incomplete, missing_mask)
+
         return self
+
 
     def transform(self, X):
         """
@@ -1056,44 +1061,47 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
         Returns
         -------
-        X_filled : pandas DataFrame of shape (n_samples, n_features)
+        X_imputed : pandas DataFrame of shape (n_samples, n_features)
             Fully imputed dataset containing no missing values.
         """
         check_is_fitted(self, attributes=["columns_"])
 
-        X = check_input_dataset(X)
+        X = check_input_dataset(X, require_numeric=True)
 
         if list(X.columns) != list(self.columns_):
             raise ValueError(f"X.columns must match the columns seen during fit {list(self.columns_)}, "
                              f"got {list(X.columns)} instead")
 
-        missing_mask = X.isnull().reset_index(drop=True)
-        X_filled = X.interpolate(method='linear', limit_direction='both').reset_index(drop=True)
+        _, incomplete = split_complete_incomplete(X)
 
-        for _ in range(self.max_outer_iter):
-            U_star, V_star, _ = self._ifcm(X_filled)
+        if incomplete.empty:
+            return X
 
-            X_new = X_filled.copy()
-            for i in range(X_filled.shape[0]):
-                for j in range(X_filled.shape[1]):
-                    if missing_mask.iloc[i, j]:
-                        X_new.iloc[i, j] = np.sum(U_star[i, :] * V_star[:, j])
+        X_imputed = X.copy()
 
-            diff = np.abs(X_new - X_filled)
-            rel_diff = diff / (np.abs(X_filled) + 1e-10)
-            if missing_mask.values.any():
-                AvgV = rel_diff[missing_mask].mean().mean()
-            else:
-                AvgV = 0
+        for idx, row in incomplete.iterrows():
+            distances = []
 
-            if AvgV <= self.stop_threshold:
-                return X_new
+            for j, center in enumerate(self.centers_):
+                mask = ~np.isnan(row.values)
+                if self.is_sigma:
+                    sigma_j = self.sigma_[j][mask]
+                    diff = row.values[mask] - center[mask]
+                    distances.append(np.sqrt(np.sum((diff**2)/(sigma_j+1e-10))))
+                else:
+                    distances.append(np.linalg.norm(row.values[mask] - center[mask]))
 
-            X_filled = X_new.copy()
+            nearest_idx = np.argmin(distances)
+            nearest_center = self.centers_[nearest_idx]
 
-        return X_filled
+            missing_cols = row[row.isna()].index
+            for col in missing_cols:
+                X_imputed.at[idx, col] = nearest_center[X.columns.get_loc(col)]
 
-    def _ifcm(self, data):
+        return X_imputed
+
+
+    def _ifcm(self, data, incomplete, missing_mask):
         """
         Method implementing Intuitionistic Fuzzy C-Means clustering.
         Optionally applies weighted distance metric (IFCM-σ) if sigma=True.
@@ -1103,68 +1111,64 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         data : np.ndarray or pd.DataFrame
             Numeric data without missing values.
 
+        incomplete : pandas.DataFrame
+            Subset of the original dataset containing only the rows that had missing
+            values before interpolation.
+
+        missing_mask : np.ndarray of shape (n_samples, n_features)
+            Boolean mask indicating original missing-value in the dataset.
+
         Returns
         -------
-        U_star : np.ndarray
-            Adjusted membership matrix after applying intuitionistic correction.
-        V_star : np.ndarray
-            Cluster prototype (centroid) matrix after optimization.
-        J_history : list of float
-            Objective function values for each iteration of the clustering process.
+        centers : ndarray of shape (n_clusters, n_features)
+            Estimated cluster after completing the iterative
+            IIFCM optimization loop.
         """
-        data = data.to_numpy()
-        N, F = data.shape
 
-        rng = np.random.RandomState(self.random_state)
-        U = rng.rand(N, self.n_clusters)
-        U = U / np.sum(U, axis=1, keepdims=True)
-        J_history = []
+        n_samples, n_features = data.shape
 
-        sigma_val = 1.0
-        if isinstance(self.sigma, (int, float)):
-            sigma_val = float(self.sigma)
+        rng = np.random.default_rng(self.random_state)
+        u = rng.random((n_samples, self.n_clusters))
+        u = u / np.sum(u, axis=1, keepdims=True)
 
         for _ in range(self.max_iter):
-            eta = 1 - U - (1 - U ** self.alpha) ** (1 / self.alpha)
-            eta = np.clip(eta, 0, 1)
+            n = 1 - u - (1 - u) ** (1 / self.alpha)
+            u_star = u + n
+            uv = u_star ** self.m
 
-            U_star = U + eta
+            centers = (uv.T @ data) / np.sum(uv.T, axis=1)[:, None]
+            dist = np.zeros((n_samples, self.n_clusters))
 
-            V_star = np.zeros((self.n_clusters, F))
-            for j in range(self.n_clusters):
-                numerator = np.sum(U_star[:, j][:, None] * data, axis=0)
-                denominator = np.sum(U_star[:, j])
-                V_star[j] = numerator / (denominator + 1e-10)
-
-            dist = np.zeros((N, self.n_clusters))
-            for i in range(N):
+            if self.is_sigma:
+                sigma = np.zeros((self.n_clusters, n_features))
                 for j in range(self.n_clusters):
-                    diff = np.linalg.norm(data[i] - V_star[j])
-                    if self.sigma:
-                        D2 = diff ** 2
-                        sim = np.exp(-D2 / (2 * sigma_val ** 2))
-                        diff = 1 - sim
+                    u_m = uv[:, j]
+                    diff = data - centers[j]
+                    sigma[j] = np.sum(u_m[:, None] * diff**2, axis=0) / np.sum(u_m)
 
-                    dist[i, j] = diff
+            for j in range(self.n_clusters):
+                if self.is_sigma:
+                    dist[:, j] = np.sqrt(np.sum(((data - centers[j])**2) / (sigma[j] + 1e-10), axis=1))
+                else:
+                    dist[:, j] = np.linalg.norm(data - centers[j], axis=1)
             dist = np.fmax(dist, 1e-10)
 
-            new_U = np.zeros_like(U)
-            for i in range(N):
-                for j in range(self.n_clusters):
-                    denom = np.sum((dist[i, j] / dist[i, :]) ** (2 / (self.m - 1)))
-                    new_U[i, j] = 1.0 / denom if denom != 0 else 0
+            u = 1 / np.sum((dist[:, :, None] / dist[:, None, :]) ** (2 / (self.m - 1)), axis=2)
 
-            J1 = np.sum((U_star ** self.m) * (dist ** 2))
-            J2 = np.sum(np.mean(eta, axis=0) * np.exp(1 - np.mean(eta, axis=0)))
-            J_ifcm = J1 + J2
-            J_history.append(J_ifcm)
+            prior = data.copy()
+            for idx in incomplete.index:
+                missing_cols = np.where(missing_mask[idx])[0]
+                for j in missing_cols:
+                    data[idx, j] = np.sum(u[idx] * centers[:, j]) / np.sum(u[idx])
 
-            if np.linalg.norm(new_U - U) < self.tol:
+            diff = np.abs(data[incomplete.index] - prior[incomplete.index])
+            avgV = np.nanmean(diff)
+
+            if avgV <= self.tol:
                 break
 
-            U = new_U.copy()
-
-        return U_star, V_star, J_history
+        self.sigma_ = sigma if self.is_sigma else None
+        return centers
 
 
 # --------------------------------------
