@@ -819,6 +819,30 @@ def test_liiifcm_transform_fails_on_different_columns():
             raise ValueError("Columns of input DataFrame differ from those used in fit")
         imputer.transform(X_transform)
 
+def test_sigma_false():
+    X = pd.DataFrame({
+        'a': [0.1, 0.5, np.nan],
+        'b': [0.2, np.nan, 0.8]
+    })
+    imputer = FCMInterpolationIterativeImputer(n_clusters=2, sigma=False, random_state=0)
+    imputer.fit(X)
+
+    assert imputer.sigma_ is None, "sigma_ powinno być None, gdy sigma=False"
+
+
+def test_sigma_true():
+    X = pd.DataFrame({
+        'a': [0.1, 0.5, np.nan],
+        'b': [0.2, np.nan, 0.8]
+    })
+    imputer = FCMInterpolationIterativeImputer(n_clusters=2, sigma=True, random_state=0)
+    imputer.fit(X)
+
+    assert imputer.sigma_ is not None, "sigma+ cannot be None when sigma=True"
+    assert isinstance(imputer.sigma_, np.ndarray), "sigma_ must be numpy array"
+    assert imputer.sigma_.shape == (2, X.shape[1]), \
+        "sigma_ should have dimensions (n_clusters, n_features)"
+
 
 
 # ----- FCMDTIterativeImputer ---------------------------------------

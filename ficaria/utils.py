@@ -120,13 +120,6 @@ def validate_params(params):
         if max_II_iter <= 1:
             raise ValueError(f"max_II_iter must be > 1, got {max_II_iter} instead")
 
-    if 'max_outer_iter' in params:
-        max_outer_iter = params['max_outer_iter']
-        if not isinstance(max_outer_iter, int):
-            raise TypeError(f"max_outer_iter must be int, got {type(max_outer_iter).__name__} instead")
-        if max_outer_iter < 1:
-            raise ValueError(f"max_outer_iter must be >= 1, got {max_outer_iter} instead")
-
     if 'max_k' in params:
         max_k = params['max_k']
         if not isinstance(max_k, int):
