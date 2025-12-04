@@ -1,8 +1,7 @@
-from typing import Optional
-
 import numpy as np
 import pandas as pd
 from kneed import KneeLocator
+from scipy.spatial.distance import cdist
 
 
 def split_complete_incomplete(X: pd.DataFrame):
@@ -84,14 +83,6 @@ def validate_params(params):
     Raises:
         TypeError, ValueError: If any parameter is invalid.
     """
-
-    if 'n_clusters' in params:
-        n_clusters = params['n_clusters']
-        if n_clusters is not None and not isinstance(n_clusters, int):
-            raise TypeError(f"n_clusters must be int or None, got {type(n_clusters).__name__} instead")
-        if isinstance(n_clusters, int) and n_clusters < 1:
-            raise ValueError(f"n_clusters must be >= 1, got {n_clusters} instead")
-
     if 'max_clusters' in params:
         max_clusters = params['max_clusters']
         if not isinstance(max_clusters, int):
@@ -300,7 +291,7 @@ def fcm_predict(X_new, centers, m=2.0):
     return u_new
 
 
-def compute_fcm_objective(X: np.ndarray, centers: np.ndarray, u: np.ndarray, m: float = 2):
+def compute_fcm_objective(X, centers, u, m=2):
     """
     Compute the fuzzy c-means objective function value.
 
@@ -313,20 +304,11 @@ def compute_fcm_objective(X: np.ndarray, centers: np.ndarray, u: np.ndarray, m: 
     Returns:
         float: Value of the fuzzy c-means objective function.
     """
-    centers = np.array(centers)
-
-    dist_sq = np.zeros((X.shape[0], centers.shape[0]))
-    for j in range(centers.shape[0]):
-        diff = X - centers[j]
-        dist_sq[:, j] = np.sum(diff ** 2, axis=1)
-
-    obj = np.sum((u ** m) * dist_sq)
-    return obj
+    dist_sq = cdist(X, centers, metric='sqeuclidean')
+    return np.sum((u ** m) * dist_sq)
 
 
-def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters: int = 2, max_clusters: int = 10,
-                                random_state: Optional[int] = None, m: float = 2, max_iter: int = 100,
-                                tol: float = 1e-5):
+def find_optimal_clusters_fuzzy(X, min_clusters=2, max_clusters=10, random_state=None, m=2, max_iter=100, tol=1e-5):
     """
     Elbow method for fuzzy C-means with missing data imputation and objective function calculation.
 
@@ -347,13 +329,12 @@ def find_optimal_clusters_fuzzy(X: pd.DataFrame, min_clusters: int = 2, max_clus
     k_values = list(range(min_clusters, max_clusters + 1))
 
     sample_size = min(len(X), 10000)
-    X_sampled = X.sample(n=sample_size, random_state=random_state)
+    X_sampled = X.sample(n=sample_size, random_state=random_state).to_numpy()
 
     for k in k_values:
-        centers, u = fuzzy_c_means(X_sampled.values, n_clusters=k, m=m, random_state=random_state, max_iter=max_iter,
-                                   tol=tol)
+        centers, u = fuzzy_c_means(X_sampled, n_clusters=k, m=m, random_state=random_state, max_iter=max_iter, tol=tol)
 
-        obj = compute_fcm_objective(X_sampled.to_numpy(), centers, u, m)
+        obj = compute_fcm_objective(X_sampled, centers, u, m)
         objective_values.append(obj)
 
     kl = KneeLocator(k_values, objective_values, curve="convex", direction="decreasing")
