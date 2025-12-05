@@ -1,6 +1,8 @@
+import warnings
+from collections import defaultdict
+
 import numpy as np
 import pandas as pd
-from scipy.spatial.distance import cdist
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.experimental import enable_iterative_imputer
 from sklearn.impute import IterativeImputer, SimpleImputer
@@ -14,7 +16,7 @@ from .utils import *
 # FCMCentroidImputer
 # --------------------------------------
 class FCMCentroidImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, random_state=None):
+    def __init__(self, n_clusters=5, m=2.0, max_iter=100, tol=1e-5, random_state=None):
         """"
         Fuzzy C-Means centroid-based imputer.
 
@@ -24,9 +26,9 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        n_clusters : {int, None}, default=None
+        n_clusters : int, default=5
             Number of fuzzy clusters used by the IIFCM algorithm.
-            Must be an integer >= 1, or None to enable automatic selection.
+            Must be an integer >= 1.
 
         m : {int, float}, default=2.0
             Fuzzification exponent controlling cluster softness.
@@ -56,12 +58,16 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
 
         validate_params({
-            'n_clusters': n_clusters,
             'm': m,
             'max_iter': max_iter,
             'tol': tol,
             'random_state': random_state
         })
+
+        if not isinstance(n_clusters, int):
+            raise TypeError(f"n_clusters must be int, got {type(n_clusters).__name__} instead")
+        if isinstance(n_clusters, int) and n_clusters < 1:
+            raise ValueError(f"n_clusters must be >= 1, got {n_clusters} instead")
 
         self.n_clusters = n_clusters
         self.m = m
@@ -88,11 +94,6 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
-
-        if self.n_clusters is None:
-            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
-                                                          max_iter=self.max_iter, tol=self.tol,
-                                                          max_clusters=len(complete))
 
         if self.n_clusters > len(complete):
             raise ValueError(
@@ -156,7 +157,7 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 # FCMParameterImputer
 # --------------------------------------
 class FCMParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, random_state=None):
+    def __init__(self, n_clusters=5, m=2.0, max_iter=100, tol=1e-5, random_state=None):
         """
         Fuzzy C-Means parameter-based imputer.
 
@@ -165,9 +166,9 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        n_clusters : {int, None}, default=None
+        n_clusters : int, default=5
             Number of fuzzy clusters used by the IIFCM algorithm.
-            Must be an integer >= 1, or None to enable automatic selection.
+            Must be an integer >= 1.
 
         m : {int, float}, default=2.0
             Fuzzification exponent controlling cluster softness.
@@ -196,12 +197,16 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         >>> X_filled = imputer.transform(X_test)
         """
         validate_params({
-            'n_clusters': n_clusters,
             'm': m,
             'max_iter': max_iter,
             'tol': tol,
             'random_state': random_state
         })
+
+        if not isinstance(n_clusters, int):
+            raise TypeError(f"n_clusters must be int, got {type(n_clusters).__name__} instead")
+        if isinstance(n_clusters, int) and n_clusters < 1:
+            raise ValueError(f"n_clusters must be >= 1, got {n_clusters} instead")
 
         self.n_clusters = n_clusters
         self.m = m
@@ -228,10 +233,6 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
-
-        if self.n_clusters is None:
-            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
-                                                          max_iter=self.max_iter, tol=self.tol)
 
         if self.n_clusters > len(complete):
             raise ValueError(
@@ -301,7 +302,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 # --------------------------------------
 
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=None, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
+    def __init__(self, n_clusters=5, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
         """
         Rough Fuzzy C-Means parameter-based imputer.
 
@@ -311,9 +312,9 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        n_clusters : {int, None}, default=None
+        n_clusters : int, default=5
             Number of fuzzy clusters used by the IIFCM algorithm.
-            Must be an integer >= 1, or None to enable automatic selection.
+            Must be an integer >= 1.
 
         m : {int, float}, default=2.0
             Fuzzification exponent controlling cluster softness.
@@ -354,7 +355,6 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         >>> X_filled = imputer.transform(X_test)
         """
         validate_params({
-            'n_clusters': n_clusters,
             'm': m,
             'max_iter': max_iter,
             'tol': tol,
@@ -363,6 +363,11 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
             'tau': tau,
             'random_state': random_state
         })
+
+        if not isinstance(n_clusters, int):
+            raise TypeError(f"n_clusters must be int, got {type(n_clusters).__name__} instead")
+        if isinstance(n_clusters, int) and n_clusters < 1:
+            raise ValueError(f"n_clusters must be >= 1, got {n_clusters} instead")
 
         self.n_clusters = n_clusters
         self.m = m
@@ -393,10 +398,6 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         """
         X = check_input_dataset(X, require_numeric=True, require_complete_rows=True)
         complete, _ = split_complete_incomplete(X)
-
-        if self.n_clusters is None:
-            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
-                                                          max_iter=self.max_iter, tol=self.tol)
 
         if self.n_clusters > len(complete):
             raise ValueError(
@@ -613,7 +614,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         Maximum number of iterations allowed for the FCM algorithm.
         Must be >= 1.
 
-    max_II_iter : int, default=30
+    max_II_iter : int, default=80
         Maximum number of iterations for the iterative imputer.
         Must be > 1.
 
@@ -654,7 +655,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
     >>> X_filled = imputer.transform(X_test)
     """
 
-    def __init__(self, n_clusters=None, max_clusters=10, m=2, max_FCM_iter=100, max_II_iter=30, max_k=20, tol=1e-5,
+    def __init__(self, n_clusters=None, max_clusters=10, m=2, max_FCM_iter=100, max_II_iter=80, max_k=20, tol=1e-5,
                  random_state=None):
 
         validate_params({
@@ -667,6 +668,11 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             'tol': tol,
             'random_state': random_state
         })
+
+        if n_clusters is not None and not isinstance(n_clusters, int):
+            raise TypeError(f"n_clusters must be int or None, got {type(n_clusters).__name__} instead")
+        if isinstance(n_clusters, int) and n_clusters < 1:
+            raise ValueError(f"n_clusters must be >= 1, got {n_clusters} instead")
 
         self.n_clusters = n_clusters
         self.random_state = random_state
@@ -712,12 +718,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         self.np_rng_ = np.random.RandomState(self.random_state)
         np.random.seed(self.random_state)
 
-        self.centers_, self.u_ = fuzzy_c_means(
-            X_filled.values,
-            n_clusters=self.n_clusters,
-            m=self.m,
-            random_state=self.random_state,
-        )
+        self.centers_, self.u_ = fuzzy_c_means(X_filled.values, n_clusters=self.n_clusters, m=self.m,
+                                               max_iter=self.max_FCM_iter, tol=self.tol, random_state=self.random_state)
         return self
 
     def transform(self, X):
@@ -745,71 +747,49 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         X_imputed = self._FCKI_algorithm(X)
         return X_imputed
 
-    def _find_best_k(self, St, random_col, original_value):
+    def _find_best_k(self, St, random_col, original_value, distances):
         """
         Select the optimal number of neighbors (n_features) that minimizes RMSE
         when imputing a masked value in a selected column.
 
         Parameters:
-            St (pd.DataFrame): Data with last row partially masked.
+            St (np.ndarray): Data with last row partially masked.
             random_col (int): Index of the masked column.
             original_value (float): True value before masking.
+            distances (np.ndarray): Distances of xi to all other rows in St
 
         Returns:
             int: Best value of n_features.
         """
-        n = len(St)
+        n = St.shape[0]
         if n <= 1:
             return 1
 
-        xi = St.iloc[-1].to_numpy()
-        St_without_xi = St.iloc[:-1].to_numpy()
+        St_without_xi = St[:-1, :]
 
-        distances = [euclidean_distance(xi, row) for row in St_without_xi]
         sorted_indices = np.argsort(distances)
         sorted_rows = St_without_xi[sorted_indices]
 
         max_k = min(n - 1, self.max_k)
-        k_values = range(1, max_k + 1)
-        rmse_list = []
+        k_values = np.arange(1, max_k + 1)
 
-        for k in k_values:
-            top_k_rows = sorted_rows[:k]
-            col_values = top_k_rows[:, random_col]
-            col_values = col_values[~np.isnan(col_values)]
+        rmses = np.empty_like(k_values, dtype=float)
 
-            if len(col_values) > 0:
-                mean_value = np.mean(col_values)
-                rmse = np.sqrt((mean_value - original_value) ** 2)
+        for i, k in enumerate(k_values):
+            col_vals = sorted_rows[:k, random_col]
+            col_vals = col_vals[~np.isnan(col_vals)]
+
+            if col_vals.size == 0:
+                rmses[i] = np.inf
             else:
-                rmse = np.inf
-            rmse_list.append(rmse)
+                mean_value = col_vals.mean()
+                rmses[i] = np.abs(mean_value - original_value)
 
-        best_k = k_values[np.argmin(rmse_list)]
-        return best_k
+        best_k = int(k_values[np.argmin(rmses)])
 
-    def _get_neighbors(self, train, test_row, k):
-        """
-        Returns the n_features closest rows in `train` to `test_row`
-        using Euclidean distance (ignores NaNs).
+        knn_idx = sorted_indices[:best_k]
 
-        Parameters:
-            train (list[list[float]]): Training data.
-            test_row (list[float]): Query point.
-            k (int): Number of neighbors to return.
-        Returns:
-            list: Closest n_features rows from `train`.
-        """
-        test = np.array(test_row)
-        distances = list()
-        for train_row in train:
-            dist = np.sqrt(np.nansum((test - np.array(train_row)) ** 2))
-            distances.append((train_row, dist))
-        distances.sort(key=lambda tup: tup[1])
-        neighbors = list()
-        for i in range(k):
-            neighbors.append(distances[i][0])
-        return neighbors
+        return knn_idx
 
     def _KI_algorithm(self, X, X_train=None):
         """
@@ -825,6 +805,9 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
         X_incomplete_rows = X.copy()
         X_mis = X_incomplete_rows[X_incomplete_rows.isnull().any(axis=1)]
+
+        if len(X_mis) == 0:
+            return X
 
         if X_train is not None and not X.equals(X_train):
             X_safe = X.copy()
@@ -842,45 +825,51 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         mis_idx = X_mis.index.to_numpy()
         imputed_values = []
 
-        for idx in mis_idx:
-            xi = X_incomplete_rows.loc[idx]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=UserWarning)
 
-            A_mis = [col for col in X.columns if pd.isnull(xi[col])]
+            for idx in mis_idx:
+                xi = X_incomplete_rows.loc[idx]
 
-            P = all_data.dropna(subset=A_mis)
-            if P.empty:
-                raise ValueError(
-                    f"For any row with missing values, there must be at least one row where all "
-                    f"those columns are complete, got none for columns {list(A_mis)} instead")
+                A_mis = [col for col in X.columns if pd.isnull(xi[col])]
 
-            P_ext = np.vstack([P.to_numpy(), xi.to_numpy()])
+                P = all_data.dropna(subset=A_mis)
+                if P.empty:
+                    raise ValueError(
+                        f"For any row with missing values, there must be at least one row where all "
+                        f"those columns are complete, got none for columns {list(A_mis)} instead")
 
-            St = P_ext.copy()
-            St_Complete_Temp = St.copy()
+                P_ext = np.vstack([P.to_numpy(), xi.to_numpy()])
 
-            A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
-            AV = St_Complete_Temp[-1, A_r]
-            while np.isnan(AV):
+                St = P_ext.copy()
+                St_Complete_Temp = St.copy()
+
                 A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
                 AV = St_Complete_Temp[-1, A_r]
-            St[-1, A_r] = np.NaN
+                while np.isnan(AV):
+                    A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
+                    AV = St_Complete_Temp[-1, A_r]
+                St[-1, A_r] = np.NaN
 
-            k = self._find_best_k(pd.DataFrame(St, columns=X.columns), A_r, AV)
+                xi_np = St[-1]
+                St_without_xi = St[:-1]
 
-            xi_from_Pt = P_ext[-1, :].tolist()
-            Pt_without_xi = P_ext[:-1, :].tolist()
+                mask = ~np.isnan(St_without_xi) & ~np.isnan(xi_np)
+                diffs = np.where(mask, St_without_xi - xi_np, 0)
+                distances = np.sqrt(np.sum(diffs ** 2, axis=1))
 
-            neighbors_xi = self._get_neighbors(Pt_without_xi, xi_from_Pt, k)
-            S = np.vstack([neighbors_xi, xi.to_numpy()])
+                knn_idx = self._find_best_k(St, A_r, AV, distances)
+                neighbors_xi = P_ext[knn_idx, :]
+                S = np.vstack([neighbors_xi, xi.to_numpy()])
 
-            imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_II_iter)
-            S_filled_EM = imputer.fit_transform(S)
+                imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_II_iter)
+                S_filled_EM = imputer.fit_transform(S)
 
-            xi_imputed = S_filled_EM[-1, :]
-            imputed_values.append(xi_imputed)
+                xi_imputed = S_filled_EM[-1, :]
+                imputed_values.append(xi_imputed)
 
-            if idx in index_map:
-                all_data.iloc[index_map[idx]] = xi_imputed
+                if idx in index_map:
+                    all_data.iloc[index_map[idx]] = xi_imputed
 
         if imputed_values:
             X_incomplete_rows.loc[mis_idx, :] = np.vstack(imputed_values)
@@ -898,26 +887,27 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             np.ndarray: Imputed dataset.
         """
         X_filled = self.imputer_.transform(X)
-        X_filled = pd.DataFrame(data=X_filled, columns=X.columns, index=X.index)
-        membership_matrix = fcm_predict(X_filled.values, self.centers_, self.m)
+        membership_matrix = fcm_predict(X_filled, self.centers_, self.m)
+
         fcm_labels_train = self.u_.argmax(axis=1)
         fcm_labels_X = membership_matrix.argmax(axis=1)
 
-        all_clusters = pd.DataFrame(columns=X.columns)
+        imputed_clusters_list = []
 
         for i in range(self.n_clusters):
             cluster_train_i = self.X_train_[fcm_labels_train == i]
             cluster_X_i = X[fcm_labels_X == i]
             imputed_cluster_X_I = self._KI_algorithm(cluster_X_i, cluster_train_i)
+
             imputed_cluster_X_I = pd.DataFrame(imputed_cluster_X_I, columns=X.columns, index=cluster_X_i.index)
-            if len(all_clusters) == 0:
-                all_clusters = imputed_cluster_X_I
-            else:
-                all_clusters = pd.concat([all_clusters, imputed_cluster_X_I], axis=0)
+            imputed_clusters_list.append(imputed_cluster_X_I)
 
-        all_clusters = all_clusters.loc[~all_clusters.index.duplicated(keep='last')]
-
-        all_clusters.sort_index(inplace=True)
+        if imputed_clusters_list:
+            all_clusters = pd.concat(imputed_clusters_list, axis=0)
+            all_clusters = all_clusters.loc[~all_clusters.index.duplicated(keep='last')]
+            all_clusters.sort_index(inplace=True)
+        else:
+            all_clusters = X.copy()
 
         return all_clusters
 
@@ -928,9 +918,9 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
 class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
-    def __init__(self, n_clusters=None, m=2.0, max_iter=100, alpha=0.85, tol=1e-5,
+    def __init__(self, n_clusters=5, m=2.0, max_iter=100, alpha=0.85, tol=1e-5,
                  sigma=False, random_state=None):
-        
+
         """
         Linear-Interpolation Intuitionistic Fuzzy C-Means Iterative Imputer (LI-IIFCM).
 
@@ -942,9 +932,9 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
         Parameters
         ----------
-        n_clusters : {int, None}, default=None
+        n_clusters : int, default=5
             Number of fuzzy clusters used by the IIFCM algorithm.
-            Must be an integer >= 1, or None to enable automatic selection.
+            Must be an integer >= 1.
 
         m : {int, float}, default=2.0
             Fuzzification exponent controlling cluster softness.
@@ -989,12 +979,16 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         """
 
         validate_params({
-            'n_clusters': n_clusters,
             'm': m,
             'max_iter': max_iter,
             'tol': tol,
             'random_state': random_state
         })
+
+        if not isinstance(n_clusters, int):
+            raise TypeError(f"n_clusters must be int, got {type(n_clusters).__name__} instead")
+        if isinstance(n_clusters, int) and n_clusters < 1:
+            raise ValueError(f"n_clusters must be >= 1, got {n_clusters} instead")
 
         if not isinstance(alpha, (int, float)):
             raise TypeError(f"alpha must be int or float, got {type(alpha).__name__} instead")
@@ -1034,10 +1028,6 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         self.columns_ = X.columns
         complete, incomplete = split_complete_incomplete(X)
 
-        if self.n_clusters is None:
-            self.n_clusters = find_optimal_clusters_fuzzy(complete, random_state=self.random_state, m=self.m,
-                                                          max_iter=self.max_iter, tol=self.tol)
-    
         X_filled = X.copy()
         X_filled = X_filled.interpolate(method='linear', axis=0, limit_direction='both')
 
@@ -1047,7 +1037,6 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         self.centers_ = self._ifcm(data, incomplete, missing_mask)
 
         return self
-
 
     def transform(self, X):
         """
@@ -1087,7 +1076,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
                 if self.is_sigma:
                     sigma_j = self.sigma_[j][mask]
                     diff = row.values[mask] - center[mask]
-                    distances.append(np.sqrt(np.sum((diff**2)/(sigma_j+1e-10))))
+                    distances.append(np.sqrt(np.sum((diff ** 2) / (sigma_j + 1e-10))))
                 else:
                     distances.append(np.linalg.norm(row.values[mask] - center[mask]))
 
@@ -1099,7 +1088,6 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
                 X_imputed.at[idx, col] = nearest_center[X.columns.get_loc(col)]
 
         return X_imputed
-
 
     def _ifcm(self, data, incomplete, missing_mask):
         """
@@ -1144,11 +1132,11 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
                 for j in range(self.n_clusters):
                     u_m = uv[:, j]
                     diff = data - centers[j]
-                    sigma[j] = np.sum(u_m[:, None] * diff**2, axis=0) / np.sum(u_m)
+                    sigma[j] = np.sum(u_m[:, None] * diff ** 2, axis=0) / np.sum(u_m)
 
             for j in range(self.n_clusters):
                 if self.is_sigma:
-                    dist[:, j] = np.sqrt(np.sum(((data - centers[j])**2) / (sigma[j] + 1e-10), axis=1))
+                    dist[:, j] = np.sqrt(np.sum(((data - centers[j]) ** 2) / (sigma[j] + 1e-10), axis=1))
                 else:
                     dist[:, j] = np.linalg.norm(data - centers[j], axis=1)
             dist = np.fmax(dist, 1e-10)
@@ -1209,7 +1197,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         Convergence tolerance for fuzzy c-means.
         Must be > 0.
 
-    min_samples_leaf : int, default=3
+    min_samples_leaf : int, default=40
         Minimum samples per leaf in the decision tree regressors.
         Must be > 0
 
@@ -1256,7 +1244,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
     >>> X_filled = imputer.transform(X_test)
     """
 
-    def __init__(self, max_clusters=20, m=2, max_iter=100, max_FCM_iter=100, tol=1e-5, min_samples_leaf=3,
+    def __init__(self, max_clusters=20, m=2, max_iter=100, max_FCM_iter=100, tol=1e-5, min_samples_leaf=40,
                  learning_rate=0.1, stop_threshold=1.0, alpha=1.0, random_state=None):
 
         validate_params({
@@ -1367,11 +1355,13 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
         while AV > self.stop_threshold and count_iter < self.max_iter:
 
+            col_to_row_indices = defaultdict(list)
+
+            for (idx, col_idx), leaf in incomplete_leaf_indices_dict.items():
+                col_to_row_indices[col_idx].append(idx)
+
             for j in cols_with_nan:
-                leaf_for_j = [(idx, leaf_number) for (idx, j_key), leaf_number in
-                              incomplete_leaf_indices_dict.items()
-                              if j_key == j]
-                leaf_numbers = list(dict.fromkeys([leaf[0] for _, leaf in leaf_for_j]))
+                leaf_numbers = list(set(col_to_row_indices[j]))
 
                 for k in leaf_numbers:
                     imputed_X = self._improve_imputations_in_leaf(k, j, incomplete_leaf_indices_dict, imputed_X,
@@ -1398,54 +1388,42 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return opt_c
 
     def _fuzzy_silhouette(self, X, U, alpha=1.0):
-        X = pd.DataFrame(X)
-        only_numeric = all(pd.api.types.is_numeric_dtype(X[col]) for col in X.columns)
-
-        D = cdist(X.to_numpy().astype(float), X.to_numpy().astype(float), metric="euclidean")
-
+        X = np.asarray(X, dtype=float)
         N, C = U.shape
-        s = np.zeros(N)
+
+        D = cdist(X, X, metric="euclidean")
         cluster_labels = np.argmax(U, axis=1)
 
+        s = np.zeros(N)
         for j in range(N):
             cj = cluster_labels[j]
             in_cluster = (cluster_labels == cj)
             out_clusters = [k for k in range(C) if k != cj]
-            a_j = np.mean(D[j, in_cluster]) if np.sum(in_cluster) > 1 else 0
+
+            a_j = np.mean(D[j, in_cluster]) if in_cluster.sum() > 1 else 0
+
             mean_dists = []
             for k in out_clusters:
                 mask = (cluster_labels == k)
                 if np.any(mask):
                     mean_dists.append(np.mean(D[j, mask]))
+            b_j = np.min(mean_dists) if mean_dists else a_j
 
-            if len(mean_dists) > 0:
-                b_j = np.min(mean_dists)
-            else:
-                b_j = a_j
             s[j] = (b_j - a_j) / max(a_j, b_j) if max(a_j, b_j) > 0 else 0.0
+
         sorted_U = np.sort(U, axis=1)
         p = sorted_U[:, -1]
-        if U.shape[1] > 1:
-            q = sorted_U[:, -2]
-        else:
-            q = np.zeros_like(p)
-
+        q = sorted_U[:, -2] if C > 1 else np.zeros_like(p)
         weights = (p - q) ** alpha
-        FS = np.sum(weights * s) / np.sum(weights) if np.sum(weights) > 0 else 0.0
+
+        FS = (weights * s).sum() / weights.sum() if weights.sum() > 0 else 0.0
         return FS
 
     def _calculate_AV(self, new_df, old_df, mask_missing):
-        diffs = []
-        for col in new_df.columns:
-            mask_col = mask_missing[col]
-            diff = (new_df[col] - old_df[col]).abs()
-            diff = diff[mask_col]
-            diffs.append(diff)
-        all_diffs = pd.concat(diffs)
-        if len(all_diffs) == 0:
-            return 0.0
-        AV = all_diffs.mean()
-        return AV
+        diffs = (new_df - old_df).abs()
+        masked_diffs = diffs.where(mask_missing)
+        AV = masked_diffs.stack().mean()
+        return 0.0 if pd.isna(AV) else AV
 
     def _initial_imputation_DT(self, incomplete_X, cols_with_nan):
         incomplete_leaf_indices_dict = {}
@@ -1480,6 +1458,9 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         matching_indices = [idx for (idx, j_key), leaf_number in incomplete_leaf_indices_dict.items() if
                             j_key == j and (hasattr(leaf_number, "__iter__") and k in leaf_number)]
         records_in_leaf = pd.concat([complete_records_in_leaf, imputed_X.loc[matching_indices]])
+
+        if len(records_in_leaf) < 2:
+            return imputed_X
 
         n_clusters = self._determine_optimal_n_clusters_FSI(records_in_leaf, fcm_function)
         centers, u = fcm_function(records_in_leaf.to_numpy(), n_clusters, self.m, max_iter=self.max_FCM_iter,

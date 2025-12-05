@@ -61,9 +61,24 @@ def test_fcmcentroidimputer_init_parametrized(n_clusters, m, max_iter, tol):
     assert imputer.tol == tol
 
 
+@pytest.mark.parametrize(
+    "value, expected_exception, expected_msg", [
+        ("txt", TypeError, "n_clusters must be int, got"),
+        ([True], TypeError, "n_clusters must be int, got"),
+        ([[35]], TypeError, "n_clusters must be int, got"),
+        (None, TypeError, "n_clusters must be int, got"),
+        (3.5, TypeError, "n_clusters must be int, got"),
+        (0, ValueError, "n_clusters must be >= 1, got"),
+        (-4, ValueError, "n_clusters must be >= 1, got")
+    ])
+def test_fcmcentroidimputer_init_errors_nclusters(value, expected_exception, expected_msg):
+    with pytest.raises(expected_exception, match=expected_msg):
+        FCMCentroidImputer(n_clusters=value)
+
+
 def test_fcmcentroidimputer_fit_creates_attributes():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    imputer = FCMCentroidImputer()
+    imputer = FCMCentroidImputer(n_clusters=2)
     imputer.fit(X)
     assert hasattr(imputer, "centers_")
     assert hasattr(imputer, "memberships_")
@@ -97,7 +112,7 @@ def test_fcmcentroidimputer_transform_raises_if_columns_differ():
     X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
     X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
 
-    imputer = FCMCentroidImputer()
+    imputer = FCMCentroidImputer(n_clusters=2)
     imputer.fit(X_train)
 
     with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
@@ -106,7 +121,7 @@ def test_fcmcentroidimputer_transform_raises_if_columns_differ():
 
 @pytest.mark.parametrize("X", dataframes_list)
 def test_fcmcentroidimputer_transform_imputes_missing_values(X):
-    imputer = FCMCentroidImputer()
+    imputer = FCMCentroidImputer(n_clusters=2)
     imputer.fit(X.dropna())
     result = imputer.transform(X)
     assert not result.isna().any().any(), "Imputer should fill all missing values"
@@ -114,7 +129,7 @@ def test_fcmcentroidimputer_transform_imputes_missing_values(X):
 
 def test_fcmcentroidimputer_transform_no_missing_returns_same():
     X = pd.DataFrame({"a": [1.0, 2.0, 2.0], "b": [3.0, 4.0, 4.0]})
-    imputer = FCMCentroidImputer()
+    imputer = FCMCentroidImputer(n_clusters=2)
     imputer.fit(X)
     result = imputer.transform(X)
     pd.testing.assert_frame_equal(X, result)
@@ -139,11 +154,26 @@ def test_fcmcentroidimputer_fit_no_complete_rows():
 
 def test_fcmparameterimputer_fit_creates_attributes():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    imputer = FCMParameterImputer()
+    imputer = FCMParameterImputer(n_clusters=2)
     imputer.fit(X)
     assert hasattr(imputer, "centers_")
     assert hasattr(imputer, "memberships_")
     assert hasattr(imputer, "feature_names_in_")
+
+
+@pytest.mark.parametrize(
+    "value, expected_exception, expected_msg", [
+        ("txt", TypeError, "n_clusters must be int, got"),
+        ([True], TypeError, "n_clusters must be int, got"),
+        ([[35]], TypeError, "n_clusters must be int, got"),
+        (None, TypeError, "n_clusters must be int, got"),
+        (3.5, TypeError, "n_clusters must be int, got"),
+        (0, ValueError, "n_clusters must be >= 1, got"),
+        (-4, ValueError, "n_clusters must be >= 1, got")
+    ])
+def test_fcmparameterimputer_init_errors_nclusters(value, expected_exception, expected_msg):
+    with pytest.raises(expected_exception, match=expected_msg):
+        FCMParameterImputer(n_clusters=value)
 
 
 @pytest.mark.parametrize("X_train, X_test", [
@@ -163,7 +193,7 @@ def test_fcmparameterimputer_transform_single_row(X_train, X_test):
 
 @pytest.mark.parametrize("X", dataframes_list)
 def test_fcmparameterimputer_transform_imputes_values(X):
-    imputer = FCMParameterImputer()
+    imputer = FCMParameterImputer(n_clusters=2)
     imputer.fit(X.dropna())
     result = imputer.transform(X)
     assert not result.isna().any().any()
@@ -179,7 +209,7 @@ def test_fcmparameterimputer_fit_raises_if_too_many_clusters():
 def test_fcmparameterimputer_feature_names_in_assigned():
     X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
                       "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
-    imputer = FCMParameterImputer()
+    imputer = FCMParameterImputer(n_clusters=3)
     imputer.fit(X)
     assert list(imputer.feature_names_in_) == list(X.columns)
 
@@ -188,7 +218,7 @@ def test_fcmparameterimputer_transform_raises_if_columns_differ():
     X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
     X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
 
-    imputer = FCMParameterImputer()
+    imputer = FCMParameterImputer(n_clusters=2)
     imputer.fit(X_train)
 
     with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
@@ -207,11 +237,26 @@ def test_fcmparameterimputer_transform_raises_if_not_fitted():
 
 def test_fcmroughparameterimputer_fit_creates_clusters():
     X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    imputer = FCMRoughParameterImputer()
+    imputer = FCMRoughParameterImputer(n_clusters=2)
     imputer.fit(X)
     assert hasattr(imputer, "centers_")
     assert hasattr(imputer, "memberships_")
     assert hasattr(imputer, "clusters_")
+
+
+@pytest.mark.parametrize(
+    "value, expected_exception, expected_msg", [
+        ("txt", TypeError, "n_clusters must be int, got"),
+        ([True], TypeError, "n_clusters must be int, got"),
+        ([[35]], TypeError, "n_clusters must be int, got"),
+        (None, TypeError, "n_clusters must be int, got"),
+        (3.5, TypeError, "n_clusters must be int, got"),
+        (0, ValueError, "n_clusters must be >= 1, got"),
+        (-4, ValueError, "n_clusters must be >= 1, got")
+    ])
+def test_fcmroughparameterimputer_init_errors_nclusters(value, expected_exception, expected_msg):
+    with pytest.raises(expected_exception, match=expected_msg):
+        FCMRoughParameterImputer(n_clusters=value)
 
 
 @pytest.mark.parametrize("X_train, X_test", [
@@ -316,7 +361,7 @@ def test_rough_kmeans_from_fcm_cluster_consistency():
 
 # ----- FCMKIterativeImputer ---------------------------------------
 
-@pytest.mark.parametrize("St, random_col, original_value, max_k, random_state", [
+@pytest.mark.parametrize("St_df, random_col, original_value, max_k, random_state", [
     (
             pd.DataFrame({
                 'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
@@ -329,14 +374,30 @@ def test_rough_kmeans_from_fcm_cluster_consistency():
                 'income': [50000, 55000, 80000, 85000, 90000, 120000, np.nan]}),
             0, 125000, 15, 42)
 ])
-def test_fcmkiimputer_find_best_k(St, random_col, original_value, max_k, random_state):
+def test_fcmkiimputer_find_best_k(St_df, random_col, original_value, max_k, random_state):
+    St = St_df.to_numpy()
+
+    xi = St[-1]
+    St_without_xi = St[:-1]
+
+    mask = ~np.isnan(St_without_xi) & ~np.isnan(xi)
+    diffs = np.where(mask, St_without_xi - xi, 0)
+    distances = np.sqrt(np.sum(diffs ** 2, axis=1))
+
     imputer = FCMKIterativeImputer(random_state=random_state, max_k=max_k)
-    result1 = imputer._find_best_k(St, random_col, original_value)
-    result2 = imputer._find_best_k(St, random_col, original_value)
-    assert result1 == result2
-    assert isinstance(result1, int)
-    assert result1 > 0
-    assert result1 <= len(St)
+
+    result1 = imputer._find_best_k(St, random_col, original_value, distances)
+    result2 = imputer._find_best_k(St, random_col, original_value, distances)
+
+    np.testing.assert_array_equal(result1, result2)
+
+    assert isinstance(result1, np.ndarray)
+    assert result1.dtype.kind in ("i", "u")
+    assert len(result1) > 0
+    n_rows = St.shape[0]
+    for idx in result1:
+        assert 0 <= idx < n_rows - 1
+    assert len(result1) <= min(max_k, n_rows - 1)
 
 
 @pytest.mark.parametrize("X_train, X_test", [
@@ -352,27 +413,6 @@ def test_fcmkiimputer_transform_single_row(X_train, X_test):
     assert isinstance(result, pd.DataFrame)
     assert result.shape == X_test.shape
     assert result.isna().sum().sum() == 0
-
-
-@pytest.mark.parametrize("train, test_row, num_neighbors, expected, random_state", [
-    (
-            [[1, 2], [3, 4], [5, 6], [7, 8]], [1, 2],
-            2, [[1, 2], [3, 4]], 42
-    ),
-    (
-            [[1, 2], [3, 4], [5, 6], [7, 8]], [5, 6],
-            1, [[5, 6]], 123
-    ),
-    (
-            [[1, 2], [3, 4], [5, 6]], [2, 3],
-            2, [[1, 2], [3, 4]], 34
-    )
-])
-def test_fcmkiimputer_get_neighbors(train, test_row, num_neighbors, expected, random_state):
-    imputer = FCMKIterativeImputer(random_state=random_state)
-    result = imputer._get_neighbors(train, test_row, num_neighbors)
-    assert result == expected
-    assert len(result) == num_neighbors
 
 
 @pytest.mark.parametrize("X, random_state", [
@@ -516,6 +556,20 @@ def test_fcmkiimputer_init(random_state, max_clusters, m, max_FCM_iter, max_k, m
     assert max_k == max_k
     assert max_II_iter == max_II_iter
     assert n_clusters == n_clusters
+
+
+@pytest.mark.parametrize(
+    "value, expected_exception, expected_msg", [
+        ("txt", TypeError, "n_clusters must be int or None, got"),
+        ([True], TypeError, "n_clusters must be int or None, got"),
+        ([[35]], TypeError, "n_clusters must be int or None, got"),
+        (3.5, TypeError, "n_clusters must be int or None, got"),
+        (0, ValueError, "n_clusters must be >= 1, got"),
+        (-4, ValueError, "n_clusters must be >= 1, got")
+    ])
+def test_fcmkiimputer_init_errors_nclusters(value, expected_exception, expected_msg):
+    with pytest.raises(expected_exception, match=expected_msg):
+        FCMKIterativeImputer(n_clusters=value)
 
 
 @pytest.mark.parametrize("X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters", [
@@ -764,6 +818,21 @@ def test_liiifcm_init_errors_alpha(value, expected_exception, expected_msg):
 
 @pytest.mark.parametrize(
     "value, expected_exception, expected_msg", [
+        ("txt", TypeError, "n_clusters must be int, got"),
+        ([True], TypeError, "n_clusters must be int, got"),
+        ([[35]], TypeError, "n_clusters must be int, got"),
+        (None, TypeError, "n_clusters must be int, got"),
+        (3.5, TypeError, "n_clusters must be int, got"),
+        (0, ValueError, "n_clusters must be >= 1, got"),
+        (-4, ValueError, "n_clusters must be >= 1, got")
+    ])
+def test_liiifcm_init_errors_nclusters(value, expected_exception, expected_msg):
+    with pytest.raises(expected_exception, match=expected_msg):
+        FCMInterpolationIterativeImputer(n_clusters=value)
+
+
+@pytest.mark.parametrize(
+    "value, expected_exception, expected_msg", [
         ("txt", TypeError, "sigma must be bool, got"),
         ([True], TypeError, "sigma must be bool, got"),
         ([[35]], TypeError, "sigma must be bool, got"),
@@ -804,7 +873,7 @@ def test_liiifcm_ifcm_output_shapes(X):
 
     assert isinstance(centers, np.ndarray)
     assert centers.shape[0] == imputer.n_clusters
-    assert centers.shape[1] == X.shape[1]  
+    assert centers.shape[1] == X.shape[1]
 
 
 def test_liiifcm_transform_fails_on_different_columns():
@@ -818,6 +887,7 @@ def test_liiifcm_transform_fails_on_different_columns():
         if not all(X_transform.columns == imputer.columns_):
             raise ValueError("Columns of input DataFrame differ from those used in fit")
         imputer.transform(X_transform)
+
 
 def test_sigma_false():
     X = pd.DataFrame({
@@ -842,7 +912,6 @@ def test_sigma_true():
     assert isinstance(imputer.sigma_, np.ndarray), "sigma_ must be numpy array"
     assert imputer.sigma_.shape == (2, X.shape[1]), \
         "sigma_ should have dimensions (n_clusters, n_features)"
-
 
 
 # ----- FCMDTIterativeImputer ---------------------------------------

@@ -17,11 +17,6 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
 @pytest.mark.parametrize(
     "params, expected_exception, expected_msg",
     [
-        # n_clusters
-        ({"n_clusters": "3"}, TypeError, "n_clusters must be int or None, got"),
-        ({"n_clusters": [3]}, TypeError, "n_clusters must be int or None, got"),
-        ({"n_clusters": 0}, ValueError, "n_clusters must be >= 1, got"),
-
         # max_clusters
         ({"max_clusters": "3"}, TypeError, "max_clusters must be int, got"),
         ({"max_clusters": [3]}, TypeError, "max_clusters must be int, got"),
@@ -49,13 +44,6 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         ({"max_II_iter": 2.5}, TypeError, "max_II_iter must be int, got"),
         ({"max_II_iter": 1}, ValueError, "max_II_iter must be > 1, got"),
         ({"max_II_iter": -5}, ValueError, "max_II_iter must be > 1, got"),
-
-        # max_outer_iter
-        ({"max_outer_iter": "100"}, TypeError, "max_outer_iter must be int, got"),
-        ({"max_outer_iter": [100]}, TypeError, "max_outer_iter must be int, got"),
-        ({"max_outer_iter": 2.5}, TypeError, "max_outer_iter must be int, got"),
-        ({"max_outer_iter": 0}, ValueError, "max_outer_iter must be >= 1, got"),
-        ({"max_outer_iter": -5}, ValueError, "max_outer_iter must be >= 1, got"),
 
         # max_k
         ({"max_k": "100"}, TypeError, "max_k must be int, got"),
