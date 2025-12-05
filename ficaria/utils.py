@@ -4,7 +4,7 @@ from kneed import KneeLocator
 from scipy.spatial.distance import cdist
 
 
-def split_complete_incomplete(X: pd.DataFrame):
+def split_complete_incomplete(X):
     """
     Split the dataset into complete (no missing values) and incomplete (with missing values) objects.
     
@@ -208,7 +208,7 @@ def validate_params(params):
             raise ValueError(f"eps must be > 0, got {eps} instead")
 
 
-def euclidean_distance(a: np.ndarray, b: np.ndarray):
+def euclidean_distance(a, b):
     """
     Compute Euclidean distance between two vectors, ignoring NaNs.
     
@@ -222,8 +222,7 @@ def euclidean_distance(a: np.ndarray, b: np.ndarray):
     return np.linalg.norm(a[mask] - b[mask])
 
 
-def fuzzy_c_means(X: np.ndarray, n_clusters: int, m: float = 2.0, max_iter: int = 100, tol: float = 1e-5,
-                  random_state=None):
+def fuzzy_c_means(X, n_clusters, m=2.0, max_iter=100, tol=1e-5, random_state=None):
     """
     Fuzzy C-Means clustering algorithm.
 

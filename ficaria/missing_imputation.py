@@ -1,4 +1,5 @@
 import warnings
+from collections import defaultdict
 
 import numpy as np
 import pandas as pd
@@ -1196,7 +1197,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         Convergence tolerance for fuzzy c-means.
         Must be > 0.
 
-    min_samples_leaf : int, default=3
+    min_samples_leaf : int, default=40
         Minimum samples per leaf in the decision tree regressors.
         Must be > 0
 
@@ -1243,7 +1244,7 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
     >>> X_filled = imputer.transform(X_test)
     """
 
-    def __init__(self, max_clusters=20, m=2, max_iter=100, max_FCM_iter=100, tol=1e-5, min_samples_leaf=3,
+    def __init__(self, max_clusters=20, m=2, max_iter=100, max_FCM_iter=100, tol=1e-5, min_samples_leaf=40,
                  learning_rate=0.1, stop_threshold=1.0, alpha=1.0, random_state=None):
 
         validate_params({
@@ -1354,11 +1355,13 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
         while AV > self.stop_threshold and count_iter < self.max_iter:
 
+            col_to_row_indices = defaultdict(list)
+
+            for (idx, col_idx), leaf in incomplete_leaf_indices_dict.items():
+                col_to_row_indices[col_idx].append(idx)
+
             for j in cols_with_nan:
-                leaf_for_j = [(idx, leaf_number) for (idx, j_key), leaf_number in
-                              incomplete_leaf_indices_dict.items()
-                              if j_key == j]
-                leaf_numbers = list(dict.fromkeys([leaf[0] for _, leaf in leaf_for_j]))
+                leaf_numbers = list(set(col_to_row_indices[j]))
 
                 for k in leaf_numbers:
                     imputed_X = self._improve_imputations_in_leaf(k, j, incomplete_leaf_indices_dict, imputed_X,
@@ -1385,54 +1388,42 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return opt_c
 
     def _fuzzy_silhouette(self, X, U, alpha=1.0):
-        X = pd.DataFrame(X)
-        only_numeric = all(pd.api.types.is_numeric_dtype(X[col]) for col in X.columns)
-
-        D = cdist(X.to_numpy().astype(float), X.to_numpy().astype(float), metric="euclidean")
-
+        X = np.asarray(X, dtype=float)
         N, C = U.shape
-        s = np.zeros(N)
+
+        D = cdist(X, X, metric="euclidean")
         cluster_labels = np.argmax(U, axis=1)
 
+        s = np.zeros(N)
         for j in range(N):
             cj = cluster_labels[j]
             in_cluster = (cluster_labels == cj)
             out_clusters = [k for k in range(C) if k != cj]
-            a_j = np.mean(D[j, in_cluster]) if np.sum(in_cluster) > 1 else 0
+
+            a_j = np.mean(D[j, in_cluster]) if in_cluster.sum() > 1 else 0
+
             mean_dists = []
             for k in out_clusters:
                 mask = (cluster_labels == k)
                 if np.any(mask):
                     mean_dists.append(np.mean(D[j, mask]))
+            b_j = np.min(mean_dists) if mean_dists else a_j
 
-            if len(mean_dists) > 0:
-                b_j = np.min(mean_dists)
-            else:
-                b_j = a_j
             s[j] = (b_j - a_j) / max(a_j, b_j) if max(a_j, b_j) > 0 else 0.0
+
         sorted_U = np.sort(U, axis=1)
         p = sorted_U[:, -1]
-        if U.shape[1] > 1:
-            q = sorted_U[:, -2]
-        else:
-            q = np.zeros_like(p)
-
+        q = sorted_U[:, -2] if C > 1 else np.zeros_like(p)
         weights = (p - q) ** alpha
-        FS = np.sum(weights * s) / np.sum(weights) if np.sum(weights) > 0 else 0.0
+
+        FS = (weights * s).sum() / weights.sum() if weights.sum() > 0 else 0.0
         return FS
 
     def _calculate_AV(self, new_df, old_df, mask_missing):
-        diffs = []
-        for col in new_df.columns:
-            mask_col = mask_missing[col]
-            diff = (new_df[col] - old_df[col]).abs()
-            diff = diff[mask_col]
-            diffs.append(diff)
-        all_diffs = pd.concat(diffs)
-        if len(all_diffs) == 0:
-            return 0.0
-        AV = all_diffs.mean()
-        return AV
+        diffs = (new_df - old_df).abs()
+        masked_diffs = diffs.where(mask_missing)
+        AV = masked_diffs.stack().mean()
+        return 0.0 if pd.isna(AV) else AV
 
     def _initial_imputation_DT(self, incomplete_X, cols_with_nan):
         incomplete_leaf_indices_dict = {}
@@ -1467,6 +1458,9 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         matching_indices = [idx for (idx, j_key), leaf_number in incomplete_leaf_indices_dict.items() if
                             j_key == j and (hasattr(leaf_number, "__iter__") and k in leaf_number)]
         records_in_leaf = pd.concat([complete_records_in_leaf, imputed_X.loc[matching_indices]])
+
+        if len(records_in_leaf) < 2:
+            return imputed_X
 
         n_clusters = self._determine_optimal_n_clusters_FSI(records_in_leaf, fcm_function)
         centers, u = fcm_function(records_in_leaf.to_numpy(), n_clusters, self.m, max_iter=self.max_FCM_iter,
