@@ -1,4 +1,5 @@
 import warnings
+import time
 from collections import defaultdict
 
 import numpy as np
@@ -45,16 +46,6 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         random_state : {int, None}, default=None
             Seed for reproducibility of internal stochastic components.
             If None, randomness is not fixed.
-
-        Attributes
-        ----------
-
-
-        Examples
-        --------
-        >>> imputer = FCMCentroidImputer(n_clusters=4)
-        >>> imputer.fit(X_train)
-        >>> X_filled = imputer.transform(X_test)
         """
 
         validate_params({
@@ -185,16 +176,6 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         random_state : {int, None}, default=None
             Seed for reproducibility of internal stochastic components.
             If None, randomness is not fixed.
-
-        Attributes
-        ----------
-
-
-        Examples
-        --------
-        >>> imputer = FCMParameterImputer(n_clusters=4)
-        >>> imputer.fit(X_train)
-        >>> X_filled = imputer.transform(X_test)
         """
         validate_params({
             'm': m,
@@ -302,7 +283,7 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 # --------------------------------------
 
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, n_clusters=5, m=2.0, max_iter=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
+    def __init__(self, n_clusters=5, m=2.0, max_iter=100, max_iter_rough_k=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5, random_state=None):
         """
         Rough Fuzzy C-Means parameter-based imputer.
 
@@ -324,6 +305,10 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
             Maximum number of iterations used by the FCM clustering algorithm.
             Must be > 1.
 
+        max_iter_rough_k : int, default=100
+            Maximum number of iterations used by the Rough K-Means clustering algorithm.
+            Must be > 1.
+
         tol : {int, float}, default=1e-5
             Convergence tolerance for stopping IIFCM updates.
             Must be > 0.
@@ -343,20 +328,12 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         random_state : {int, None}, default=None
             Seed for reproducibility of internal stochastic components.
             If None, randomness is not fixed.
-
-        Attributes
-        ----------
-
-
-        Examples
-        --------
-        >>> imputer = FCMRoughParameterImputer(n_clusters=4)
-        >>> imputer.fit(X_train)
-        >>> X_filled = imputer.transform(X_test)
         """
+
         validate_params({
             'm': m,
             'max_iter': max_iter,
+            'max_iter_rough_k': max_iter_rough_k,
             'tol': tol,
             'wl': wl,
             'wb': wb,
@@ -372,6 +349,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         self.n_clusters = n_clusters
         self.m = m
         self.max_iter = max_iter
+        self.max_iter_rough_k = max_iter_rough_k
         self.tol = tol
         self.wl = wl
         self.wb = wb
@@ -421,7 +399,7 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
             wl=self.wl,
             wb=self.wb,
             tau=self.tau,
-            max_iter=self.max_iter,
+            max_iter_rough_k=self.max_iter_rough_k,
             tol=self.tol
         )
 
@@ -460,10 +438,11 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
         X_imputed = X.copy()
 
-        for idx, row in incomplete.iterrows():
-            obs = row.to_numpy()
-
-            distances = np.array([euclidean_distance(obs, center) for center in self.centers_])
+        for row in incomplete.itertuples(index=True):
+            idx = row.Index
+            obs = np.array(row[1:]) 
+            
+            distances = np.linalg.norm(self.centers_ - obs, axis=1)
             nearest_idx = np.argmin(distances)
 
             lower, upper, center = self.clusters_[nearest_idx]
@@ -473,20 +452,20 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
             elif len(upper) == 0:
                 approx_data = lower
             else:
-                dist_to_lower = np.mean([euclidean_distance(obs, x) for x in lower]) if len(lower) > 0 else np.inf
-                dist_to_upper = np.mean([euclidean_distance(obs, x) for x in upper]) if len(upper) > 0 else np.inf
+                lower = np.array(lower)
+                upper = np.array(upper)
+                dist_to_lower = np.mean(np.linalg.norm(lower - obs, axis=1)) if len(lower) > 0 else np.inf
+                dist_to_upper = np.mean(np.linalg.norm(upper - obs, axis=1)) if len(upper) > 0 else np.inf
                 approx_data = lower if dist_to_lower <= dist_to_upper else upper
 
-            missing_cols = row[row.isna()].index
-            for col in missing_cols:
-                col_idx = X.columns.get_loc(col)
+            missing_cols = np.where(np.isnan(obs))[0]
+            for col_idx in missing_cols:
+                X_imputed.iat[idx, col_idx] = np.mean(approx_data[:, col_idx])
 
-                approx_data = np.atleast_2d(approx_data)
-                X_imputed.at[idx, col] = np.mean(approx_data[:, col_idx])
 
         return X_imputed
 
-    def _rough_kmeans_from_fcm(self, X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter=100, tol=1e-4):
+    def _rough_kmeans_from_fcm(self, X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter_rough_k=100, tol=1e-4):
         """
         Rough K-Means
         Applied after FCM clustering (using its centroids as initialization).
@@ -517,53 +496,51 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
         n_samples = X.shape[0]
         n_clusters = center_init.shape[0]
+
         centers = center_init.copy()
 
-        lower_sets = [[] for _ in range(n_clusters)]
-        upper_sets = [[] for _ in range(n_clusters)]
+        upper_mask = np.zeros((n_samples, n_clusters), dtype=bool)
+        lower_mask = np.zeros((n_samples, n_clusters), dtype=bool)
 
         init_labels = np.argmax(memberships, axis=1)
-        for i, lbl in enumerate(init_labels):
-            lower_sets[lbl].append(i)
-            upper_sets[lbl].append(i)
+        upper_mask[np.arange(n_samples), init_labels] = True
+        lower_mask[np.arange(n_samples), init_labels] = True
 
-        for iteration in range(max_iter):
+        for iteration in range(max_iter_rough_k):
 
             new_centers = np.zeros_like(centers)
-            for k in range(n_clusters):
-                lower_idx = lower_sets[k]
-                upper_idx = upper_sets[k]
-                boundary_idx = list(set(upper_idx) - set(lower_idx))
 
-                if len(lower_idx) == 0:
+            for k in range(n_clusters):
+                lower_idx = np.where(lower_mask[:, k])[0]
+                upper_idx = np.where(upper_mask[:, k])[0]
+
+                if lower_idx.size == 0:
                     new_centers[k] = centers[k]
                     continue
 
-                lower_mean = np.mean(X[lower_idx], axis=0)
+                boundary_mask = ~np.isin(upper_idx, lower_idx)
+                boundary_idx = upper_idx[boundary_mask]
 
-                if len(boundary_idx) > 0:
-                    boundary_mean = np.mean(X[boundary_idx], axis=0)
+                lower_mean = X[lower_idx].mean(axis=0)
+
+                if boundary_idx.size > 0:
+                    boundary_mean = X[boundary_idx].mean(axis=0)
                     new_centers[k] = wl * lower_mean + wb * boundary_mean
                 else:
                     new_centers[k] = lower_mean
 
-            new_lower_sets = [[] for _ in range(n_clusters)]
-            new_upper_sets = [[] for _ in range(n_clusters)]
+            distances = np.linalg.norm(X[:, None, :] - new_centers[None, :, :], axis=2)
 
-            for i, x in enumerate(X):
-                distances = np.array([euclidean_distance(x, c) for c in new_centers])
-                h = np.argmin(distances)
-                dmin = distances[h]
+            winners = np.argmin(distances, axis=1)
+            dmin = distances[np.arange(n_samples), winners]
 
-                new_upper_sets[h].append(i)
+            boundary_mask = (distances - dmin[:, None]) <= tau
 
-                for k in range(n_clusters):
-                    if k != h and (distances[k] - dmin) <= tau:
-                        new_upper_sets[k].append(i)
+            new_upper_mask = boundary_mask.copy()
 
-                count_upper = sum([i in new_upper_sets[k] for k in range(n_clusters)])
-                if count_upper == 1:
-                    new_lower_sets[h].append(i)
+            only_one = new_upper_mask.sum(axis=1) == 1
+            new_lower_mask = np.zeros_like(new_upper_mask)
+            new_lower_mask[np.arange(n_samples)[only_one], winners[only_one]] = True
 
             shift = np.linalg.norm(new_centers - centers)
 
@@ -571,13 +548,13 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
                 break
 
             centers = new_centers
-            lower_sets = new_lower_sets
-            upper_sets = new_upper_sets
+            upper_mask = new_upper_mask
+            lower_mask = new_lower_mask
 
         clusters = []
         for k in range(n_clusters):
-            lower = X[lower_sets[k]] if len(lower_sets[k]) > 0 else np.array([])
-            upper = X[upper_sets[k]] if len(upper_sets[k]) > 0 else np.array([])
+            lower = X[lower_mask[:, k]]
+            upper = X[upper_mask[:, k]]
             clusters.append((lower, upper, centers[k]))
 
         return clusters
@@ -647,12 +624,6 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     np_rng_ : numpy.random.RandomState
         Random generator used during adaptive neighbor masking.
-
-    Examples
-    ----------
-    >>> imputer = FCMKIterativeImputer(max_clusters=5, random_state=42)
-    >>> imputer.fit(X_train)
-    >>> X_filled = imputer.transform(X_test)
     """
 
     def __init__(self, n_clusters=None, max_clusters=10, m=2, max_FCM_iter=100, max_II_iter=80, max_k=20, tol=1e-5,
@@ -970,12 +941,6 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         sigma_ : ndarray of shape (n_clusters, n_features) or None
             Adaptive, feature-wise variance estimates for each cluster,
             used only when `sigma=True`.
-
-        Examples
-        --------
-        >>> imputer = FCMInterpolationIterativeImputer(n_clusters=4, sigma=True)
-        >>> imputer.fit(X_train)
-        >>> X_filled = imputer.transform(X_test)
         """
 
         validate_params({
@@ -1236,12 +1201,6 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
     leaf_indices_ : dict
         Mapping from column name → array of leaf indices for training rows.
         Used to form leaf-local subgroups during refinement.
-
-    Examples
-    ----------
-    >>> imputer = FCMDTIterativeImputer(max_clusters=10, random_state=0)
-    >>> imputer.fit(X_train)
-    >>> X_filled = imputer.transform(X_test)
     """
 
     def __init__(self, max_clusters=20, m=2, max_iter=100, max_FCM_iter=100, tol=1e-5, min_samples_leaf=40,
