@@ -1,6 +1,9 @@
 # Ignoruj wirtualne środowisko
 .venv/
 
+# Experiments resuts
+experiments/01_MI_results/*.csv
+
 # Standardowe pliki Pythona
 __pycache__/
 *.pyc
