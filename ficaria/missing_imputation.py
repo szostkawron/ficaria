@@ -718,7 +718,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         X_imputed = self._FCKI_algorithm(X)
         return X_imputed
 
-    def _find_best_k(self, St, random_col, original_value, distances):
+      def _find_best_k(self, St, random_col, original_value, distances):
         """
         Select the optimal number of neighbors (n_features) that minimizes RMSE
         when imputing a masked value in a selected column.
@@ -780,6 +780,9 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         if len(X_mis) == 0:
             return X
 
+        missing_counts = X_mis.isnull().sum(axis=1)
+        mis_idx = missing_counts.sort_values().index.to_numpy()
+
         if X_train is not None and not X.equals(X_train):
             X_safe = X.copy()
             X_train_safe = X_train.copy()
@@ -793,7 +796,6 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             all_data = X.reset_index(drop=True).copy()
             index_map = dict(zip(X.index, range(len(X))))
 
-        mis_idx = X_mis.index.to_numpy()
         imputed_values = []
 
         with warnings.catch_warnings():
@@ -820,6 +822,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
                 while np.isnan(AV):
                     A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
                     AV = St_Complete_Temp[-1, A_r]
+
                 St[-1, A_r] = np.NaN
 
                 xi_np = St[-1]
