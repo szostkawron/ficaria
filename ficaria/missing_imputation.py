@@ -793,14 +793,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     def _KI_algorithm(self, X, X_train=None):
         """
-        Impute missing values using the KI method (KNN + Iterative Imputation).
-
-        Parameters:
-            X (pd.DataFrame): Data to impute.
-            X_train (pd.DataFrame): Optional reference data (default is None).
-
-        Returns:
-            pd.DataFrame: Imputed dataset (same shape and index as X).
+        Impute missing values using the KI method (KNN + Iterative Imputation),
+        but imputing rows in order of *increasing number of missing values*.
         """
 
         X_incomplete_rows = X.copy()
@@ -808,6 +802,14 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
         if len(X_mis) == 0:
             return X
+
+        # ---------------------------
+        # NEW: Sort indices by missing count
+        # ---------------------------
+        missing_counts = X_mis.isnull().sum(axis=1)
+        mis_idx = missing_counts.sort_values().index.to_numpy()
+        # teraz kolejność: 1 brak, 2 braki, 3 braki, ...
+        # ---------------------------
 
         if X_train is not None and not X.equals(X_train):
             X_safe = X.copy()
@@ -822,12 +824,12 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             all_data = X.reset_index(drop=True).copy()
             index_map = dict(zip(X.index, range(len(X))))
 
-        mis_idx = X_mis.index.to_numpy()
         imputed_values = []
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=UserWarning)
 
+            # iterate in the NEW sorted order
             for idx in mis_idx:
                 xi = X_incomplete_rows.loc[idx]
 
@@ -849,6 +851,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
                 while np.isnan(AV):
                     A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
                     AV = St_Complete_Temp[-1, A_r]
+
                 St[-1, A_r] = np.NaN
 
                 xi_np = St[-1]

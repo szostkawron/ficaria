@@ -446,9 +446,9 @@ def test_fcmkiimputer_KI_algorithm(X, random_state):
 
 @pytest.mark.parametrize("X, random_state", [
     (pd.DataFrame({
-        'height_cm': [165, 170, 175, 180, 175, 160, 175, 190],
-        'weight_kg': [np.nan, np.nan, 70, 75, 80, 55, np.nan, 80],
-        'bmi': [np.nan, 21, np.nan, np.nan, np.nan, np.nan, 23.8, np.nan]}), 42),
+        'height_cm': [np.nan, 175, np.nan],
+        'weight_kg': [np.nan, np.nan, 80],
+        'bmi': [22.5, np.nan, np.nan]}), 42),
 ])
 def test_fcmkiimputer_KI_algorithm_error_no_complete(X, random_state):
     imputer = FCMKIterativeImputer(random_state=random_state)
