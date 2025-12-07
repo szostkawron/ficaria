@@ -57,11 +57,10 @@ def test_transform_without_fit(sample_data):
 
 
 def test_init_valid(sample_data):
-    selector = FuzzyGranularitySelector(n_features=3, eps=0.5, max_features=5, sigma=10, random_state=42)
+    selector = FuzzyGranularitySelector(n_features=3, eps=0.5, max_features=5, random_state=42)
     assert selector.random_state == 42
     assert selector.eps == 0.5
     assert selector.d == 5
-    assert selector.sigma == 10
     assert selector.k == 3
 
 
@@ -105,20 +104,6 @@ def test_fit_invalid_input_types(sample_data):
     ll = X.values.tolist()
     selector3 = FuzzyGranularitySelector()
     selector3.fit(ll, y)
-
-
-@pytest.mark.parametrize(
-    "value, expected_exception, expected_msg", [
-        ("txt", TypeError, "sigma must be int, got"),
-        ([26], TypeError, "sigma must be int, got"),
-        ([[35]], TypeError, "sigma must be int, got"),
-        (-4.6, TypeError, "sigma must be int, got"),
-        (0, ValueError, r"sigma must be in range \[0, 100\], got"),
-        (101, ValueError, r"sigma must be in range \[0, 100\], got"),
-    ])
-def test_fuzzygranularityselector_init_errors_sigma(value, expected_exception, expected_msg):
-    with pytest.raises(expected_exception, match=expected_msg):
-        FuzzyGranularitySelector(sigma=value)
 
 
 @pytest.mark.parametrize(
@@ -202,7 +187,7 @@ def test_mixed_numerical_and_categorical():
 
     for col in transformed.columns:
         if X[col].dtype == object:
-            assert np.issubdtype(transformed[col].dtype, np.integer)
+            assert transformed[col].dtype == object
 
 
 def test__calculate_similarity_matrix_for_df_numeric(sample_data):
@@ -245,7 +230,7 @@ def test__calculate_multi_granularity_fuzzy_implication_entropy_basic(sample_dat
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
 
-    ent = selector._calculate_multi_granularity_fuzzy_implication_entropy([0, 1], type="basic")
+    ent = selector._calculate_multi_granularity_fuzzy_implication_entropy(['a', 'b'], type="basic")
     assert isinstance(ent, float)
     assert ent >= 0
 
@@ -256,7 +241,7 @@ def test__calculate_multi_granularity_fuzzy_implication_entropy_types(sample_dat
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
 
-    val = selector._calculate_multi_granularity_fuzzy_implication_entropy([0], type=etype)
+    val = selector._calculate_multi_granularity_fuzzy_implication_entropy(["b"], type=etype)
     assert isinstance(val, float)
     assert val >= 0
 
@@ -266,7 +251,7 @@ def test__granual_consistency_of_B_subset(sample_data):
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
 
-    score = selector._granular_consistency_of_B_subset([0])
+    score = selector._granular_consistency_of_B_subset(["c"])
     assert isinstance(score, float)
     assert 0 <= score <= 1
 
@@ -276,7 +261,7 @@ def test__local_granularity_consistency_of_B_subset(sample_data):
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
 
-    val = selector._local_granularity_consistency_of_B_subset(['a'])
+    val = selector._local_granularity_consistency_of_B_subset(['b'])
     assert isinstance(val, float)
     assert 0 <= val <= 1
 
@@ -336,7 +321,7 @@ def test_transform_single_row():
     })
     y = pd.Series([1])
 
-    selector = FuzzyGranularitySelector(n_features=2, max_features=3, eps=0.5, sigma=10, random_state=42)
+    selector = FuzzyGranularitySelector(n_features=2, max_features=3, eps=0.5, random_state=42)
     selector.fit(X, y)
     X_transformed = selector.transform(X)
 
@@ -351,7 +336,7 @@ def test_transform_single_row():
 def test_d_greater_than_number_of_features(sample_data):
     X, y = sample_data
 
-    selector = FuzzyGranularitySelector(max_features=10, n_features=3, eps=0.5, sigma=10, random_state=42)
+    selector = FuzzyGranularitySelector(max_features=10, n_features=3, eps=0.5, random_state=42)
     selector.fit(X, y)
     X_transformed = selector.transform(X)
 
