@@ -19,7 +19,7 @@ def split_complete_incomplete(X):
     return complete, incomplete
 
 
-def check_input_dataset(X, require_numeric=False, allow_nan=True, require_complete_rows=False, no_nan_rows=False,
+def check_input_dataset(X, require_numeric=False, allow_nan=True, require_complete_rows=False,
                         no_nan_columns=False):
     """
     Convert input to DataFrame and check the validity of the dataset
@@ -29,7 +29,6 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True, require_comple
         require_numeric (bool): check if only numeric columns are present
         allow_nan (bool): allow nan values
         require_complete_rows (bool): check if complete rows are present
-        no_nan_rows (bool): check if there are no nan rows are present
         no_nan_columns (bool): check if there are no nan columns are present
 
     Returns:
@@ -60,11 +59,6 @@ def check_input_dataset(X, require_numeric=False, allow_nan=True, require_comple
     if require_complete_rows and complete_rows.empty:
         raise ValueError(
             "X must contain at least one row with no missing values")
-
-    if no_nan_rows:
-        rows_all_nan = X.isnull().all(axis=1)
-        if rows_all_nan.any():
-            raise ValueError(f"X must not contain rows with all NaNs")
 
     if no_nan_columns and X.isna().all().any():
         cols_all_nan = X.isna().all()

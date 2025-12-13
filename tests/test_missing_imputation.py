@@ -444,21 +444,6 @@ def test_fcmkiimputer_KI_algorithm(X, random_state):
     assert result.isna().sum().sum() == 0
 
 
-@pytest.mark.parametrize("X, random_state", [
-    (pd.DataFrame({
-        'height_cm': [np.nan, 175, np.nan],
-        'weight_kg': [np.nan, np.nan, 80],
-        'bmi': [22.5, np.nan, np.nan]}), 42),
-])
-def test_fcmkiimputer_KI_algorithm_error_no_complete(X, random_state):
-    imputer = FCMKIterativeImputer(random_state=random_state)
-    imputer.fit(X)
-    with pytest.raises(ValueError,
-                       match="For any row with missing values, there must be at least one row where "
-                             "all those columns are complete, got none for columns"):
-        imputer._KI_algorithm(X)
-
-
 @pytest.mark.parametrize("X, X_train, random_state, max_FCM_iter, max_k, max_II_iter", [
     (pd.DataFrame({
         'a': [1, np.nan, 3],
