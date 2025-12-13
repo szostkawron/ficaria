@@ -736,7 +736,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         X_imputed : pandas DataFrame of shape (n_samples, n_features)
             Fully imputed dataset containing no missing values.
         """
-        X = check_input_dataset(X, require_numeric=True, no_nan_rows=True)
+        X = check_input_dataset(X, require_numeric=True)
         check_is_fitted(self, attributes=["X_train_", "imputer_", "centers_", "u_", "np_rng_"])
 
         if not X.columns.equals(self.X_train_.columns):
@@ -747,7 +747,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         X_imputed = self._FCKI_algorithm(X)
         return X_imputed
 
-      def _find_best_k(self, St, random_col, original_value, distances):
+    def _find_best_k(self, St, random_col, original_value, distances):
         """
         Select the optimal number of neighbors (n_features) that minimizes RMSE
         when imputing a masked value in a selected column.
@@ -837,36 +837,38 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
                 P = all_data.dropna(subset=A_mis)
                 if P.empty:
-                    raise ValueError(
-                        f"For any row with missing values, there must be at least one row where all "
-                        f"those columns are complete, got none for columns {list(A_mis)} instead")
+                    S = xi[X.columns].to_numpy().reshape(1, -1)
+                    S_filled_EM = self.imputer_.transform(S)
 
-                P_ext = np.vstack([P.to_numpy(), xi.to_numpy()])
+                else:
+                    P_ext = np.vstack([P.to_numpy(), xi.to_numpy()])
 
-                St = P_ext.copy()
-                St_Complete_Temp = St.copy()
+                    St = P_ext.copy()
 
-                A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
-                AV = St_Complete_Temp[-1, A_r]
-                while np.isnan(AV):
-                    A_r = self.np_rng_.randint(0, St_Complete_Temp.shape[1])
-                    AV = St_Complete_Temp[-1, A_r]
+                    if not np.all(np.isnan(xi)):
 
-                St[-1, A_r] = np.NaN
+                        A_r = self.np_rng_.randint(0, St.shape[1])
+                        AV = St[-1, A_r]
+                        while np.isnan(AV):
+                            A_r = self.np_rng_.randint(0, St.shape[1])
+                            AV = St[-1, A_r]
 
-                xi_np = St[-1]
-                St_without_xi = St[:-1]
+                        St[-1, A_r] = np.NaN
 
-                mask = ~np.isnan(St_without_xi) & ~np.isnan(xi_np)
-                diffs = np.where(mask, St_without_xi - xi_np, 0)
-                distances = np.sqrt(np.sum(diffs ** 2, axis=1))
+                        xi_np = St[-1]
+                        St_without_xi = St[:-1]
 
-                knn_idx = self._find_best_k(St, A_r, AV, distances)
-                neighbors_xi = P_ext[knn_idx, :]
-                S = np.vstack([neighbors_xi, xi.to_numpy()])
+                        mask = ~np.isnan(St_without_xi) & ~np.isnan(xi_np)
+                        diffs = np.where(mask, St_without_xi - xi_np, 0)
+                        distances = np.sqrt(np.sum(diffs ** 2, axis=1))
 
-                imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_II_iter)
-                S_filled_EM = imputer.fit_transform(S)
+                        knn_idx = self._find_best_k(St, A_r, AV, distances)
+                        neighbors_xi = P_ext[knn_idx, :]
+                        S = np.vstack([neighbors_xi, xi.to_numpy()])
+                    else:
+                        S = St
+                    imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_II_iter)
+                    S_filled_EM = imputer.fit_transform(S)
 
                 xi_imputed = S_filled_EM[-1, :]
                 imputed_values.append(xi_imputed)
@@ -1456,27 +1458,42 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
     def _improve_imputations_in_leaf(self, k, j, incomplete_leaf_indices_dict, imputed_X, fcm_function):
 
-        complete_records_in_leaf = self.X_train_complete_[self.leaf_indices_[j] == k]
+        complete_records_in_leaf = self.X_train_complete_[self.leaf_indices_[j] == k].copy()
+        complete_records_in_leaf.index = range(len(complete_records_in_leaf))
 
-        matching_indices = [idx for (idx, j_key), leaf_number in incomplete_leaf_indices_dict.items() if
-                            j_key == j and (hasattr(leaf_number, "__iter__") and k in leaf_number)]
-        records_in_leaf = pd.concat([complete_records_in_leaf, imputed_X.loc[matching_indices]])
+        matching_indices = [
+            idx for (idx, j_key), leaf_number in incomplete_leaf_indices_dict.items()
+            if j_key == j and k in leaf_number
+        ]
+
+        incomplete_records = imputed_X.loc[matching_indices].copy()
+        C = len(complete_records_in_leaf)
+        I = len(incomplete_records)
+
+        incomplete_records.index = range(C, C + I)
+
+        records_in_leaf = pd.concat([complete_records_in_leaf, incomplete_records])
 
         if len(records_in_leaf) < 2:
             return imputed_X
 
         n_clusters = self._determine_optimal_n_clusters_FSI(records_in_leaf, fcm_function)
-        centers, u = fcm_function(records_in_leaf.to_numpy(), n_clusters, self.m, max_iter=self.max_FCM_iter,
-                                  tol=self.tol, random_state=self.random_state)
+        centers, u = fcm_function(
+            records_in_leaf.to_numpy(), n_clusters, self.m,
+            max_iter=self.max_FCM_iter, tol=self.tol,
+            random_state=self.random_state
+        )
 
-        col_j_idx = self.X_train_complete_.columns.get_loc(j)
         centers = np.asarray(centers)
-        local_indices = {idx: pos for pos, idx in enumerate(records_in_leaf.index)}
+        col_j_idx = self.X_train_complete_.columns.get_loc(j)
 
-        for i in matching_indices:
-            i_local = local_indices[i]
-            correction = self.learning_rate * (
-                    u[i_local, :] @ centers[:, col_j_idx] - imputed_X.loc[i, j])
-            imputed_X.loc[i, j] = imputed_X.loc[i, j] + correction
+        matching_local = np.arange(C, C + I)
+
+        pred = u[matching_local] @ centers[:, col_j_idx]
+        current_vals = imputed_X.loc[matching_indices, j].to_numpy()
+
+        corrected_vals = current_vals + self.learning_rate * (pred - current_vals)
+
+        imputed_X.loc[matching_indices, j] = corrected_vals
 
         return imputed_X
