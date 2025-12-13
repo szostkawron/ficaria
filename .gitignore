@@ -2,7 +2,8 @@
 .venv/
 
 # Experiments resuts
-experiments/01_MI_results/*.csv
+experiments/01_MI_results/*
+experiments/01_MI_results_2/*
 
 # Standardowe pliki Pythona
 __pycache__/

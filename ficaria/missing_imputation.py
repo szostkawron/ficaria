@@ -718,7 +718,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         X_imputed = self._FCKI_algorithm(X)
         return X_imputed
 
-      def _find_best_k(self, St, random_col, original_value, distances):
+    def _find_best_k(self, St, random_col, original_value, distances):
         """
         Select the optimal number of neighbors (n_features) that minimizes RMSE
         when imputing a masked value in a selected column.
