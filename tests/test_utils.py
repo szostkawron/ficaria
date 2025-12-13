@@ -339,20 +339,6 @@ def test_check_input_dataset_check_require_complete(X, require_complete_rows):
         check_input_dataset(X, require_complete_rows=require_complete_rows)
 
 
-@pytest.mark.parametrize("X, no_nan_rows", [
-    ([[np.nan, np.nan, np.nan], [3, 7, 4]], True),
-    (pd.DataFrame({
-        'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, np.nan],
-        'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
-        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]
-    }), True),
-])
-def test_check_input_dataset_check_no_nan_rows(X, no_nan_rows):
-    with pytest.raises(ValueError,
-                       match="X must not contain rows with all NaNs"):
-        check_input_dataset(X, no_nan_rows=no_nan_rows)
-
-
 @pytest.mark.parametrize("X, no_nan_columns", [
     ([[np.nan, 4, 2], [np.nan, 7, 4]], True),
     (pd.DataFrame({

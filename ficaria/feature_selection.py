@@ -105,7 +105,6 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         self.D_partition_: Dict[Any, pd.DataFrame] = {}
         self.C_: Dict[str, str] = {}
 
-
     def fit(self, X, y=None):
         """
         Fit the FIGFS selector on the input dataset.
@@ -195,7 +194,8 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             Dataset reduced to the selected `k` most informative features.
         """
         check_is_fitted(self, attributes=["U_", "n_", "C_", "m_", "D_", "fuzzy_adaptive_neighbourhood_radius_",
-                                          "delta_cache_", "entropy_cache_", "D_partition_","global_row_tuple_to_index_cache_","S_"])
+                                          "delta_cache_", "entropy_cache_", "D_partition_",
+                                          "global_row_tuple_to_index_cache_", "S_"])
 
         X = check_input_dataset(X, allow_nan=False)
 
@@ -235,7 +235,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         n = len(df)
         if n == 0:
             return np.zeros((0, 0), dtype=float)
-        
+
         if col_type == 'numeric':
             if n == 1:
                 sd = 0.0
@@ -260,7 +260,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             codes, _ = pd.factorize(vals, sort=True)
             mat = (codes[:, None] == codes[None, :]).astype(float)
             return mat
-    
+
     def _calculate_delta_for_B_all_rows(self, B: List[str], df: Optional[pd.DataFrame] = None):
         use_global = df is None
         if use_global:
@@ -371,7 +371,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
         n = max(self.n_, 1.0)
         if type == 'basic':
-            res_vec = 1.0 - (delta_B_sizes / n) 
+            res_vec = 1.0 - (delta_B_sizes / n)
             out = float(np.sum(res_vec) / n)
         elif type == 'conditional':
             res_vec = np.maximum(delta_B_sizes, delta_T_sizes) - delta_B_sizes
@@ -379,13 +379,12 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         elif type == 'joint':
             res_vec = 1.0 + (np.maximum(delta_B_sizes, delta_T_sizes) / n) - ((delta_B_sizes + delta_T_sizes) / n)
             out = float(np.sum(res_vec) / n)
-        else: 
+        else:
             res_vec = 1.0 - (np.maximum(delta_B_sizes, delta_T_sizes) / n)
             out = float(np.sum(res_vec) / n)
 
         self.entropy_cache_[key] = out
         return out
-
 
     def _granular_consistency_of_B_subset(self, B):
         """
@@ -416,7 +415,6 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         score_vec = 1.0 - diff_norm
         return float(np.mean(score_vec))
 
-
     def _local_granularity_consistency_of_B_subset(self, B):
 
         """
@@ -446,7 +444,7 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
 
             _, delta_df_sizes = self._calculate_delta_for_B_all_rows(B, df=df_local)
 
-            local_vals = df_local.values 
+            local_vals = df_local.values
             ratios = np.empty(part_n, dtype=float)
             for i_local in range(part_n):
                 tup = tuple(local_vals[i_local])
@@ -479,7 +477,6 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         for v in vals:
             partitions[v] = self.U_[self.U_[self.target_name_] == v].reset_index(drop=True).copy()
         return partitions
-    
 
     def _FIGFS_algorithm(self):
         """
@@ -512,7 +509,8 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         while len(B) > 0 and i < self.d:
             i += 1
             J_list = []
-            denom_base = self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional', T=[self.target_name_]) + 0.01
+            denom_base = self._calculate_multi_granularity_fuzzy_implication_entropy(S, type='conditional',
+                                                                                     T=[self.target_name_]) + 0.01
             for colname in B:
                 sim = 0
                 for s_colname in S:
