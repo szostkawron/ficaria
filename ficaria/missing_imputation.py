@@ -1497,3 +1497,13 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         imputed_X.loc[matching_indices, j] = corrected_vals
 
         return imputed_X
+
+
+__all__ = [
+    "FCMCentroidImputer",
+    "FCMParameterImputer",
+    "FCMRoughParameterImputer",
+    "FCMKIterativeImputer",
+    "FCMInterpolationIterativeImputer",
+    "FCMDTIterativeImputer",
+]

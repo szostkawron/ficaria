@@ -1138,3 +1138,9 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         Rw = np.diag(logistic_weights)
 
         return sequence, Rw
+
+
+__all__ = [
+    "FuzzyGranularitySelector",
+    "WeightedFuzzyRoughSelector",
+]
