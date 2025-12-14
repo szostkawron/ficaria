@@ -46,6 +46,21 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
         random_state : {int, None}, default=None
             Seed for reproducibility of internal stochastic components.
             If None, randomness is not fixed.
+
+        Attributes
+        ----------
+        centers_ : numpy.ndarray of shape (n_clusters, n_features)
+            Centroids of fuzzy clusters learned from complete observations.
+            Each centroid represents the mean position of a cluster in feature space.
+
+        memberships_ : numpy.ndarray of shape (n_samples_complete, n_clusters)
+            Fuzzy membership matrix obtained from the FCM algorithm.
+            Each row contains the degree of membership of a complete observation
+            to each cluster.
+
+        feature_names_in_ : list of str
+            Names of features seen during `fit`.
+            Used to ensure column consistency between `fit` and `transform`.`
         """
 
         validate_params({
@@ -176,6 +191,21 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
         random_state : {int, None}, default=None
             Seed for reproducibility of internal stochastic components.
             If None, randomness is not fixed.
+
+        Attributes
+        ----------
+        centers_ : numpy.ndarray of shape (n_clusters, n_features)
+            Centroids of fuzzy clusters learned from complete observations.
+            Each centroid represents the mean position of a cluster in feature space.
+
+        memberships_ : numpy.ndarray of shape (n_samples_complete, n_clusters)
+            Fuzzy membership matrix obtained from the FCM algorithm.
+            Each row contains the degree of membership of a complete observation
+            to each cluster.
+
+        feature_names_in_ : list of str
+            Names of features seen during `fit`.
+            Used to ensure column consistency between `fit` and `transform`.`
         """
         validate_params({
             'm': m,
@@ -328,6 +358,39 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         random_state : {int, None}, default=None
             Seed for reproducibility of internal stochastic components.
             If None, randomness is not fixed.
+
+        Attributes
+        ----------
+        centers_ : numpy.ndarray of shape (n_clusters, n_features)
+            Final cluster centroids obtained from the initial Fuzzy C-Means (FCM)
+            clustering and subsequently refined by the Rough K-Means procedure.
+
+        memberships_ : numpy.ndarray of shape (n_samples_complete, n_clusters)
+            Fuzzy membership matrix produced by the FCM algorithm.
+            Each element represents the degree of membership of a complete
+            observation to a given cluster.
+
+        clusters_ : list of tuples
+            Rough cluster representations obtained after applying Rough K-Means.
+            Each element of the list corresponds to a single cluster and is a tuple:
+
+            (lower, upper, center), where:
+                - lower : numpy.ndarray of shape (n_lower_samples, n_features)
+                    Samples belonging exclusively to the lower approximation
+                    of the cluster (objects with high assignment certainty).
+
+                - upper : numpy.ndarray of shape (n_upper_samples, n_features)
+                    Samples belonging to the upper approximation (boundary region),
+                    potentially shared with other clusters due to uncertainty.
+
+                - center : numpy.ndarray of shape (n_features,)
+                    Final centroid of the rough cluster, computed as a weighted
+                    combination of lower and boundary region means.
+
+        feature_names_in_ : list of str
+            Names of features observed during fitting.
+            Used to ensure consistency between `fit` and `transform` inputs.
+
         """
 
         validate_params({
