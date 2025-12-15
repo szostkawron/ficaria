@@ -853,7 +853,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
                             A_r = self.np_rng_.randint(0, St.shape[1])
                             AV = St[-1, A_r]
 
-                        St[-1, A_r] = np.NaN
+                        St[-1, A_r] = np.nan
 
                         xi_np = St[-1]
                         St_without_xi = St[:-1]
