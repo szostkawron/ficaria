@@ -90,6 +90,13 @@ def validate_params(params):
             raise TypeError(f"max_iter must be int, got {type(max_iter).__name__} instead")
         if max_iter <= 1:
             raise ValueError(f"max_iter must be > 1, got {max_iter} instead")
+        
+    if 'max_iter_rough_k' in params:
+        max_iter_rough_k = params['max_iter_rough_k']
+        if not isinstance(max_iter_rough_k, int):
+            raise TypeError(f"max_iter_rough_k must be int, got {type(max_iter_rough_k).__name__} instead")
+        if max_iter_rough_k <= 1:
+            raise ValueError(f"max_iter_rough_k must be > 1, got {max_iter_rough_k} instead")
 
     if 'max_FCM_iter' in params:
         max_FCM_iter = params['max_FCM_iter']
