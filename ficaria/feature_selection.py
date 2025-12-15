@@ -262,6 +262,25 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             return mat
 
     def _calculate_delta_for_B_all_rows(self, B: List[str], df: Optional[pd.DataFrame] = None):
+        """
+        Calculate the granule matrix and row-wise granule sizes for a subset of columns.
+
+        Parameters
+        ----------
+        B : List[str]
+            List of column names to include in the granule computation.
+        df : Optional[pd.DataFrame]
+            Local DataFrame context. If None, uses the global dataset (`self.U_`).
+
+        Returns
+        -------
+        Tuple[np.ndarray, np.ndarray]
+            granule_matrix : np.ndarray
+                Pairwise similarity matrix of shape (n_rows, n_rows), representing similarities
+                between all rows across columns in B.
+            sizes : np.ndarray
+                Array of row-wise granule sizes (sum of similarities per row).
+        """
         use_global = df is None
         if use_global:
             n = self.n_
@@ -416,7 +435,6 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
         return float(np.mean(score_vec))
 
     def _local_granularity_consistency_of_B_subset(self, B):
-
         """
         Evaluates how consistent the fuzzy granules of B are within each
         class-specific partition of the dataset.
@@ -491,7 +509,6 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
             Ordered list of selected feature cnames according to the FIGFS algorithm.
             The order reflects the importance of the features.
         """
-
         B = list(self.C_.keys())
         S = []
         cor_list = []
@@ -707,6 +724,16 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         return X.iloc[:, selected_idx]
 
     def _identify_high_density_region(self, X, y):
+        """
+        Identify high-density regions within a dataset based on local density and class labels.
+
+        Parameters
+        ----------
+        X : np.ndarray or pd.DataFrame
+            Feature matrix of shape (n_samples, n_features).
+        y : np.ndarray or pd.Series
+            Class labels corresponding to each row in X.
+        """
         distances = self._compute_HEC(X)
 
         n_samples = len(X)
