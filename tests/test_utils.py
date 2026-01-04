@@ -129,6 +129,12 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         ({"eps": [9]}, TypeError, "eps must be int or float, got"),
         ({"eps": -0.1}, ValueError, "eps must be > 0, got"),
         ({"eps": 0}, ValueError, "eps must be > 0, got"),
+
+        #n_jobs
+        ({"n_jobs": "ABC"}, TypeError, "n_jobs must be int, got"),
+        ({"n_jobs": [5]}, TypeError, "n_jobs must be int, got"),
+        ({"n_jobs": 3.5}, TypeError, "n_jobs must be int, got"),
+        ({"n_jobs": 0}, ValueError, "n_jobs must not be 0; use -1 for all cores or a non-zero integer"),
     ]
 )
 def test_validate_params_errors(params, expected_exception, expected_msg):

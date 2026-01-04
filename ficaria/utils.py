@@ -208,6 +208,13 @@ def validate_params(params):
         if eps <= 0:
             raise ValueError(f"eps must be > 0, got {eps} instead")
 
+    if 'n_jobs' in params:
+        n_jobs = params['n_jobs']
+        if not isinstance(n_jobs, int):
+            raise TypeError(f"n_jobs must be int, got {type(n_jobs).__name__} instead")
+        if n_jobs == 0:
+            raise ValueError("n_jobs must not be 0; use -1 for all cores or a non-zero integer")
+
 
 def euclidean_distance(a, b):
     """
