@@ -141,8 +141,8 @@ def test_validate_params_errors(params, expected_exception, expected_msg):
 
 def test_split_complete_incomplete_basic():
     X = pd.DataFrame({
-        "a": [1, 2, np.nan, 4],
-        "b": [5, 6, 7, np.nan],
+        "num1": [1, 2, np.nan, 4],
+        "num2": [5, 6, 7, np.nan],
     })
 
     complete, incomplete = split_complete_incomplete(X)
@@ -187,21 +187,21 @@ def test_euclidean_distance_matches_scipy(a, b):
 
 dataframes_list = [
     pd.DataFrame({
-        "a": [1.0, 2.0, 3.0],
-        "b": [5.0, 4.0, 3.0],
+        "num1": [1.0, 2.0, 3.0],
+        "num2": [5.0, 4.0, 3.0],
     }),
 
     pd.DataFrame({
-        "a": [1.0, 2.0, 3.0, 4.0, 5.0],
-        "b": [5.0, 4.0, 3.0, 2.0, 1.0],
+        "num1": [1.0, 2.0, 3.0, 4.0, 5.0],
+        "num2": [5.0, 4.0, 3.0, 2.0, 1.0],
     }),
 
     pd.DataFrame({
-        "a": [1.0, 2.0, 3.0, 17.0, 5.0, 6.0, 7.0],
-        "b": [5.0, 4.0, 3.0, 20.0, 2.0, 1.0, 0.0],
-        "c": [9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0],
-        "d": [10.0, 12.5, 15.0, 16.0, 17.0, 18.0, 19.0],
-        "e": [9.0, 8.7, 7.0, 6.0, 5.0, 2.2, 2.1],
+        "num1": [1.0, 2.0, 3.0, 17.0, 5.0, 6.0, 7.0],
+        "num2": [5.0, 4.0, 3.0, 20.0, 2.0, 1.0, 0.0],
+        "num3": [9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0],
+        "num4": [10.0, 12.5, 15.0, 16.0, 17.0, 18.0, 19.0],
+        "num5": [9.0, 8.7, 7.0, 6.0, 5.0, 2.2, 2.1],
     }),
 ]
 
@@ -244,17 +244,17 @@ def test_fuzzy_c_means_same_random_state_reproducible():
 @pytest.mark.parametrize("X", [
     ([[1, 2, 3], [3, 7, 4]]),
     (pd.DataFrame({
-        'height_cm': [165, 170, 175, 180, 175, 160, 175, 190],
-        'weight_kg': [60, 65, 70, 75, 80, 55, 68, 80],
-        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, 25.0]})),
+        'num1': [165, 170, 175, 180, 175, 160, 175, 190],
+        'num2': [60, 65, 70, 75, 80, 55, 68, 80],
+        'num3': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, 25.0]})),
     (np.array([[5, 1], [4, 5]])),
     ([(1, 2), (3, 4)]),
     ([[1, "txt", 3], [3, "txt", 4]]),
     ([[1, 2], [3, "txt"]]),
     (pd.DataFrame({
-        'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
-        'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
-        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]})),
+        'num1': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
+        'num2': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
+        'num3': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]})),
 ])
 def test_check_input_dataset_valid_cases(X):
     result = check_input_dataset(X)
@@ -300,10 +300,10 @@ def test_check_input_dataset_empty_dataset(X):
 @pytest.mark.parametrize("X, require_numeric", [
     ([[1, "txt", 3], [3, 7, 4]], True),
     (pd.DataFrame({
-        'height_cm': [165, 170, 175, 180, 175, 160, 175, 190],
-        'weight_kg': [60, 65, 70, 75, 80, 55, 68, 80],
-        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, 25.0],
-        'name': ["txt", "txt", "txt", "txt", "txt", "txt", "txt", "txt"]
+        'num1': [165, 170, 175, 180, 175, 160, 175, 190],
+        'num2': [60, 65, 70, 75, 80, 55, 68, 80],
+        'num3': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, 25.0],
+        'cat1': ["txt", "txt", "txt", "txt", "txt", "txt", "txt", "txt"]
     }), True),
 ])
 def test_check_input_dataset_check_require_numeric_true(X, require_numeric):
@@ -315,9 +315,9 @@ def test_check_input_dataset_check_require_numeric_true(X, require_numeric):
 @pytest.mark.parametrize("X,allow_nan", [
     ([[1, np.nan, 3], [3, 7, 4]], False),
     (pd.DataFrame({
-        'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
-        'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
-        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]
+        'num1': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
+        'num2': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
+        'num3': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]
     }), False),
 ])
 def test_check_input_dataset_check_allow_nan_false(X, allow_nan):
@@ -328,9 +328,9 @@ def test_check_input_dataset_check_allow_nan_false(X, allow_nan):
 @pytest.mark.parametrize("X, require_complete_rows", [
     ([[1, np.nan, 3], [3, 7, np.nan]], True),
     (pd.DataFrame({
-        'height_cm': [165, 170, np.nan, 180],
-        'weight_kg': [np.nan, 65, 70, np.nan],
-        'bmi': [22.0, np.nan, 24.2, 26.5]
+        'num1': [165, 170, np.nan, 180],
+        'num2': [np.nan, 65, 70, np.nan],
+        'num3': [22.0, np.nan, 24.2, 26.5]
     }), True),
 ])
 def test_check_input_dataset_check_require_complete(X, require_complete_rows):
@@ -342,9 +342,9 @@ def test_check_input_dataset_check_require_complete(X, require_complete_rows):
 @pytest.mark.parametrize("X, no_nan_columns", [
     ([[np.nan, 4, 2], [np.nan, 7, 4]], True),
     (pd.DataFrame({
-        'height_cm': [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
-        'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, 70],
-        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]
+        'num1': [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, np.nan],
+        'num2': [60, 65, 70, np.nan, 80, 55, 68, 70],
+        'num3': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]
     }), True),
 ])
 def test_check_input_dataset_check_no_nan_columns(X, no_nan_columns):
