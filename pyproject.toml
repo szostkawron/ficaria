@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=61.0"]
+requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -14,7 +14,6 @@ authors = [
     { name = "Bogumiła Okrojek", email = "email@example.com" }
 ]
 
-license = "MIT"
 license-files = ["LICENSE"]
 
 urls = { "Homepage" = "https://github.com/szostkawron/ficaria", "Repository" = "https://github.com/szostkawron/ficaria" }
@@ -43,5 +42,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.4.0"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+
 
 

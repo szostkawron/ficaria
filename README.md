@@ -65,4 +65,3 @@ See the `LICENSE` file for details.
 * Małgorzata Mokwa
 * Bogumiła Okrojek
 
-```
