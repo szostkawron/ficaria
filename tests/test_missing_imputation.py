@@ -3,9 +3,11 @@ import sys
 
 import pytest
 from sklearn.exceptions import NotFittedError
+from sklearn.impute import SimpleImputer
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from ficaria.missing_imputation import *
+from ficaria.utils import *
 
 dataframes_list = [
     pd.DataFrame({
