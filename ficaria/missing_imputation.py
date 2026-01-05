@@ -17,52 +17,58 @@ from joblib import Parallel, delayed
 # FCMCentroidImputer
 # --------------------------------------
 class FCMCentroidImputer(BaseEstimator, TransformerMixin):
+    """"
+    Fuzzy C-Means centroid-based imputer.
+
+    Missing values are imputed using the centroid of the closest fuzzy cluster,
+    where the nearest cluster is determined by Euclidean distance between an
+    incomplete object and all FCM centroids.
+
+    Parameters
+    ----------
+    n_clusters : int, default=5
+        Number of fuzzy clusters used by the IIFCM algorithm.
+        Must be an integer >= 1.
+
+    m : {int, float}, default=2.0
+        Fuzzification exponent controlling cluster softness.
+        Must be > 1.
+
+    max_iter : int, default=100
+        Maximum number of iterations used by the FCM clustering algorithm.
+        Must be > 1.
+
+    tol : {int, float}, default=1e-5
+        Convergence tolerance for stopping IIFCM updates.
+        Must be > 0.
+
+    random_state : {int, None}, default=None
+        Seed for reproducibility of internal stochastic components.
+        If None, randomness is not fixed.
+
+    Attributes
+    ----------
+    centers_ : numpy.ndarray of shape (n_clusters, n_features)
+        Centroids of fuzzy clusters learned from complete observations.
+        Each centroid represents the mean position of a cluster in feature space.
+
+    memberships_ : numpy.ndarray of shape (n_samples_complete, n_clusters)
+        Fuzzy membership matrix obtained from the FCM algorithm.
+        Each row contains the degree of membership of a complete observation
+        to each cluster.
+
+    feature_names_in_ : list of str
+        Names of features seen during `fit`.
+        Used to ensure column consistency between `fit` and `transform`.`
+
+    Examples
+    --------
+    >>> imputer = FCMCentroidImputer(n_clusters=4)
+    >>> imputer.fit(X_train)
+    >>> X_filled = imputer.transform(X_test)
+    """
+
     def __init__(self, n_clusters=5, m=2.0, max_iter=100, tol=1e-5, random_state=None):
-        """"
-        Fuzzy C-Means centroid-based imputer.
-
-        Missing values are imputed using the centroid of the closest fuzzy cluster,
-        where the nearest cluster is determined by Euclidean distance between an
-        incomplete object and all FCM centroids.
-
-        Parameters
-        ----------
-        n_clusters : int, default=5
-            Number of fuzzy clusters used by the IIFCM algorithm.
-            Must be an integer >= 1.
-
-        m : {int, float}, default=2.0
-            Fuzzification exponent controlling cluster softness.
-            Must be > 1.
-
-        max_iter : int, default=100
-            Maximum number of iterations used by the FCM clustering algorithm.
-            Must be > 1.
-
-        tol : {int, float}, default=1e-5
-            Convergence tolerance for stopping IIFCM updates.
-            Must be > 0.
-
-        random_state : {int, None}, default=None
-            Seed for reproducibility of internal stochastic components.
-            If None, randomness is not fixed.
-
-        Attributes
-        ----------
-        centers_ : numpy.ndarray of shape (n_clusters, n_features)
-            Centroids of fuzzy clusters learned from complete observations.
-            Each centroid represents the mean position of a cluster in feature space.
-
-        memberships_ : numpy.ndarray of shape (n_samples_complete, n_clusters)
-            Fuzzy membership matrix obtained from the FCM algorithm.
-            Each row contains the degree of membership of a complete observation
-            to each cluster.
-
-        feature_names_in_ : list of str
-            Names of features seen during `fit`.
-            Used to ensure column consistency between `fit` and `transform`.`
-        """
-
         validate_params({
             'm': m,
             'max_iter': max_iter,
@@ -163,50 +169,57 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
 # FCMParameterImputer
 # --------------------------------------
 class FCMParameterImputer(BaseEstimator, TransformerMixin):
+    """
+    Fuzzy C-Means parameter-based imputer.
+
+    Each missing value is imputed using a membership-weighted linear combination
+    of all cluster centroids, computed from FCM membership degrees.
+
+    Parameters
+    ----------
+    n_clusters : int, default=5
+        Number of fuzzy clusters used by the IIFCM algorithm.
+        Must be an integer >= 1.
+
+    m : {int, float}, default=2.0
+        Fuzzification exponent controlling cluster softness.
+        Must be > 1.
+
+    max_iter : int, default=100
+        Maximum number of iterations used by the FCM clustering algorithm.
+        Must be > 1.
+
+    tol : {int, float}, default=1e-5
+        Convergence tolerance for stopping IIFCM updates.
+        Must be > 0.
+
+    random_state : {int, None}, default=None
+        Seed for reproducibility of internal stochastic components.
+        If None, randomness is not fixed.
+
+    Attributes
+    ----------
+    centers_ : numpy.ndarray of shape (n_clusters, n_features)
+        Centroids of fuzzy clusters learned from complete observations.
+        Each centroid represents the mean position of a cluster in feature space.
+
+    memberships_ : numpy.ndarray of shape (n_samples_complete, n_clusters)
+        Fuzzy membership matrix obtained from the FCM algorithm.
+        Each row contains the degree of membership of a complete observation
+        to each cluster.
+
+    feature_names_in_ : list of str
+        Names of features seen during `fit`.
+        Used to ensure column consistency between `fit` and `transform`.`
+
+    Examples
+    --------
+    >>> imputer = FCMParameterImputer(n_clusters=4)
+    >>> imputer.fit(X_train)
+    >>> X_filled = imputer.transform(X_test)
+    """
+
     def __init__(self, n_clusters=5, m=2.0, max_iter=100, tol=1e-5, random_state=None):
-        """
-        Fuzzy C-Means parameter-based imputer.
-
-        Each missing value is imputed using a membership-weighted linear combination
-        of all cluster centroids, computed from FCM membership degrees.
-
-        Parameters
-        ----------
-        n_clusters : int, default=5
-            Number of fuzzy clusters used by the IIFCM algorithm.
-            Must be an integer >= 1.
-
-        m : {int, float}, default=2.0
-            Fuzzification exponent controlling cluster softness.
-            Must be > 1.
-
-        max_iter : int, default=100
-            Maximum number of iterations used by the FCM clustering algorithm.
-            Must be > 1.
-
-        tol : {int, float}, default=1e-5
-            Convergence tolerance for stopping IIFCM updates.
-            Must be > 0.
-
-        random_state : {int, None}, default=None
-            Seed for reproducibility of internal stochastic components.
-            If None, randomness is not fixed.
-
-        Attributes
-        ----------
-        centers_ : numpy.ndarray of shape (n_clusters, n_features)
-            Centroids of fuzzy clusters learned from complete observations.
-            Each centroid represents the mean position of a cluster in feature space.
-
-        memberships_ : numpy.ndarray of shape (n_samples_complete, n_clusters)
-            Fuzzy membership matrix obtained from the FCM algorithm.
-            Each row contains the degree of membership of a complete observation
-            to each cluster.
-
-        feature_names_in_ : list of str
-            Names of features seen during `fit`.
-            Used to ensure column consistency between `fit` and `transform`.`
-        """
         validate_params({
             'm': m,
             'max_iter': max_iter,
@@ -313,87 +326,92 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
 # --------------------------------------
 
 class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
+    """
+    Rough Fuzzy C-Means parameter-based imputer.
+
+    Missing values are imputed using the lower or upper approximation of the
+    nearest rough cluster generated from FCM memberships, enabling robust
+    handling of objects in boundary regions.
+
+    Parameters
+    ----------
+    n_clusters : int, default=5
+        Number of fuzzy clusters used by the IIFCM algorithm.
+        Must be an integer >= 1.
+
+    m : {int, float}, default=2.0
+        Fuzzification exponent controlling cluster softness.
+        Must be > 1.
+
+    max_iter : int, default=100
+        Maximum number of iterations used by the FCM clustering algorithm.
+        Must be > 1.
+
+    max_iter_rough_k : int, default=100
+        Maximum number of iterations used by the Rough K-Means clustering algorithm.
+        Must be > 1.
+
+    tol : {int, float}, default=1e-5
+        Convergence tolerance for stopping IIFCM updates.
+        Must be > 0.
+
+    wl : {int, float},  default=0.6
+        Weight assigned to the lower approximation during centroid updates.
+        Must be in range (0, 1].
+
+    wb : {int, float},  default=0.4
+        Weight assigned to the boundary region.
+        Must be in range [0, 1].
+
+    tau : {int, float},  default=0.5
+        Threshold controlling assignment of samples to boundary sets.
+        Must be >= 0.
+
+    random_state : {int, None}, default=None
+        Seed for reproducibility of internal stochastic components.
+        If None, randomness is not fixed.
+
+    Attributes
+    ----------
+    centers_ : numpy.ndarray of shape (n_clusters, n_features)
+        Final cluster centroids obtained from the initial Fuzzy C-Means (FCM)
+        clustering and subsequently refined by the Rough K-Means procedure.
+
+    memberships_ : numpy.ndarray of shape (n_samples_complete, n_clusters)
+        Fuzzy membership matrix produced by the FCM algorithm.
+        Each element represents the degree of membership of a complete
+        observation to a given cluster.
+
+    clusters_ : list of tuples
+        Rough cluster representations obtained after applying Rough K-Means.
+        Each element of the list corresponds to a single cluster and is a tuple:
+
+        (lower, upper, center), where:
+            - lower : numpy.ndarray of shape (n_lower_samples, n_features)
+                Samples belonging exclusively to the lower approximation
+                of the cluster (objects with high assignment certainty).
+
+            - upper : numpy.ndarray of shape (n_upper_samples, n_features)
+                Samples belonging to the upper approximation (boundary region),
+                potentially shared with other clusters due to uncertainty.
+
+            - center : numpy.ndarray of shape (n_features,)
+                Final centroid of the rough cluster, computed as a weighted
+                combination of lower and boundary region means.
+
+    feature_names_in_ : list of str
+        Names of features observed during fitting.
+        Used to ensure consistency between `fit` and `transform` inputs.
+
+    Examples
+    --------
+    >>> imputer = FCMRoughParameterImputer(n_clusters=4)
+    >>> imputer.fit(X_train)
+    >>> X_filled = imputer.transform(X_test)
+    """
+
     def __init__(self, n_clusters=5, m=2.0, max_iter=100, max_iter_rough_k=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5,
                  random_state=None):
-        """
-        Rough Fuzzy C-Means parameter-based imputer.
-
-        Missing values are imputed using the lower or upper approximation of the
-        nearest rough cluster generated from FCM memberships, enabling robust
-        handling of objects in boundary regions.
-
-        Parameters
-        ----------
-        n_clusters : int, default=5
-            Number of fuzzy clusters used by the IIFCM algorithm.
-            Must be an integer >= 1.
-
-        m : {int, float}, default=2.0
-            Fuzzification exponent controlling cluster softness.
-            Must be > 1.
-
-        max_iter : int, default=100
-            Maximum number of iterations used by the FCM clustering algorithm.
-            Must be > 1.
-
-        max_iter_rough_k : int, default=100
-            Maximum number of iterations used by the Rough K-Means clustering algorithm.
-            Must be > 1.
-
-        tol : {int, float}, default=1e-5
-            Convergence tolerance for stopping IIFCM updates.
-            Must be > 0.
-
-        wl : {int, float},  default=0.6
-            Weight assigned to the lower approximation during centroid updates.
-            Must be in range (0, 1].
-
-        wb : {int, float},  default=0.4
-            Weight assigned to the boundary region.
-            Must be in range [0, 1].
-
-        tau : {int, float},  default=0.5
-            Threshold controlling assignment of samples to boundary sets.
-            Must be >= 0.
-
-        random_state : {int, None}, default=None
-            Seed for reproducibility of internal stochastic components.
-            If None, randomness is not fixed.
-
-        Attributes
-        ----------
-        centers_ : numpy.ndarray of shape (n_clusters, n_features)
-            Final cluster centroids obtained from the initial Fuzzy C-Means (FCM)
-            clustering and subsequently refined by the Rough K-Means procedure.
-
-        memberships_ : numpy.ndarray of shape (n_samples_complete, n_clusters)
-            Fuzzy membership matrix produced by the FCM algorithm.
-            Each element represents the degree of membership of a complete
-            observation to a given cluster.
-
-        clusters_ : list of tuples
-            Rough cluster representations obtained after applying Rough K-Means.
-            Each element of the list corresponds to a single cluster and is a tuple:
-
-            (lower, upper, center), where:
-                - lower : numpy.ndarray of shape (n_lower_samples, n_features)
-                    Samples belonging exclusively to the lower approximation
-                    of the cluster (objects with high assignment certainty).
-
-                - upper : numpy.ndarray of shape (n_upper_samples, n_features)
-                    Samples belonging to the upper approximation (boundary region),
-                    potentially shared with other clusters due to uncertainty.
-
-                - center : numpy.ndarray of shape (n_features,)
-                    Final centroid of the rough cluster, computed as a weighted
-                    combination of lower and boundary region means.
-
-        feature_names_in_ : list of str
-            Names of features observed during fitting.
-            Used to ensure consistency between `fit` and `transform` inputs.
-
-        """
-
         validate_params({
             'm': m,
             'max_iter': max_iter,
@@ -560,7 +578,6 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
         n_samples = X.shape[0]
         n_clusters = center_init.shape[0]
-
         centers = center_init.copy()
 
         upper_mask = np.zeros((n_samples, n_clusters), dtype=bool)
@@ -692,6 +709,12 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     np_rng_ : numpy.random.RandomState
         Random generator used during adaptive neighbor masking.
+
+    Examples
+    ----------
+    >>> imputer = FCMKIterativeImputer(max_clusters=5, random_state=42)
+    >>> imputer.fit(X_train)
+    >>> X_filled = imputer.transform(X_test)
     """
 
     def __init__(self, n_clusters=None, max_clusters=10, m=2, max_FCM_iter=100, max_II_iter=80, max_k=20, tol=1e-5,
@@ -790,17 +813,18 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     def _find_best_k(self, St, random_col, original_value, distances):
         """
-        Select the optimal number of neighbors (n_features) that minimizes RMSE
-        when imputing a masked value in a selected column.
+        Identify the indices of the best k nearest neighbors that minimize the
+        absolute error when imputing a masked value in a specific column.
 
         Parameters:
-            St (np.ndarray): Data with last row partially masked.
-            random_col (int): Index of the masked column.
-            original_value (float): True value before masking.
-            distances (np.ndarray): Distances of xi to all other rows in St
+            St (np.ndarray): 2D array of data where the last row contains the masked value.
+            random_col (int): Index of the column that was masked.
+            original_value (float): True value of the masked entry.
+            distances (np.ndarray): 1D array of distances from the last row to all other rows.
 
         Returns:
-            int: Best value of n_features.
+            np.ndarray: Indices of the k nearest neighbors in St (excluding the last row)
+                        that produce the smallest absolute error in the selected column.
         """
         n = St.shape[0]
         if n <= 1:
@@ -964,61 +988,64 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 # --------------------------------------
 
 class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
+    """
+    Linear-Interpolation Intuitionistic Fuzzy C-Means Iterative Imputer (LI-IIFCM).
 
-    def __init__(self, n_clusters=5, m=2.0, max_iter=100, alpha=0.85, tol=1e-5,
-                 sigma=False, random_state=None):
+    Implements an iterative imputation algorithm that combines linear interpolation
+    with intuitionistic fuzzy C-means (IIFCM). The method repeatedly estimates
+    missing values using cluster prototypes weighted by intuitionistic membership.
+    An optional IFCM-σ distance variant is supported to incorporate adaptive,
+    cluster-specific variance scaling.
 
-        """
-        Linear-Interpolation Intuitionistic Fuzzy C-Means Iterative Imputer (LI-IIFCM).
+    Parameters
+    ----------
+    n_clusters : int, default=5
+        Number of fuzzy clusters used by the IIFCM algorithm.
+        Must be an integer >= 1.
 
-        Implements an iterative imputation algorithm that combines linear interpolation
-        with intuitionistic fuzzy C-means (IIFCM). The method repeatedly estimates
-        missing values using cluster prototypes weighted by intuitionistic membership.
-        An optional IFCM-σ distance variant is supported to incorporate adaptive,
-        cluster-specific variance scaling.
+    m : {int, float}, default=2.0
+        Fuzzification exponent controlling cluster softness.
+        Must be > 1.
 
-        Parameters
-        ----------
-        n_clusters : int, default=5
-            Number of fuzzy clusters used by the IIFCM algorithm.
-            Must be an integer >= 1.
+    max_iter : int, default=100
+        Maximum iteration count for the internal IIFCM optimization loop.
+        Must be > 1.
 
-        m : {int, float}, default=2.0
-            Fuzzification exponent controlling cluster softness.
-            Must be > 1.
+    alpha : {int, float}, default=0.85
+        Parameter controlling hesitation in intuitionistic fuzzification.
+        Must be > 0.
 
-        max_iter : int, default=100
-            Maximum iteration count for the internal IIFCM optimization loop.
-            Must be > 1.
+    tol : {int, float}, default=1e-5
+        Convergence tolerance for stopping IIFCM updates.
+        Must be > 0.
 
-        alpha : {int, float}, default=0.85
-            Parameter controlling hesitation in intuitionistic fuzzification.
-            Must be > 0.
+    sigma : bool, default=False
+        If True, applies the IFCM-σ distance metric with adaptive variance scaling.
 
-        tol : {int, float}, default=1e-5
-            Convergence tolerance for stopping IIFCM updates.
-            Must be > 0.
+    random_state : {int, None}, default=None
+        Seed for reproducibility of internal stochastic components.
+        If None, randomness is not fixed.
 
-        sigma : bool, default=False
-            If True, applies the IFCM-σ distance metric with adaptive variance scaling.
+    Attributes
+    ----------
+    columns_ : list of str
+        Column names of the fitted input dataset.
 
-        random_state : {int, None}, default=None
-            Seed for reproducibility of internal stochastic components.
-            If None, randomness is not fixed.
+    centers_ : ndarray of shape (n_clusters, n_features)
+        Learned cluster obtained after convergence of the IIFCM algorithm.
 
-        Attributes
-        ----------
-        columns_ : list of str
-            Column names of the fitted input dataset.
+    sigma_ : ndarray of shape (n_clusters, n_features) or None
+        Adaptive, feature-wise variance estimates for each cluster,
+        used only when `sigma=True`.
 
-        centers_ : ndarray of shape (n_clusters, n_features)
-            Learned cluster obtained after convergence of the IIFCM algorithm.
+    Examples
+    --------
+    >>> imputer = FCMInterpolationIterativeImputer(n_clusters=4, sigma=True)
+    >>> imputer.fit(X_train)
+    >>> X_filled = imputer.transform(X_test)
+    """
 
-        sigma_ : ndarray of shape (n_clusters, n_features) or None
-            Adaptive, feature-wise variance estimates for each cluster,
-            used only when `sigma=True`.
-        """
-
+    def __init__(self, n_clusters=5, m=2.0, max_iter=100, alpha=0.85, tol=1e-5, sigma=False, random_state=None):
         validate_params({
             'm': m,
             'max_iter': max_iter,
@@ -1277,6 +1304,12 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
     leaf_indices_ : dict
         Mapping from column name → array of leaf indices for training rows.
         Used to form leaf-local subgroups during refinement.
+
+    Examples
+    ----------
+    >>> imputer = FCMDTIterativeImputer(max_clusters=10, random_state=0)
+    >>> imputer.fit(X_train)
+    >>> X_filled = imputer.transform(X_test)
     """
 
     def __init__(self, max_clusters=20, m=2, max_iter=100, max_FCM_iter=100, tol=1e-5, min_samples_leaf=40,
@@ -1410,6 +1443,19 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return combined
 
     def _determine_optimal_n_clusters_FSI(self, X, fcm_function):
+        """
+        Determine the optimal number of clusters for fuzzy clustering using the Fuzzy
+        Silhouette Index (FSI).
+
+        Parameters:
+            X (pd.DataFrame): Input data to be clustered.
+            fcm_function (callable): Function that performs fuzzy c-means clustering.
+                                     It should return a tuple `(centers, u)`, where `u`
+                                     is the membership matrix.
+
+        Returns:
+            int: Optimal number of clusters (c) that maximizes the Fuzzy Silhouette Index.
+        """
         if len(X) < 2:
             return 1
         c_values = list(range(1, min(len(X), self.max_clusters) + 1))
@@ -1423,6 +1469,18 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return opt_c
 
     def _fuzzy_silhouette(self, X, U, alpha=1.0):
+        """
+        Compute the Fuzzy Silhouette Index (FSI) for a fuzzy clustering result.
+
+        Parameters:
+            X (np.ndarray or pd.DataFrame): Data points used for clustering (N samples x M features).
+            U (np.ndarray): Fuzzy membership matrix (N samples x C clusters), where each entry
+                            represents the membership degree of a point to a cluster.
+            alpha (float, optional): Weighting exponent for membership differences; default is 1.0.
+
+        Returns:
+            float: Fuzzy Silhouette Index, a weighted measure of cluster cohesion and separation.
+        """
         X = np.asarray(X, dtype=float)
         N, C = U.shape
 
@@ -1455,12 +1513,42 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return FS
 
     def _calculate_AV(self, new_df, old_df, mask_missing):
+        """
+        Compute the average absolute difference between a new and old DataFrame
+        for only the masked/missing entries.
+
+        Parameters:
+            new_df (pd.DataFrame): DataFrame containing the new/imputed values.
+            old_df (pd.DataFrame): DataFrame containing the original values.
+            mask_missing (pd.DataFrame): Boolean mask indicating which entries were
+                                         missing or masked.
+
+        Returns:
+            float: Average absolute difference for the masked entries. Returns 0.0 if
+                   no masked entries exist or result is NaN.
+        """
         diffs = (new_df - old_df).abs()
         masked_diffs = diffs.where(mask_missing)
         AV = masked_diffs.stack().mean()
         return 0.0 if pd.isna(AV) else AV
 
     def _initial_imputation_DT(self, incomplete_X, cols_with_nan):
+        """
+        Perform initial imputation of missing values in a DataFrame using trained decision trees.
+
+        For each missing entry in the specified columns, the function predicts its value
+        using the corresponding decision tree. If a row has multiple missing values,
+        previously imputed values are used iteratively to fill remaining gaps.
+
+        Parameters:
+            incomplete_X (pd.DataFrame): DataFrame containing missing values to be imputed.
+            cols_with_nan (pandas.Index): Columns names that contain missing values.
+
+        Returns:
+            tuple:
+                - dict: Mapping of (row_index, column) to the leaf index in the corresponding tree.
+                - pd.DataFrame: DataFrame with missing values initially imputed.
+        """
         incomplete_leaf_indices_dict = {}
         imputed_X = incomplete_X.copy()
 
@@ -1487,7 +1575,25 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         return incomplete_leaf_indices_dict, imputed_X
 
     def _improve_imputations_in_leaf(self, k, j, incomplete_leaf_indices_dict, imputed_X, fcm_function):
+        """
+        Refine imputed values within a specific leaf of a decision tree using fuzzy c-means clustering.
 
+        The function selects all complete and imputed records in a given leaf, determines
+        the optimal number of clusters via Fuzzy Silhouette Index, and updates the imputed
+        values as a weighted combination of cluster centers, adjusted by a learning rate.
+
+        Parameters:
+            k (int): Leaf index within the decision tree for column j.
+            j (int or str): Column index or name for which imputations are being refined.
+            incomplete_leaf_indices_dict (dict): Mapping of (row_index, column) to leaf indices
+                                                 from initial imputation.
+            imputed_X (pd.DataFrame): DataFrame with currently imputed values.
+            fcm_function (callable): Function to perform fuzzy c-means clustering. Should return
+                                     `(centers, u)` where `u` is the membership matrix.
+
+        Returns:
+            pd.DataFrame: Updated DataFrame with refined imputations for column j within leaf k.
+        """
         complete_records_in_leaf = self.X_train_complete_[self.leaf_indices_[j] == k].copy()
         complete_records_in_leaf.index = range(len(complete_records_in_leaf))
 
@@ -1527,3 +1633,13 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         imputed_X.loc[matching_indices, j] = corrected_vals
 
         return imputed_X
+
+
+__all__ = [
+    "FCMCentroidImputer",
+    "FCMParameterImputer",
+    "FCMRoughParameterImputer",
+    "FCMKIterativeImputer",
+    "FCMInterpolationIterativeImputer",
+    "FCMDTIterativeImputer",
+]

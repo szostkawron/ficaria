@@ -2,6 +2,8 @@ import os
 import sys
 
 import pytest
+import numpy as np
+import pandas as pd
 from sklearn.exceptions import NotFittedError
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -493,8 +495,8 @@ def test_weightedfuzzyroughselector_fit_creates_attributes():
 
 
 def test_weightedfuzzyroughselector_transform_returns_reduced_features():
-    X = pd.DataFrame({"num1": [1.0, 2.0, 3.0, 4.0, 5.0], 
-                      "num2": [4.0, 5.0, 6.0, 7.0, 8.0], 
+    X = pd.DataFrame({"num1": [1.0, 2.0, 3.0, 4.0, 5.0],
+                      "num2": [4.0, 5.0, 6.0, 7.0, 8.0],
                       "num3": [1.0, 2.0, 3.0, 4.0, 5.0]})
     y = pd.Series([0, 1, 0, 1, 0])
     selector = WeightedFuzzyRoughSelector(n_features=2, k=2)
