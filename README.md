@@ -1,25 +1,28 @@
-<p>
+<h1 align="center">FICARIA</h1>
+
+<p align="center">
+  <img src="img/logo.png" alt="Project Logo" width="350">
+</p>
+
+<h2 align="center"><em>Fuzzy Imputation and Critical Attribute Reduction for Intelligent Analysis</em></h2>
+
+</br>
+
+<p align="center">
   <img src="https://img.shields.io/badge/pypi-v1.0.0-blue?style=flat-square" alt="PyPI">
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/coverage-96%25-green?style=flat-square" alt="coverage">
 </p>
 
 <p align="center">
-  <img src="img/logo.png" alt="Project Logo" width="250">
+<a href="#about-the-package">About The Package</a> | 
+<a href="#prerequisites">Prerequisites</a> | 
+<a href="#setup">Setup</a> | 
+<a href="#usage">Usage</a> | 
+<a href="#license">License</a> | 
+<a href="#authors">Authors</a>
 </p>
 
-
-<h2 align="center"><em>Fuzzy Imputation and Critical Attribute Reduction for Intelligent Analysis</em></h2>
-
-</br>
-
-## 📖 Table of Contents
-<li><a href="#about-the-package"> ➤ About The Package</a></li>
-<li><a href="#prerequisites"> ➤ Prerequisites</a></li>
-<li><a href="#setup"> ➤ Setup</a></li>
-<li><a href="#usage"> ➤ Usage</a></li>
-<li><a href="#license"> ➤ License</a></li>
-<li><a href="#authors"> ➤ Authors</a></li>
 
 
 <h2 id="about-the-package">🔷 About The Package</h2>
@@ -39,7 +42,8 @@ This makes *ficaria* particularly suitable for datasets where
 classical crisp methods may be insufficient or overly restrictive.
 
 
-## ⚙️ Prerequisites
+<h2 id="prerequisites">⚙️ Prerequisites</h2>
+
 
 ![python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
 
@@ -52,8 +56,7 @@ The *ficaria* package depends on the following Python libraries:
 - **kneed**
 
 
-
-## 🛠 Setup
+<h2 id="setup">🛠 Setup</h2>
 
 Ficaria can be installed from PyPI:
 
@@ -64,8 +67,7 @@ pip install ficaria
 All dependencies are automatically installed when installing the package via `pip`.
 
 
-
-## 🚀 Usage
+<h2 id="usage">🚀 Usage</h2>
 
 Ficaria provides scikit-learn–compatible transformers for data imputation and feature selection.
 All transformers implement the standard fit / transform interface, so they can be used
@@ -108,15 +110,14 @@ X_final = pipeline.transform(X_test)
 ```
 
 
-
-## 📄 License
+<h2 id="license">📄 License</h2>
 
 This project is licensed under the **MIT License**.
 See the `LICENSE` file for details.
 
 
 
-## 👥 Authors
+<h2 id="authors">👥 Authors</h2>
 
 **Aleksandra Kwiatkowska** <br>
 Email: <a>aleksandra.kwiatkowska263@gmail.com</a> <br>
