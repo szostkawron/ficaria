@@ -13,9 +13,9 @@ from ficaria.feature_selection import *
 @pytest.fixture
 def sample_data():
     X = pd.DataFrame({
-        "a": [0.1, 0.4, 0.5, 0.9, 0.3],
-        "b": [1, 2, 1, 2, 1],
-        "c": ["x", "y", "x", "x", "y"]
+        "num1": [0.1, 0.4, 0.5, 0.9, 0.3],
+        "num2": [1, 2, 1, 2, 1],
+        "cat1": ["x", "y", "x", "x", "y"]
     })
     y = pd.Series([0, 1, 0, 1, 0])
     return X, y
@@ -145,11 +145,11 @@ def test_inconsistent_columns_between_fit_and_transform(sample_data):
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
 
-    X_bad_order = X[["b", "a", "c"]].copy()
+    X_bad_order = X[["num2", "num1", "cat1"]].copy()
     with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
         selector.transform(X_bad_order)
 
-    X_missing = X.drop(columns=["c"])
+    X_missing = X.drop(columns=["cat1"])
     with pytest.raises(ValueError, match="X.columns must match the columns seen during fit"):
         selector.transform(X_missing)
 
@@ -194,7 +194,7 @@ def test__calculate_similarity_matrix_for_df_numeric(sample_data):
     X, y = sample_data
     selector = FuzzyGranularitySelector(eps=0.5)
     selector.fit(X, y)
-    mat = selector._calculate_similarity_matrix_for_df('b', X)
+    mat = selector._calculate_similarity_matrix_for_df('num2', X)
     assert isinstance(mat, np.ndarray)
     assert mat.shape == (len(X), len(X))
     assert np.all((mat >= 0) & (mat <= 1))
@@ -204,7 +204,7 @@ def test__calculate_similarity_matrix_for_df_nominal(sample_data):
     X, y = sample_data
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
-    mat = selector._calculate_similarity_matrix_for_df('c', X)
+    mat = selector._calculate_similarity_matrix_for_df('cat1', X)
     assert mat.shape == (len(X), len(X))
     assert np.all((mat == 0) | (mat == 1))
 
@@ -214,7 +214,7 @@ def test__calculate_delta_for_column_subset_global_and_local(sample_data):
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
 
-    B = ['a', 'b']
+    B = ['num1', 'num2']
     granule_vec, size = selector._calculate_delta_for_column_subset(0, B)
     assert isinstance(granule_vec, np.ndarray)
     assert isinstance(size, float)
@@ -230,7 +230,7 @@ def test__calculate_multi_granularity_fuzzy_implication_entropy_basic(sample_dat
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
 
-    ent = selector._calculate_multi_granularity_fuzzy_implication_entropy(['a', 'b'], type="basic")
+    ent = selector._calculate_multi_granularity_fuzzy_implication_entropy(['num1', 'num2'], type="basic")
     assert isinstance(ent, float)
     assert ent >= 0
 
@@ -241,7 +241,7 @@ def test__calculate_multi_granularity_fuzzy_implication_entropy_types(sample_dat
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
 
-    val = selector._calculate_multi_granularity_fuzzy_implication_entropy(["b"], type=etype)
+    val = selector._calculate_multi_granularity_fuzzy_implication_entropy(["num2"], type=etype)
     assert isinstance(val, float)
     assert val >= 0
 
@@ -251,7 +251,7 @@ def test__granual_consistency_of_B_subset(sample_data):
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
 
-    score = selector._granular_consistency_of_B_subset(["c"])
+    score = selector._granular_consistency_of_B_subset(["cat1"])
     assert isinstance(score, float)
     assert 0 <= score <= 1
 
@@ -261,7 +261,7 @@ def test__local_granularity_consistency_of_B_subset(sample_data):
     selector = FuzzyGranularitySelector()
     selector.fit(X, y)
 
-    val = selector._local_granularity_consistency_of_B_subset(['b'])
+    val = selector._local_granularity_consistency_of_B_subset(['num2'])
     assert isinstance(val, float)
     assert 0 <= val <= 1
 
@@ -292,12 +292,12 @@ def test__FIGFS_algorithm_executes(sample_data):
 def test_d_less_than_number_of_features():
     np.random.seed(42)
     X = pd.DataFrame({
-        "a": np.random.rand(10),
-        "b": np.random.rand(10),
-        "c": np.random.rand(10),
-        "d": np.random.rand(10),
-        "e": np.random.rand(10),
-        "f": np.random.rand(10)
+        "num1": np.random.rand(10),
+        "num2": np.random.rand(10),
+        "num3": np.random.rand(10),
+        "num4": np.random.rand(10),
+        "num5": np.random.rand(10),
+        "num6": np.random.rand(10)
     })
     y = np.random.randint(0, 2, size=10)
 
@@ -315,9 +315,9 @@ def test_d_less_than_number_of_features():
 
 def test_transform_single_row():
     X = pd.DataFrame({
-        "a": [0.5],
-        "b": [1.2],
-        "c": [0.7]
+        "num1": [0.5],
+        "num2": [1.2],
+        "num3": [0.7]
     })
     y = pd.Series([1])
 
@@ -351,41 +351,41 @@ def test_d_greater_than_number_of_features(sample_data):
 
 dataframes_list = [
     pd.DataFrame({
-        "a": [1.0, 2.0, 3.0, 4.0, 5.0],
-        "b": [4.0, 5.0, 6.0, 7.0, 6.0],
-        "c": ["n_features", "n_features", "m", "m", "m"],
+        "num1": [1.0, 2.0, 3.0, 4.0, 5.0],
+        "num2": [4.0, 5.0, 6.0, 7.0, 6.0],
+        "cat1": ["n_features", "n_features", "m", "m", "m"],
     }),
 
     pd.DataFrame({
-        "a": [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],
-        "b": [3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
+        "num1": [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0],
+        "num2": [3.0, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0]
     }),
 
     pd.DataFrame({
-        "a": np.random.rand(10),
-        "b": np.random.rand(10),
-        "c": np.random.rand(10)
+        "num1": np.random.rand(10),
+        "num2": np.random.rand(10),
+        "num3": np.random.rand(10)
     }),
 
     pd.DataFrame({
-        "a": [1, 2, np.nan, 4, 5, 6, 7],
-        "b": [7, 6, 5, np.nan, 3, 2, 1],
-        "c": ["x", np.nan, "z", "x", "y", "z", "x"],
-        "d": [0.1, 0.2, 0.3, 0.4, 0.5, np.nan, 0.7]
+        "num1": [1, 2, np.nan, 4, 5, 6, 7],
+        "num2": [7, 6, 5, np.nan, 3, 2, 1],
+        "cat1": ["x", np.nan, "z", "x", "y", "z", "x"],
+        "num4": [0.1, 0.2, 0.3, 0.4, 0.5, np.nan, 0.7]
     }),
 
     pd.DataFrame({
-        "a": np.random.randint(0, 100, size=50),
-        "b": np.random.rand(50),
-        "c": np.random.choice(["red", "blue", "green"], size=50),
-        "d": np.random.randn(50),
-        "e": np.random.rand(50),
+        "num1": np.random.randint(0, 100, size=50),
+        "num2": np.random.rand(50),
+        "cat1": np.random.choice(["red", "blue", "green"], size=50),
+        "num3": np.random.randn(50),
+        "num4": np.random.rand(50),
     }),
 
     pd.DataFrame({
-        "a": ["txt", "txt", "txt", "csv", "csv"],
-        "b": ["A", "B", "B", "C", "C"],
-        "c": ["n_features", "n_features", "m", "m", "m"],
+        "cat1": ["txt", "txt", "txt", "csv", "csv"],
+        "cat2": ["A", "B", "B", "C", "C"],
+        "cat3": ["n_features", "n_features", "m", "m", "m"],
     }),
 ]
 
@@ -416,7 +416,7 @@ selector_params_list = [
     (1.5, ValueError, r"alpha must be in range \(0, 1\], got"),
 ])
 def test_fcmcentroidimputer_fit_raises_if_too_many_clusters(alpha, expected_exception, expected_msg):
-    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, np.nan], "num2": [4.0, 5.0, 6.0]})
     with pytest.raises(expected_exception, match=expected_msg):
         WeightedFuzzyRoughSelector(n_features=2, alpha=alpha)
 
@@ -430,14 +430,14 @@ def test_weightedfuzzyroughselector_init_parametrized(n_features, alpha, k):
 
 
 def test_weightedfuzzyroughselector_transform_raises_if_not_fitted():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, 3.0], "num2": [4.0, 5.0, 6.0]})
     selector = WeightedFuzzyRoughSelector(n_features=1)
     with pytest.raises(NotFittedError):
         selector.transform(X)
 
 
 def test_weightedfuzzyroughselector_fit_raises_if_y_has_missing_values():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, 3.0], "num2": [4.0, 5.0, 6.0]})
     y = pd.Series([1, np.nan, 0])
     selector = WeightedFuzzyRoughSelector(n_features=1, k=2)
 
@@ -446,7 +446,7 @@ def test_weightedfuzzyroughselector_fit_raises_if_y_has_missing_values():
 
 
 def test_weightedfuzzyroughselector_fit_raises_if_y_length_mismatch():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, 3.0], "num2": [4.0, 5.0, 6.0]})
     y = pd.Series([0, 1])
     selector = WeightedFuzzyRoughSelector(n_features=1, k=2)
 
@@ -455,8 +455,8 @@ def test_weightedfuzzyroughselector_fit_raises_if_y_length_mismatch():
 
 
 def test_weightedfuzzyroughselector_transform_raises_if_columns_differ():
-    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0, 5.0], "b": [4.0, 5.0, 6.0, 7.0, 8.0]})
-    X_test = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0, 5.0], "c": [7.0, 8.0, 9.0, 10.0, 11.0]})
+    X_train = pd.DataFrame({"num1": [1.0, 2.0, 3.0, 4.0, 5.0], "num2": [4.0, 5.0, 6.0, 7.0, 8.0]})
+    X_test = pd.DataFrame({"num1": [1.0, 2.0, 3.0, 4.0, 5.0], "num3": [7.0, 8.0, 9.0, 10.0, 11.0]})
     y = np.array([0, 1, 0, 1, 0])
 
     selector = WeightedFuzzyRoughSelector(n_features=1, k=2)
@@ -482,7 +482,7 @@ def test_weightedfuzzyroughselector_transform_single_row(sample_data):
 
 
 def test_weightedfuzzyroughselector_fit_creates_attributes():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0, 5.0], "b": [4.0, 5.0, 6.0, 7.0, 8.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, 3.0, 4.0, 5.0], "num2": [4.0, 5.0, 6.0, 7.0, 8.0]})
     y = np.array([0, 1, 0, 1, 0])
     selector = WeightedFuzzyRoughSelector(n_features=1, k=2)
     selector.fit(X, y)
@@ -493,7 +493,9 @@ def test_weightedfuzzyroughselector_fit_creates_attributes():
 
 
 def test_weightedfuzzyroughselector_transform_returns_reduced_features():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0, 4.0, 5.0], "b": [4.0, 5.0, 6.0, 7.0, 8.0], "c": [1.0, 2.0, 3.0, 4.0, 5.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, 3.0, 4.0, 5.0], 
+                      "num2": [4.0, 5.0, 6.0, 7.0, 8.0], 
+                      "num3": [1.0, 2.0, 3.0, 4.0, 5.0]})
     y = pd.Series([0, 1, 0, 1, 0])
     selector = WeightedFuzzyRoughSelector(n_features=2, k=2)
     selector.fit(X, y)
@@ -541,7 +543,7 @@ def test_weightedfuzzyroughselector_fit_transform_combinations(X, y, params):
 
 
 def test_single_feature_dataset():
-    X = pd.DataFrame({"a": [1, 2, 1, 2, 1]})
+    X = pd.DataFrame({"num1": [1, 2, 1, 2, 1]})
     y = np.array([0, 1, 0, 1, 0])
 
     selector = WeightedFuzzyRoughSelector(n_features=1, alpha=1.0, k=2)
@@ -550,18 +552,18 @@ def test_single_feature_dataset():
 
     assert selector.feature_sequence_ == [0]
     assert selector.feature_importances_.shape[0] == 1
-    assert selector.feature_importances_['feature'].iloc[0] == "a"
+    assert selector.feature_importances_['feature'].iloc[0] == "num1"
     X_transformed = selector.transform(X)
     assert X_transformed.shape == X.shape
-    assert (X_transformed['a'] == X['a']).all()
+    assert (X_transformed['num1'] == X['num1']).all()
     assert selector.Rw_.shape == (1, 1)
 
 
 def test_reproducibility_same_input():
     X = pd.DataFrame({
-        "a": [1, 2, 1, 2, 1],
-        "b": [5, 4, 5, 4, 5],
-        "c": [9, 8, 9, 8, 9]
+        "num1": [1, 2, 1, 2, 1],
+        "num2": [5, 4, 5, 4, 5],
+        "num3": [9, 8, 9, 8, 9]
     })
     y = np.array([0, 1, 0, 1, 0])
 
@@ -590,9 +592,9 @@ def test_reproducibility_same_input():
 
 def test_n_features_greater_or_equal_than_columns_raises():
     X = pd.DataFrame({
-        "a": [1, 2, 3],
-        "b": [4, 5, 6],
-        "c": [7, 8, 9]
+        "num1": [1, 2, 3],
+        "num2": [4, 5, 6],
+        "num3": [7, 8, 9]
     })
     y = np.array([0, 1, 0])
 
@@ -607,9 +609,9 @@ def test_n_features_greater_or_equal_than_columns_raises():
 
 def test_weightedfuzzyroughselector_selected_columns_match_sequence():
     X = pd.DataFrame({
-        "a": [1, 2, 3, 4],
-        "b": [4, 3, 2, 1],
-        "c": [10, 20, 30, 40]
+        "num1": [1, 2, 3, 4],
+        "num2": [4, 3, 2, 1],
+        "num3": [10, 20, 30, 40]
     })
     y = np.array([0, 1, 0, 1])
 
@@ -626,7 +628,7 @@ def test_weightedfuzzyroughselector_selected_columns_match_sequence():
 
 
 def test_weightedfuzzyroughselector_invalid_y_type():
-    X = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
+    X = pd.DataFrame({"num1": [1, 2], "num2": [3, 4]})
     y = ["a", "b"]
     selector = WeightedFuzzyRoughSelector(n_features=1, k=2)
 
@@ -638,8 +640,8 @@ def test_weightedfuzzyroughselector_invalid_y_type():
 
 def test_identify_high_density_region():
     X = pd.DataFrame({
-        "a": [1.0, 2.0, 1.1, 3.0],
-        "b": [4.0, 5.0, 4.1, 6.0]
+        "num1": [1.0, 2.0, 1.1, 3.0],
+        "num2": [4.0, 5.0, 4.1, 6.0]
     })
     y = pd.Series([0, 1, 0, 1])
 
@@ -661,8 +663,8 @@ def test_identify_high_density_region():
 
 def test_compute_HEC_numeric_and_categorical():
     X = pd.DataFrame({
-        "num": [1.0, 2.0, np.nan],
-        "cat": ["a", "b", "a"]
+        "num1": [1.0, 2.0, np.nan],
+        "cat1": ["a", "b", "a"]
     })
 
     selector = WeightedFuzzyRoughSelector(n_features=1, k=2)
@@ -701,8 +703,8 @@ def test_compute_LDF_simple():
 
 def test_compute_fuzzy_similarity_relations_small():
     X = pd.DataFrame({
-        "a": [1, 2, 1],
-        "b": [3, 4, 3]
+        "num1": [1, 2, 1],
+        "num2": [3, 4, 3]
     })
     H = [0, 2]
     selector = WeightedFuzzyRoughSelector(n_features=1, k=2, alpha=0.5)
@@ -774,10 +776,10 @@ def test_compute_gamma_basic():
 
 def test_build_weighted_feature_sequence_equal_weights():
     X = pd.DataFrame({
-        'a': [1, 2, 3, 4, 5, 6],
-        'b': [2, 3, 4, 5, 6, 7],
-        'c': [3, 4, 5, 6, 7, 8],
-        'd': [4, 5, 6, 7, 8, 9]
+        'num1': [1, 2, 3, 4, 5, 6],
+        'num2': [2, 3, 4, 5, 6, 7],
+        'num3': [3, 4, 5, 6, 7, 8],
+        'num4': [4, 5, 6, 7, 8, 9]
     })
 
     y = np.array([0, 1, 0, 1, 0, 1])
@@ -848,8 +850,8 @@ def test_compute_relevance_B_basic():
 
 def test_compute_relation_for_subset_basic():
     X = pd.DataFrame({
-        'a': [1, 2, 3],
-        'b': [4, 5, 6]
+        'num1': [1, 2, 3],
+        'num2': [4, 5, 6]
     })
     H = [0, 2]
     feature_subset = [0, 1]
@@ -865,9 +867,9 @@ def test_compute_relation_for_subset_basic():
 
 def test_compute_separability_basic():
     X = pd.DataFrame({
-        'a': [1, 2, 3],
-        'b': [4, 5, 6],
-        'c': [7, 8, 9]
+        'num1': [1, 2, 3],
+        'num2': [4, 5, 6],
+        'num3': [7, 8, 9]
     })
     y = np.array([0, 1, 0])
     H = [0, 2]

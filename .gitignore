@@ -3,7 +3,8 @@
 
 # Experiments resuts
 experiments/01_MI_results/*
-experiments/01_MI_results_2/*
+experiments/02_MI_results/*
+experiments/03_MI_results/*
 
 # Standardowe pliki Pythona
 __pycache__/

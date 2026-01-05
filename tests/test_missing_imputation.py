@@ -9,33 +9,33 @@ from ficaria.missing_imputation import *
 
 dataframes_list = [
     pd.DataFrame({
-        "a": [1.0, 2.0, 3.0, np.nan, 5.0],
-        "b": [5.0, 4.0, 3.0, 2.0, 1.0],
+        "num1": [1.0, 2.0, 3.0, np.nan, 5.0],
+        "num2": [5.0, 4.0, 3.0, 2.0, 1.0],
     }),
 
     pd.DataFrame({
-        "a": [np.nan, np.nan, 3.0, 4.0, 5.0],
-        "b": [np.nan, np.nan, 3.0, 2.0, 1.0],
+        "num1": [np.nan, np.nan, 3.0, 4.0, 5.0],
+        "num2": [np.nan, np.nan, 3.0, 2.0, 1.0],
     }),
 
     pd.DataFrame({
-        "a": [np.nan, np.nan, 3.0, 4.0, 5.0, 6.0],
-        "b": [np.nan, 2.0, 3.0, np.nan, 5.0, 6.0],
-        "c": [2.0, 3.0, 4.0, 5.0, 5.0, 6.0],
+        "num1": [np.nan, np.nan, 3.0, 4.0, 5.0, 6.0],
+        "num2": [np.nan, 2.0, 3.0, np.nan, 5.0, 6.0],
+        "num3": [2.0, 3.0, 4.0, 5.0, 5.0, 6.0],
     }),
 
     pd.DataFrame({
-        "a": [np.nan, 2.0, -3.0, -4.0, -5.0, -6.0],
-        "b": [1.0, 2.0, np.nan, -4.0, -5.0, -6.0],
-        "c": [1.0, 2.0, -3.0, np.nan, -5.0, -6.0],
+        "num1": [np.nan, 2.0, -3.0, -4.0, -5.0, -6.0],
+        "num2": [1.0, 2.0, np.nan, -4.0, -5.0, -6.0],
+        "num3": [1.0, 2.0, -3.0, np.nan, -5.0, -6.0],
     }),
 
     pd.DataFrame({
-        "a": [1.0, 2.0, 3.0, np.nan, 5.0, 6.0, 7.0],
-        "b": [5.0, 4.0, 3.0, np.nan, 2.0, 1.0, 0.0],
-        "c": [9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0],
-        "d": [10.0, np.nan, 15.0, 16.0, 17.0, 18.0, 19.0],
-        "e": [9.0, np.nan, 7.0, 6.0, 5.0, np.nan, np.nan],
+        "num1": [1.0, 2.0, 3.0, np.nan, 5.0, 6.0, 7.0],
+        "num2": [5.0, 4.0, 3.0, np.nan, 2.0, 1.0, 0.0],
+        "num3": [9.0, 8.0, 7.0, 6.0, 5.0, 4.0, 3.0],
+        "num4": [10.0, np.nan, 15.0, 16.0, 17.0, 18.0, 19.0],
+        "num5": [9.0, np.nan, 7.0, 6.0, 5.0, np.nan, np.nan],
     }),
 ]
 
@@ -77,7 +77,7 @@ def test_fcmcentroidimputer_init_errors_nclusters(value, expected_exception, exp
 
 
 def test_fcmcentroidimputer_fit_creates_attributes():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, 3.0], "num2": [4.0, 5.0, 6.0]})
     imputer = FCMCentroidImputer(n_clusters=2)
     imputer.fit(X)
     assert hasattr(imputer, "centers_")
@@ -87,10 +87,10 @@ def test_fcmcentroidimputer_fit_creates_attributes():
 
 @pytest.mark.parametrize("X_train, X_test", [
     (pd.DataFrame({
-        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
-        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
-        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
-     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+        'num1': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'num2': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'num3': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'num1': [10], 'num2': [np.nan], 'num3': [1000]}))])
 def test_fcmcentroidimputer_transform_single_row(X_train, X_test):
     imputer = FCMCentroidImputer()
     imputer.fit(X_train)
@@ -101,16 +101,16 @@ def test_fcmcentroidimputer_transform_single_row(X_train, X_test):
 
 
 def test_fcmcentroidimputer_transform_raises_if_not_fitted():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
-                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    X = pd.DataFrame({"num1": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "num2": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
     imputer = FCMCentroidImputer()
     with pytest.raises(NotFittedError):
         imputer.transform(X)
 
 
 def test_fcmcentroidimputer_transform_raises_if_columns_differ():
-    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
+    X_train = pd.DataFrame({"num1": [1.0, 2.0, 3.0], "num2": [4.0, 5.0, 6.0]})
+    X_test = pd.DataFrame({"num1": [1.0, 2.0, np.nan], "num3": [7.0, 8.0, 9.0]})
 
     imputer = FCMCentroidImputer(n_clusters=2)
     imputer.fit(X_train)
@@ -128,7 +128,7 @@ def test_fcmcentroidimputer_transform_imputes_missing_values(X):
 
 
 def test_fcmcentroidimputer_transform_no_missing_returns_same():
-    X = pd.DataFrame({"a": [1.0, 2.0, 2.0], "b": [3.0, 4.0, 4.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, 2.0], "num2": [3.0, 4.0, 4.0]})
     imputer = FCMCentroidImputer(n_clusters=2)
     imputer.fit(X)
     result = imputer.transform(X)
@@ -136,14 +136,14 @@ def test_fcmcentroidimputer_transform_no_missing_returns_same():
 
 
 def test_fcmcentroidimputer_fit_raises_if_too_many_clusters():
-    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, np.nan], "num2": [4.0, 5.0, 6.0]})
     imputer = FCMCentroidImputer(n_clusters=5)
     with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
         imputer.fit(X)
 
 
 def test_fcmcentroidimputer_fit_no_complete_rows():
-    X = pd.DataFrame({"a": [np.nan, np.nan], "b": [np.nan, np.nan]})
+    X = pd.DataFrame({"num1": [np.nan, np.nan], "num2": [np.nan, np.nan]})
     imputer = FCMCentroidImputer()
     with pytest.raises(ValueError,
                        match="X must contain at least one row with no missing values"):
@@ -153,7 +153,7 @@ def test_fcmcentroidimputer_fit_no_complete_rows():
 # ----- FCMParameterImputer -----------------------------------------------
 
 def test_fcmparameterimputer_fit_creates_attributes():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, 3.0], "num2": [4.0, 5.0, 6.0]})
     imputer = FCMParameterImputer(n_clusters=2)
     imputer.fit(X)
     assert hasattr(imputer, "centers_")
@@ -178,10 +178,10 @@ def test_fcmparameterimputer_init_errors_nclusters(value, expected_exception, ex
 
 @pytest.mark.parametrize("X_train, X_test", [
     (pd.DataFrame({
-        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
-        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
-        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
-     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+        'num1': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'num2': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'num3': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'num1': [10], 'num2': [np.nan], 'num3': [1000]}))])
 def test_fcmparameterimputer_transform_single_row(X_train, X_test):
     imputer = FCMParameterImputer()
     imputer.fit(X_train)
@@ -200,23 +200,23 @@ def test_fcmparameterimputer_transform_imputes_values(X):
 
 
 def test_fcmparameterimputer_fit_raises_if_too_many_clusters():
-    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, np.nan], "num2": [4.0, 5.0, 6.0]})
     imputer = FCMParameterImputer(n_clusters=5)
     with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
         imputer.fit(X)
 
 
 def test_fcmparameterimputer_feature_names_in_assigned():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
-                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    X = pd.DataFrame({"num1": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "num2": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
     imputer = FCMParameterImputer(n_clusters=3)
     imputer.fit(X)
     assert list(imputer.feature_names_in_) == list(X.columns)
 
 
 def test_fcmparameterimputer_transform_raises_if_columns_differ():
-    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
+    X_train = pd.DataFrame({"num1": [1.0, 2.0, 3.0], "num2": [4.0, 5.0, 6.0]})
+    X_test = pd.DataFrame({"num1": [1.0, 2.0, np.nan], "num3": [7.0, 8.0, 9.0]})
 
     imputer = FCMParameterImputer(n_clusters=2)
     imputer.fit(X_train)
@@ -226,8 +226,8 @@ def test_fcmparameterimputer_transform_raises_if_columns_differ():
 
 
 def test_fcmparameterimputer_transform_raises_if_not_fitted():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
-                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    X = pd.DataFrame({"num1": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "num2": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
     imputer = FCMParameterImputer()
     with pytest.raises(NotFittedError):
         imputer.transform(X)
@@ -236,7 +236,7 @@ def test_fcmparameterimputer_transform_raises_if_not_fitted():
 # ----- FCMRoughParameterImputer -----------------------------------------------
 
 def test_fcmroughparameterimputer_fit_creates_clusters():
-    X = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, 3.0], "num2": [4.0, 5.0, 6.0]})
     imputer = FCMRoughParameterImputer(n_clusters=2)
     imputer.fit(X)
     assert hasattr(imputer, "centers_")
@@ -261,10 +261,10 @@ def test_fcmroughparameterimputer_init_errors_nclusters(value, expected_exceptio
 
 @pytest.mark.parametrize("X_train, X_test", [
     (pd.DataFrame({
-        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
-        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
-        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
-     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+        'num1': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'num2': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'num3': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'num1': [10], 'num2': [np.nan], 'num3': [1000]}))])
 def test_fcmroughparameterimputer_transform_single_row(X_train, X_test):
     imputer = FCMRoughParameterImputer()
     imputer.fit(X_train)
@@ -283,23 +283,23 @@ def test_fcmroughparameterimputer_transform_imputes_values(X):
 
 
 def test_fcmroughparameterimputer_fit_raises_if_too_many_clusters():
-    X = pd.DataFrame({"a": [1.0, 2.0, np.nan], "b": [4.0, 5.0, 6.0]})
+    X = pd.DataFrame({"num1": [1.0, 2.0, np.nan], "num2": [4.0, 5.0, 6.0]})
     imputer = FCMRoughParameterImputer(n_clusters=5)
     with pytest.raises(ValueError, match="n_clusters must be ≤ the number of complete rows"):
         imputer.fit(X)
 
 
 def test_fcmroughparameterimputer_transform_raises_if_not_fitted():
-    X = pd.DataFrame({"a": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
-                      "b": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
+    X = pd.DataFrame({"num1": [1.0, np.nan, 3.0, 1.0, 2.0, 3.0],
+                      "num2": [4.0, 5.0, np.nan, 4.0, 5.0, np.nan]})
     imputer = FCMRoughParameterImputer(n_clusters=5)
     with pytest.raises(NotFittedError):
         imputer.transform(X)
 
 
 def test_fcmroughparameterimputer_transform_raises_if_columns_differ():
-    X_train = pd.DataFrame({"a": [1.0, 2.0, 3.0], "b": [4.0, 5.0, 6.0]})
-    X_test = pd.DataFrame({"a": [1.0, 2.0, np.nan], "c": [7.0, 8.0, 9.0]})
+    X_train = pd.DataFrame({"num1": [1.0, 2.0, 3.0], "num2": [4.0, 5.0, 6.0]})
+    X_test = pd.DataFrame({"num1": [1.0, 2.0, np.nan], "num3": [7.0, 8.0, 9.0]})
 
     imputer = FCMRoughParameterImputer(n_clusters=2)
     imputer.fit(X_train)
@@ -364,14 +364,14 @@ def test_rough_kmeans_from_fcm_cluster_consistency():
 @pytest.mark.parametrize("St_df, random_col, original_value, max_k, random_state", [
     (
             pd.DataFrame({
-                'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
-                'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
-                'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]}),
+                'num1': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
+                'num2': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
+                'num3': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]}),
             1, 85, 20, 102),
     (
             pd.DataFrame({
-                'age': [25, 26, np.nan, 51, 53, 72, 75],
-                'income': [50000, 55000, 80000, 85000, 90000, 120000, np.nan]}),
+                'num1': [25, 26, np.nan, 51, 53, 72, 75],
+                'num2': [50000, 55000, 80000, 85000, 90000, 120000, np.nan]}),
             0, 125000, 15, 42)
 ])
 def test_fcmkiimputer_find_best_k(St_df, random_col, original_value, max_k, random_state):
@@ -402,10 +402,10 @@ def test_fcmkiimputer_find_best_k(St_df, random_col, original_value, max_k, rand
 
 @pytest.mark.parametrize("X_train, X_test", [
     (pd.DataFrame({
-        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
-        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
-        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
-     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+        'num1': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'num2': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'num3': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'num1': [10], 'num2': [np.nan], 'num3': [1000]}))])
 def test_fcmkiimputer_transform_single_row(X_train, X_test):
     imputer = FCMKIterativeImputer()
     imputer.fit(X_train)
@@ -417,22 +417,22 @@ def test_fcmkiimputer_transform_single_row(X_train, X_test):
 
 @pytest.mark.parametrize("X, random_state", [
     (pd.DataFrame({
-        'height_cm': [165, 170, 175, 180, 175, 160, 175, 190],
-        'weight_kg': [60, 65, 70, 75, 80, 55, 68, 80],
-        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, 25.0]}), 42),
+        'num1': [165, 170, 175, 180, 175, 160, 175, 190],
+        'num2': [60, 65, 70, 75, 80, 55, 68, 80],
+        'num3': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, 25.0]}), 42),
     (pd.DataFrame({
-        'height_cm': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
-        'weight_kg': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
-        'bmi': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]}), 120),
+        'num1': [165, 170, np.nan, 180, 175, 160, np.nan, 190],
+        'num2': [60, 65, 70, np.nan, 80, 55, 68, np.nan],
+        'num3': [22.0, 22.5, 24.2, 26.5, 26.1, 21.5, 23.8, np.nan]}), 120),
     (pd.DataFrame({
-        'a': [1, 2, 3],
-        'b': [4, 5, 6],
-        'c': [7, 8, 9]
+        'num1': [1, 2, 3],
+        'num2': [4, 5, 6],
+        'num3': [7, 8, 9]
     }), 100),
     (pd.DataFrame({
-        'a': [1, np.nan, 3],
-        'b': [4, 5, np.nan],
-        'c': [7, 8, 9]
+        'num1': [1, np.nan, 3],
+        'num2': [4, 5, np.nan],
+        'num3': [7, 8, 9]
     }), 34)
 ])
 def test_fcmkiimputer_KI_algorithm(X, random_state):
@@ -446,31 +446,31 @@ def test_fcmkiimputer_KI_algorithm(X, random_state):
 
 @pytest.mark.parametrize("X, X_train, random_state, max_FCM_iter, max_k, max_II_iter", [
     (pd.DataFrame({
-        'a': [1, np.nan, 3],
-        'b': [4, 5, np.nan],
-        'c': [7, 8, 9]
+        'num1': [1, np.nan, 3],
+        'num2': [4, 5, np.nan],
+        'num3': [7, 8, 9]
     }),
      pd.DataFrame({
-         'a': [10, 11, 12],
-         'b': [13, 14, 15],
-         'c': [16, 17, 18]
+         'num1': [10, 11, 12],
+         'num2': [13, 14, 15],
+         'num3': [16, 17, 18]
      }),
      42, 100, 15, 50),
     (pd.DataFrame({
-        'a': [1, np.nan, 3],
-        'b': [4, 5, np.nan],
-        'c': [7, 8, 9]
+        'num1': [1, np.nan, 3],
+        'num2': [4, 5, np.nan],
+        'num3': [7, 8, 9]
     }),
      pd.DataFrame({
-         'a': [1, np.nan, 3],
-         'b': [4, 5, np.nan],
-         'c': [7, 8, 9]
+         'num1': [1, np.nan, 3],
+         'num2': [4, 5, np.nan],
+         'num3': [7, 8, 9]
      }),
      123, 120, 30, 100),
     (pd.DataFrame({
-        'a': [1, np.nan, 3],
-        'b': [4, 5, np.nan],
-        'c': [7, 8, 9]
+        'num1': [1, np.nan, 3],
+        'num2': [4, 5, np.nan],
+        'num3': [7, 8, 9]
     }),
      None,
      42, 50, 10, 80)
@@ -489,30 +489,30 @@ def test_fcmkiimputer_KI_algorithm_with_parameters(X, X_train, random_state, max
 
 @pytest.mark.parametrize("X, X_train, n_clusters, random_state, m, max_FCM_iter, max_k, max_II_iter", [
     (pd.DataFrame({
-        "a": [1.0, np.nan, 3.0],
-        "b": [4.0, 5.0, 6.0]
+        "num1": [1.0, np.nan, 3.0],
+        "num2": [4.0, 5.0, 6.0]
     }),
      pd.DataFrame({
-         "a": [1.0, 2.0, 3.0],
-         "b": [4.0, 5.0, 6.0]
+         "num1": [1.0, 2.0, 3.0],
+         "num2": [4.0, 5.0, 6.0]
      }),
      2, 42, 1.1, 50, 15, 100),
     (pd.DataFrame({
-        "x": [np.nan, 2.5, 3.0, 4.5],
-        "y": [1.0, np.nan, 3.0, 4.0]
+        "num1": [np.nan, 2.5, 3.0, 4.5],
+        "num2": [1.0, np.nan, 3.0, 4.0]
     }),
      pd.DataFrame({
-         "x": [1.0, 2.0, 3.0, 4.0],
-         "y": [1.0, 2.0, 3.0, 4.0]
+         "num1": [1.0, 2.0, 3.0, 4.0],
+         "num2": [1.0, 2.0, 3.0, 4.0]
      }),
      2, 42, 2, 100, 20, 50),
     (pd.DataFrame({
-        "x": [1.0, 2.0, 3.0],
-        "y": [4.0, 5.0, 6.0]
+        "num1": [1.0, 2.0, 3.0],
+        "num2": [4.0, 5.0, 6.0]
     }),
      pd.DataFrame({
-         "x": [1.0, 2.0, 3.0],
-         "y": [4.0, 5.0, 6.0]
+         "num1": [1.0, 2.0, 3.0],
+         "num2": [4.0, 5.0, 6.0]
      }),
      2, 42, 1.7, 30, 5, 50)
 ])
@@ -559,12 +559,12 @@ def test_fcmkiimputer_init_errors_nclusters(value, expected_exception, expected_
 
 @pytest.mark.parametrize("X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters", [
     (pd.DataFrame({
-        'a': [np.nan, 2.0, 3.0],
-        'b': [4.0, 5.0, np.nan]
+        'num1': [np.nan, 2.0, 3.0],
+        'num2': [4.0, 5.0, np.nan]
     }), 42, 5, 1.5, 50, 20, 100, None),
     (pd.DataFrame({
-        'a': [1.0, 2.0],
-        'b': [np.nan, 6.0]
+        'num1': [1.0, 2.0],
+        'num2': [np.nan, 6.0]
     }), 42, 10, 2, 30, 5, 100, None)
 ])
 def test_fcmkiimputer_fit(X, random_state, max_clusters, m, max_FCM_iter, max_k, max_II_iter, n_clusters):
@@ -594,21 +594,21 @@ def test_fcmkiimputer_fit(X, random_state, max_clusters, m, max_FCM_iter, max_k,
 
 @pytest.mark.parametrize("X, X_test, random_state, max_clusters, m", [
     (pd.DataFrame({
-        'a': [np.nan, 2.0, 3.0],
-        'b': [4.0, 5.0, np.nan]
+        'num1': [np.nan, 2.0, 3.0],
+        'num2': [4.0, 5.0, np.nan]
     }),
      pd.DataFrame({
-         'a': [2.0, np.nan, 6.0],
-         'b': [8.0, 10.0, 12.0]
+         'num1': [2.0, np.nan, 6.0],
+         'num2': [8.0, 10.0, 12.0]
      }),
      42, 5, 1.5),
     (pd.DataFrame({
-        'a': [1.0, 2.0],
-        'b': [np.nan, 6.0]
+        'num1': [1.0, 2.0],
+        'num2': [np.nan, 6.0]
     }),
      pd.DataFrame({
-         'a': [3.0, np.nan],
-         'b': [9.0, 6.0]
+         'num1': [3.0, np.nan],
+         'num2': [9.0, 6.0]
      }),
      42, 4, 2)
 ])
@@ -628,8 +628,8 @@ def test_fcmkiimputer_transform(X, X_test, random_state, max_clusters, m):
 
 
 @pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
-    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
+    pd.DataFrame({'num1': [1.0, 2.0], 'num2': [3.0, 4.0]}),
+    pd.DataFrame({'num1': [np.nan, 2.0], 'num2': [3.0, 4.0]})
 ])
 def test_fcmkiimputer_transform_without_fit(X):
     imputer = FCMKIterativeImputer(random_state=42)
@@ -639,16 +639,16 @@ def test_fcmkiimputer_transform_without_fit(X):
 
 @pytest.mark.parametrize("X_fit, X_transform", [
     (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4]}),
+            pd.DataFrame({'x1': [3, 4], 'x2': [1, 2]})
     ),
     (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4]}),
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4], 'c': [5, 6]})
     ),
     (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2]})
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4]}),
+            pd.DataFrame({'num1': [1, 2]})
     ),
 ])
 def test_fcmkiimputer_transform_column_mismatch(X_fit, X_transform):
@@ -686,10 +686,10 @@ def test_liiifcm_transform_before_fit():
 
 @pytest.mark.parametrize("X_train, X_test", [
     (pd.DataFrame({
-        'Age': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
-        'YearsExperience': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
-        'Salary': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
-     pd.DataFrame({'Age': [10], 'YearsExperience': [np.nan], 'Salary': [1000]}))])
+        'num1': [25, 30, np.nan, 45, 28, np.nan, 39, 50, 31, np.nan],
+        'num2': [2, 5, 3, 20, 4, np.nan, 10, 25, np.nan, 1],
+        'num3': [45000, 52000, 48000, 90000, 50000, np.nan, 75000, np.nan, 56000, 42000]}),
+     pd.DataFrame({'num1': [10], 'num2': [np.nan], 'num3': [1000]}))])
 def test_liiifcm_transform_single_row(X_train, X_test):
     imputer = FCMInterpolationIterativeImputer()
     imputer.fit(X_train)
@@ -701,16 +701,16 @@ def test_liiifcm_transform_single_row(X_train, X_test):
 
 @pytest.mark.parametrize("X_fit, X_transform", [
     (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4]}),
+            pd.DataFrame({'x1': [3, 4], 'x2': [1, 2]})
     ),
     (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4]}),
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4], 'num3': [5, 6]})
     ),
     (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2]})
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4]}),
+            pd.DataFrame({'num1': [1, 2]})
     ),
 ])
 def test_liiifcm_transform_column_mismatch(X_fit, X_transform):
@@ -723,8 +723,8 @@ def test_liiifcm_transform_column_mismatch(X_fit, X_transform):
 
 def test_liiifcm_sigma_branch():
     X = pd.DataFrame({
-        'a': [0.1, 0.5, np.nan],
-        'b': [0.2, np.nan, 0.8]
+        'num1': [0.1, 0.5, np.nan],
+        'num2': [0.2, np.nan, 0.8]
     })
     imputer = FCMInterpolationIterativeImputer(n_clusters=3, sigma=True, random_state=42)
     imputer.fit(X)
@@ -741,7 +741,7 @@ def test_liiifcm_init_random_state(random_state):
 
 
 @pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [np.nan, 0.2, 0.8], 'b': [0.5, np.nan, 0.7]}),
+    pd.DataFrame({'num1': [np.nan, 0.2, 0.8], 'num2': [0.5, np.nan, 0.7]}),
 ])
 def test_liiifcm_reproducibility(X):
     params = dict(
@@ -830,7 +830,7 @@ def test_liiifcm_init_errors_sigma(value, expected_exception, expected_msg):
 
 
 @pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [np.nan, 0.5, 1.0], 'b': [0.3, np.nan, 0.9]}),
+    pd.DataFrame({'num1': [np.nan, 0.5, 1.0], 'num2': [0.3, np.nan, 0.9]}),
     pd.DataFrame({'x': [0.1, 0.2], 'y': [0.3, np.nan]}),
 ])
 def test_liiifcm_fit_transform(X):
@@ -844,7 +844,7 @@ def test_liiifcm_fit_transform(X):
 
 
 @pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [0.1, 0.5, 0.9], 'b': [0.2, 0.4, 0.8]}),
+    pd.DataFrame({'num1': [0.1, 0.5, 0.9], 'num2': [0.2, 0.4, 0.8]}),
 ])
 def test_liiifcm_ifcm_output_shapes(X):
     imputer = FCMInterpolationIterativeImputer(n_clusters=3)
@@ -862,7 +862,7 @@ def test_liiifcm_ifcm_output_shapes(X):
 
 
 def test_liiifcm_transform_fails_on_different_columns():
-    X_fit = pd.DataFrame({'a': [0.1, 0.2, 0.3], 'b': [0.4, 0.5, 0.6]})
+    X_fit = pd.DataFrame({'num1': [0.1, 0.2, 0.3], 'num2': [0.4, 0.5, 0.6]})
     X_transform = pd.DataFrame({'x': [0.1, 0.2, 0.3], 'y': [0.4, 0.5, 0.6]})
 
     imputer = FCMInterpolationIterativeImputer()
@@ -887,8 +887,8 @@ def test_sigma_false():
 
 def test_sigma_true():
     X = pd.DataFrame({
-        'a': [0.1, 0.5, np.nan],
-        'b': [0.2, np.nan, 0.8]
+        'num1': [0.1, 0.5, np.nan],
+        'num2': [0.2, np.nan, 0.8]
     })
     imputer = FCMInterpolationIterativeImputer(n_clusters=2, sigma=True, random_state=0)
     imputer.fit(X)
@@ -1060,7 +1060,7 @@ def test_fcmdti_determine_optimal_n_clusters_FSI(X, max_clusters, random_state):
     (
             pd.DataFrame({
                 "num1": [1, 2, 3],
-                "num2": [10, 20, 30]  # nowa kolumna
+                "num2": [10, 20, 30]
             }),
             pd.DataFrame({
                 "num1": [1, 3, 6],
@@ -1074,7 +1074,7 @@ def test_fcmdti_determine_optimal_n_clusters_FSI(X, max_clusters, random_state):
     ),
     (
             pd.DataFrame({
-                "num1": [10, 20, 30]  # jedna kolumna numeryczna
+                "num1": [10, 20, 30]
             }),
             pd.DataFrame({
                 "num1": [10, 25, 30]
@@ -1102,7 +1102,7 @@ def test_fcmdti_determine_optimal_n_clusters_FSI(X, max_clusters, random_state):
     (
             pd.DataFrame({
                 "num1": [1, 2, 3],
-                "num2": [10, 20, 30]  # nowa kolumna
+                "num2": [10, 20, 30]
             }),
             pd.DataFrame({
                 "num1": [1, 4, 3],
@@ -1438,8 +1438,8 @@ def test_fcmdti_transform_single_row(X_train, X_test):
 
 
 @pytest.mark.parametrize("X", [
-    pd.DataFrame({'a': [1.0, 2.0], 'b': [3.0, 4.0]}),
-    pd.DataFrame({'a': [np.nan, 2.0], 'b': [3.0, 4.0]})
+    pd.DataFrame({'num1': [1.0, 2.0], 'num2': [3.0, 4.0]}),
+    pd.DataFrame({'num1': [np.nan, 2.0], 'num2': [3.0, 4.0]})
 ])
 def test_fcmdti_transform_without_fit(X):
     imputer = FCMDTIterativeImputer(random_state=42)
@@ -1449,16 +1449,16 @@ def test_fcmdti_transform_without_fit(X):
 
 @pytest.mark.parametrize("X_fit, X_transform", [
     (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'b': [3, 4], 'a': [1, 2]})
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4]}),
+            pd.DataFrame({'x1': [3, 4], 'x2': [1, 2]})
     ),
     (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4], 'c': [5, 6]})
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4]}),
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4], 'num3': [5, 6]})
     ),
     (
-            pd.DataFrame({'a': [1, 2], 'b': [3, 4]}),
-            pd.DataFrame({'a': [1, 2]})
+            pd.DataFrame({'num1': [1, 2], 'num2': [3, 4]}),
+            pd.DataFrame({'num1': [1, 2]})
     ),
 ])
 def test_fcmdti_transform_column_mismatch(X_fit, X_transform):

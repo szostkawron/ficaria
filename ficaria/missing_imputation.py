@@ -10,6 +10,7 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.utils.validation import check_is_fitted
 
 from .utils import *
+from joblib import Parallel, delayed
 
 
 # --------------------------------------
@@ -651,6 +652,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
     allowing points to belong to multiple clusters. It then performs KNN-based imputation
     within clusters, followed by iterative imputation for refinement. This two-level
    `similarity search enhances accuracy compared to standard KNN imputation.
+    All input features are expected to be numerical and scaled to the [0, 1] interval prior to fitting.
 
     Parameters
     ----------
@@ -688,6 +690,9 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         Seed for reproducibility of internal stochastic components.
         If None, randomness is not fixed.
 
+    n_jobs: {int}, default=-1
+        Number of jobs to run in parallel.
+
     Attributes
     ----------
     X_train_ : pandas DataFrame of shape (n_samples, n_features)
@@ -713,7 +718,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
     """
 
     def __init__(self, n_clusters=None, max_clusters=10, m=2, max_FCM_iter=100, max_II_iter=80, max_k=20, tol=1e-5,
-                 random_state=None):
+                 random_state=None, n_jobs=-1):
 
         validate_params({
             'n_clusters': n_clusters,
@@ -723,7 +728,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
             'max_II_iter': max_II_iter,
             'max_k': max_k,
             'tol': tol,
-            'random_state': random_state
+            'random_state': random_state,
+            'n_jobs': n_jobs,
         })
 
         if n_clusters is not None and not isinstance(n_clusters, int):
@@ -739,6 +745,7 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         self.max_II_iter = max_II_iter
         self.max_k = max_k
         self.tol = tol
+        self.n_jobs = n_jobs
 
     def fit(self, X, y=None):
         """
@@ -925,7 +932,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
                         S = np.vstack([neighbors_xi, xi.to_numpy()])
                     else:
                         S = St
-                    imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_II_iter)
+                    imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_II_iter, min_value=0,
+                                               max_value=1)
                     S_filled_EM = imputer.fit_transform(S)
 
                 xi_imputed = S_filled_EM[-1, :]
@@ -955,15 +963,15 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         fcm_labels_train = self.u_.argmax(axis=1)
         fcm_labels_X = membership_matrix.argmax(axis=1)
 
-        imputed_clusters_list = []
-
-        for i in range(self.n_clusters):
+        def impute_cluster(i):
             cluster_train_i = self.X_train_[fcm_labels_train == i]
             cluster_X_i = X[fcm_labels_X == i]
-            imputed_cluster_X_I = self._KI_algorithm(cluster_X_i, cluster_train_i)
+            imputed_cluster = self._KI_algorithm(cluster_X_i, cluster_train_i)
+            return pd.DataFrame(imputed_cluster, columns=X.columns, index=cluster_X_i.index)
 
-            imputed_cluster_X_I = pd.DataFrame(imputed_cluster_X_I, columns=X.columns, index=cluster_X_i.index)
-            imputed_clusters_list.append(imputed_cluster_X_I)
+        imputed_clusters_list = Parallel(n_jobs=self.n_jobs)(
+            delayed(impute_cluster)(i) for i in range(self.n_clusters)
+        )
 
         if imputed_clusters_list:
             all_clusters = pd.concat(imputed_clusters_list, axis=0)
