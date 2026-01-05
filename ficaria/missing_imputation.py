@@ -17,7 +17,7 @@ from joblib import Parallel, delayed
 # FCMCentroidImputer
 # --------------------------------------
 class FCMCentroidImputer(BaseEstimator, TransformerMixin):
-    """"
+    """
     Fuzzy C-Means centroid-based imputer.
 
     Missing values are imputed using the centroid of the closest fuzzy cluster,
@@ -64,8 +64,8 @@ class FCMCentroidImputer(BaseEstimator, TransformerMixin):
     Examples
     --------
     >>> imputer = FCMCentroidImputer(n_clusters=4)
-    >>> imputer.fit(X_train)
-    >>> X_filled = imputer.transform(X_test)
+    >>> imputer.fit(X)
+    >>> X_filled = imputer.transform(X)
     """
 
     def __init__(self, n_clusters=5, m=2.0, max_iter=100, tol=1e-5, random_state=None):
@@ -215,8 +215,8 @@ class FCMParameterImputer(BaseEstimator, TransformerMixin):
     Examples
     --------
     >>> imputer = FCMParameterImputer(n_clusters=4)
-    >>> imputer.fit(X_train)
-    >>> X_filled = imputer.transform(X_test)
+    >>> imputer.fit(X)
+    >>> X_filled = imputer.transform(X)
     """
 
     def __init__(self, n_clusters=5, m=2.0, max_iter=100, tol=1e-5, random_state=None):
@@ -406,8 +406,8 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
     Examples
     --------
     >>> imputer = FCMRoughParameterImputer(n_clusters=4)
-    >>> imputer.fit(X_train)
-    >>> X_filled = imputer.transform(X_test)
+    >>> imputer.fit(X)
+    >>> X_filled = imputer.transform(X)
     """
 
     def __init__(self, n_clusters=5, m=2.0, max_iter=100, max_iter_rough_k=100, tol=1e-5, wl=0.6, wb=0.4, tau=0.5,
@@ -713,8 +713,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
     Examples
     ----------
     >>> imputer = FCMKIterativeImputer(max_clusters=5, random_state=42)
-    >>> imputer.fit(X_train)
-    >>> X_filled = imputer.transform(X_test)
+    >>> imputer.fit(X)
+    >>> X_filled = imputer.transform(X)
     """
 
     def __init__(self, n_clusters=None, max_clusters=10, m=2, max_FCM_iter=100, max_II_iter=80, max_k=20, tol=1e-5,
@@ -1041,8 +1041,8 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
     Examples
     --------
     >>> imputer = FCMInterpolationIterativeImputer(n_clusters=4, sigma=True)
-    >>> imputer.fit(X_train)
-    >>> X_filled = imputer.transform(X_test)
+    >>> imputer.fit(X)
+    >>> X_filled = imputer.transform(X)
     """
 
     def __init__(self, n_clusters=5, m=2.0, max_iter=100, alpha=0.85, tol=1e-5, sigma=False, random_state=None):
@@ -1308,8 +1308,8 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
     Examples
     ----------
     >>> imputer = FCMDTIterativeImputer(max_clusters=10, random_state=0)
-    >>> imputer.fit(X_train)
-    >>> X_filled = imputer.transform(X_test)
+    >>> imputer.fit(X)
+    >>> X_filled = imputer.transform(X)
     """
 
     def __init__(self, max_clusters=20, m=2, max_iter=100, max_FCM_iter=100, tol=1e-5, min_samples_leaf=40,

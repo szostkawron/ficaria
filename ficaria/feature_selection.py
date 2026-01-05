@@ -72,8 +72,8 @@ class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
     Examples
     --------
     >>> selector = FuzzyGranularitySelector(n_features=5, eps=0.3)
-    >>> selector.fit(X_train, y_train)
-    >>> X_reduced = selector.transform(X_test)
+    >>> selector.fit(X, y)
+    >>> X_reduced = selector.transform(X)
     """
 
     def __init__(self, n_features=3, eps=0.5, max_features=10, random_state=None):
@@ -611,8 +611,8 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
     Examples
     --------
     >>> selector = WeightedFuzzyRoughSelector(n_features=5)
-    >>> selector.fit(X_train, y_train)
-    >>> X_reduced = selector.transform(X_test)
+    >>> selector.fit(X, y)
+    >>> X_reduced = selector.transform(X)
     """
 
     def __init__(self, n_features, alpha=0.5, k=5):

@@ -1,3 +1,28 @@
+<p align="center">
+    <img src="https://img.shields.io/badge/PyPI-1.0.0-blue?style=flat-square" alt="PyPI">
+  </a>
+</p>
+
+<p align="center">
+    <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="license">
+  </a>
+</p>
+
+<p align="center">
+    <img src="https://img.shields.io/badge/coverage-96%25-green?style=flat-square" alt="coverage">
+  </a>
+</p>
+
+<p align="center">
+  <img src="img/logo.png" alt="Project Logo" width="200">
+</p>
+
+
+<h1 align="center">Fuzzy Imputation and Critical Attribute Reduction for Intelligent Analysis</h1>
+
+</br>
+
+
 # Ficaria
 
 Ficaria is a Python package providing custom, **scikit-learn–compatible transformers**
