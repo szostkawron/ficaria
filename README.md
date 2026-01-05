@@ -1,12 +1,5 @@
-<p>
-  <img src="https://img.shields.io/badge/pypi-v1.0.0-blue?style=flat-square" alt="PyPI">
-  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="license">
-  <img src="https://img.shields.io/badge/coverage-96%25-green?style=flat-square" alt="coverage">
-</p>
-
-
 <p align="center">
-  <img src="img/logo.png" alt="Project Logo" width="250">
+  <img src="img/logo.png" alt="Project Logo" width="200">
 </p>
 
 
@@ -14,8 +7,14 @@
 
 </br>
 
+<p align="center">
+  <img src="https://img.shields.io/badge/pypi-v1.0.0-blue?style=flat-square" alt="PyPI">
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="license">
+  <img src="https://img.shields.io/badge/coverage-96%25-green?style=flat-square" alt="coverage">
+</p>
 
-## 📝 About The Package
+
+## 🔷 About The Package
 
 The *ficaria* package is a Python package providing custom, **scikit-learn–compatible transformers**
 for **data imputation** and **feature selection**. The transformers are designed to integrate seamlessly with
@@ -32,22 +31,20 @@ This makes *ficaria* particularly suitable for datasets where
 classical crisp methods may be insufficient or overly restrictive.
 
 
-## Prerequisites
+## ⚙️ Prerequisites
 
-![python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![python](https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
 
 The *ficaria* package depends on the following Python libraries:
 
-- **NumPy** ≥ 1.26.4
-- **Pandas** ≥ 2.1.4
-- **SciPy** ≥ 1.11.4
-- **scikit-learn** ≥ 1.4.0
-- **kneed** ≥ 0.8.5
-
-All dependencies are automatically installed when installing the package via `pip`.
+- **NumPy**
+- **Pandas**
+- **SciPy**
+- **scikit-learn**
+- **kneed**
 
 
-## Setup
+## 🛠 Setup
 
 Ficaria can be installed from PyPI:
 
@@ -55,53 +52,66 @@ Ficaria can be installed from PyPI:
 pip install ficaria
 ```
 
+All dependencies are automatically installed when installing the package via `pip`.
 
-## Usage
+
+## 🚀 Usage
+
+Ficaria provides scikit-learn–compatible transformers for data imputation and feature selection.
+All transformers implement the standard fit / transform interface, so they can be used
+directly in pipelines alongside scalers, estimators, and cross-validation tools.
+
+#### Example 1 — Feature Selection with `FuzzyGranularitySelector`
 
 ```python
 from ficaria import FuzzyGranularitySelector
 
 selector = FuzzyGranularitySelector(n_features=5, eps=0.3)
-selector.fit(X, y)
-X_reduced = selector.transform(X)
+selector.fit(X_train, y_train)
+X_reduced = selector.transform(X_test)
 ```
 
-Ficaria transformers follow the scikit-learn API and can be used directly
-in pipelines.
-
-Example:
+#### Example 2 — Data Imputation with `FCMKIterativeImputer`
 
 ```python
-from sklearn.pipeline import Pipeline
 from ficaria import FCMKIterativeImputer
-
-pipeline = Pipeline(
-    steps=[
-        ("transformer", FCMKIterativeImputer()),
-    ]
-)
 
 pipeline.fit(X_train, y_train)
 X_transformed = pipeline.transform(X_test)
 ```
 
-Because all transformers implement `fit` and `transform`, they can be
-combined with other scikit-learn components such as scalers, estimators,
-and cross-validation tools.
+#### Example 3 — Combining Transformers in a Pipeline
 
-Refer to the package documentation and docstrings for detailed usage
-examples of individual transformers.
+Since all transformers implement fit and transform, they can be combined:
+
+```python
+from sklearn.pipeline import Pipeline
+from ficaria import FuzzyGranularitySelector, FCMKIterativeImputer
+
+pipeline = Pipeline([
+    ("imputer", FCMKIterativeImputer()),
+    ("selector", FuzzyGranularitySelector(n_features=5, eps=0.3)),
+])
+
+pipeline.fit(X_train, y_train)
+X_final = pipeline.transform(X_test)
+```
 
 
-## License
+## 📄 License
 
 This project is licensed under the **MIT License**.
 See the `LICENSE` file for details.
 
 
-## Authors
+## 👥 Authors
 
-* Aleksandra Kwiatkowska
-* Małgorzata Mokwa
-* Bogumiła Okrojek
+**Aleksandra Kwiatkowska**
+Github: <a href="https://github.com/kwiatkowskaa">@kwiatkowskaa</a>
+
+**Małgorzata Mokwa**
+Github: <a href="https://github.com/malgosiam2">@malgosiam2</a>
+
+**Bogumiła Okrojek**
+Github: <a href="https://github.com/szostkawron">@szostkawron</a>
 
