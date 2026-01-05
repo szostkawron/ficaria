@@ -1,38 +1,51 @@
-<p align="center">
-    <img src="https://img.shields.io/badge/PyPI-1.0.0-blue?style=flat-square" alt="PyPI">
-  </a>
-</p>
-
-<p align="center">
-    <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="license">
-  </a>
-</p>
-
-<p align="center">
-    <img src="https://img.shields.io/badge/coverage-96%25-green?style=flat-square" alt="coverage">
-  </a>
-</p>
-
-<p align="center">
-  <img src="img/logo.png" alt="Project Logo" width="200">
+<p>
+  <img src="https://img.shields.io/badge/pypi-v1.0.0-blue?style=flat-square" alt="PyPI">
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="license">
+  <img src="https://img.shields.io/badge/coverage-96%25-green?style=flat-square" alt="coverage">
 </p>
 
 
-<h1 align="center">Fuzzy Imputation and Critical Attribute Reduction for Intelligent Analysis</h1>
+<p align="center">
+  <img src="img/logo.png" alt="Project Logo" width="250">
+</p>
+
+
+<h2 align="center"><em>Fuzzy Imputation and Critical Attribute Reduction for Intelligent Analysis</em></h2>
 
 </br>
 
 
-# Ficaria
+## 📝 About The Package
 
-Ficaria is a Python package providing custom, **scikit-learn–compatible transformers**
-for **data imputation** and **feature selection**.
-
-The transformers are designed to integrate seamlessly with
+The *ficaria* package is a Python package providing custom, **scikit-learn–compatible transformers**
+for **data imputation** and **feature selection**. The transformers are designed to integrate seamlessly with
 `scikit-learn` pipelines, making them easy to use in real-world
-machine learning workflows and simple to extend for custom needs.
+machine learning workflows and straightforward to extend for
+custom or research-oriented use cases.
 
----
+The package was developed as part of a **Bachelor’s degree thesis**
+at the **Warsaw University of Technology**, Faculty of
+**Mathematics and Information Science**. All implemented methods are **fuzzy-based**, leveraging concepts
+from **fuzzy set theory** to handle uncertainty, vagueness, and
+incomplete data in a principled and interpretable manner.
+This makes *ficaria* particularly suitable for datasets where
+classical crisp methods may be insufficient or overly restrictive.
+
+
+## Prerequisites
+
+![python](https://img.shields.io/badge/Python-3.10%2B-3776AB?style=for-the-badge&logo=python&logoColor=white)
+
+The *ficaria* package depends on the following Python libraries:
+
+- **NumPy** ≥ 1.26.4
+- **Pandas** ≥ 2.1.4
+- **SciPy** ≥ 1.11.4
+- **scikit-learn** ≥ 1.4.0
+- **kneed** ≥ 0.8.5
+
+All dependencies are automatically installed when installing the package via `pip`.
+
 
 ## Setup
 
@@ -42,12 +55,16 @@ Ficaria can be installed from PyPI:
 pip install ficaria
 ```
 
-The package automatically installs all required dependencies, including
-NumPy, Pandas, SciPy, and scikit-learn.
-
----
 
 ## Usage
+
+```python
+from ficaria import FuzzyGranularitySelector
+
+selector = FuzzyGranularitySelector(n_features=5, eps=0.3)
+selector.fit(X, y)
+X_reduced = selector.transform(X)
+```
 
 Ficaria transformers follow the scikit-learn API and can be used directly
 in pipelines.
@@ -75,14 +92,12 @@ and cross-validation tools.
 Refer to the package documentation and docstrings for detailed usage
 examples of individual transformers.
 
----
 
 ## License
 
 This project is licensed under the **MIT License**.
 See the `LICENSE` file for details.
 
----
 
 ## Authors
 
