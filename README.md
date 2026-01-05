@@ -1,7 +1,5 @@
-<h1 align="center">FICARIA</h1>
-
 <p align="center">
-  <img src="img/logo.png" alt="Project Logo" width="350">
+  <img src="img/logo.png" alt="Project Logo" width="400">
 </p>
 
 <h2 align="center"><em>Fuzzy Imputation and Critical Attribute Reduction for Intelligent Analysis</em></h2>
@@ -15,11 +13,11 @@
 </p>
 
 <p align="center">
-<a href="#about-the-package">About The Package</a> | 
-<a href="#prerequisites">Prerequisites</a> | 
-<a href="#setup">Setup</a> | 
-<a href="#usage">Usage</a> | 
-<a href="#license">License</a> | 
+<a href="#about-the-package">About The Package</a> • 
+<a href="#prerequisites">Prerequisites</a> • 
+<a href="#setup">Setup</a> • 
+<a href="#usage">Usage</a> • 
+<a href="#license">License</a> • 
 <a href="#authors">Authors</a>
 </p>
 
