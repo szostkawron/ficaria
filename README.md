@@ -1,5 +1,11 @@
+<p>
+  <img src="https://img.shields.io/badge/pypi-v1.0.0-blue?style=flat-square" alt="PyPI">
+  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="license">
+  <img src="https://img.shields.io/badge/coverage-96%25-green?style=flat-square" alt="coverage">
+</p>
+
 <p align="center">
-  <img src="img/logo.png" alt="Project Logo" width="200">
+  <img src="img/logo.png" alt="Project Logo" width="250">
 </p>
 
 
@@ -7,14 +13,16 @@
 
 </br>
 
-<p align="center">
-  <img src="https://img.shields.io/badge/pypi-v1.0.0-blue?style=flat-square" alt="PyPI">
-  <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="license">
-  <img src="https://img.shields.io/badge/coverage-96%25-green?style=flat-square" alt="coverage">
-</p>
+## 📖 Table of Contents
+<li><a href="#about-the-package"> ➤ About The Package</a></li>
+<li><a href="#prerequisites"> ➤ Prerequisites</a></li>
+<li><a href="#setup"> ➤ Setup</a></li>
+<li><a href="#usage"> ➤ Usage</a></li>
+<li><a href="#license"> ➤ License</a></li>
+<li><a href="#authors"> ➤ Authors</a></li>
 
 
-## 🔷 About The Package
+<h2 id="about-the-package">🔷 About The Package</h2>
 
 The *ficaria* package is a Python package providing custom, **scikit-learn–compatible transformers**
 for **data imputation** and **feature selection**. The transformers are designed to integrate seamlessly with
@@ -44,6 +52,7 @@ The *ficaria* package depends on the following Python libraries:
 - **kneed**
 
 
+
 ## 🛠 Setup
 
 Ficaria can be installed from PyPI:
@@ -55,13 +64,14 @@ pip install ficaria
 All dependencies are automatically installed when installing the package via `pip`.
 
 
+
 ## 🚀 Usage
 
 Ficaria provides scikit-learn–compatible transformers for data imputation and feature selection.
 All transformers implement the standard fit / transform interface, so they can be used
 directly in pipelines alongside scalers, estimators, and cross-validation tools.
 
-#### Example 1 — Feature Selection with `FuzzyGranularitySelector`
+### Example 1 — Feature Selection with `FuzzyGranularitySelector`
 
 ```python
 from ficaria import FuzzyGranularitySelector
@@ -71,7 +81,7 @@ selector.fit(X_train, y_train)
 X_reduced = selector.transform(X_test)
 ```
 
-#### Example 2 — Data Imputation with `FCMKIterativeImputer`
+### Example 2 — Data Imputation with `FCMKIterativeImputer`
 
 ```python
 from ficaria import FCMKIterativeImputer
@@ -80,7 +90,7 @@ pipeline.fit(X_train, y_train)
 X_transformed = pipeline.transform(X_test)
 ```
 
-#### Example 3 — Combining Transformers in a Pipeline
+### Example 3 — Combining Transformers in a Pipeline
 
 Since all transformers implement fit and transform, they can be combined:
 
@@ -98,20 +108,25 @@ X_final = pipeline.transform(X_test)
 ```
 
 
+
 ## 📄 License
 
 This project is licensed under the **MIT License**.
 See the `LICENSE` file for details.
 
 
+
 ## 👥 Authors
 
-**Aleksandra Kwiatkowska**
+**Aleksandra Kwiatkowska** <br>
+Email: <a>aleksandra.kwiatkowska263@gmail.com</a> <br>
 Github: <a href="https://github.com/kwiatkowskaa">@kwiatkowskaa</a>
 
-**Małgorzata Mokwa**
+**Małgorzata Mokwa** <br>
+Email: <a>malgosiam628@gmail.com</a> <br>
 Github: <a href="https://github.com/malgosiam2">@malgosiam2</a>
 
-**Bogumiła Okrojek**
+**Bogumiła Okrojek** <br>
+Email: <a>???</a> <br>
 Github: <a href="https://github.com/szostkawron">@szostkawron</a>
 
