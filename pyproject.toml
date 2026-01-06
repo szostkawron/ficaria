@@ -9,16 +9,16 @@ description = "Feature selection and missing data imputation"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-    { name = "Aleksandra Kwiatkowska", email = "email@example.com" },
-    { name = "Małgorzata Mokwa", email = "email@example.com" },
-    { name = "Bogumiła Okrojek", email = "email@example.com" }
+    { name = "Aleksandra Kwiatkowska", email = "aleksandra.kwiatkowska263@gmail.com" },
+    { name = "Małgorzata Mokwa", email = "malgosiam628@gmail.com" },
+    { name = "Bogumiła Okrojek", email = "bogumila.okrojek@gmail.com" }
 ]
 
 license-files = ["LICENSE"]
 
 urls = { "Homepage" = "https://github.com/szostkawron/ficaria", "Repository" = "https://github.com/szostkawron/ficaria" }
 
-keywords = ["feature selection", "missing data", "imputation", "machine learning", "scikit-learn"]
+keywords = ["fuzzy", "feature selection", "missing data", "imputation", "machine learning", "scikit-learn"]
 
 classifiers = [
     "Development Status :: 5 - Production/Stable",

@@ -5,6 +5,7 @@
 experiments/01_MI_results/*
 experiments/02_MI_results/*
 experiments/03_MI_results/*
+experiments/01_FS_results/*
 
 # Standardowe pliki Pythona
 __pycache__/
