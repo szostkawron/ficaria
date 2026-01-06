@@ -1112,7 +1112,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         self.alpha = alpha
         self.max_iter = max_iter
         self.tol = tol
-        self.is_sigma = sigma
+        self.sigma = sigma
         self.random_state = random_state
 
     def fit(self, X, y=None):
@@ -1182,7 +1182,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
             for j, center in enumerate(self.centers_):
                 mask = ~np.isnan(row.values)
-                if self.is_sigma:
+                if self.sigma:
                     sigma_j = self.sigma_[j][mask]
                     diff = row.values[mask] - center[mask]
                     distances.append(np.sqrt(np.sum((diff ** 2) / (sigma_j + 1e-10))))
@@ -1236,7 +1236,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             centers = (uv.T @ data) / np.sum(uv.T, axis=1)[:, None]
             dist = np.zeros((n_samples, self.n_clusters))
 
-            if self.is_sigma:
+            if self.sigma:
                 sigma = np.zeros((self.n_clusters, n_features))
                 for j in range(self.n_clusters):
                     u_m = uv[:, j]
@@ -1244,7 +1244,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
                     sigma[j] = np.sum(u_m[:, None] * diff ** 2, axis=0) / np.sum(u_m)
 
             for j in range(self.n_clusters):
-                if self.is_sigma:
+                if self.sigma:
                     dist[:, j] = np.sqrt(np.sum(((data - centers[j]) ** 2) / (sigma[j] + 1e-10), axis=1))
                 else:
                     dist[:, j] = np.linalg.norm(data - centers[j], axis=1)
@@ -1264,7 +1264,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             if avgV <= self.tol:
                 break
 
-        self.sigma_ = sigma if self.is_sigma else None
+        self.sigma_ = sigma if self.sigma else None
         return centers
 
 
