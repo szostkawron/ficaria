@@ -384,18 +384,16 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
 
     clusters_ : list of tuples
         Rough cluster representations obtained after applying Rough K-Means.
-        Each element of the list corresponds to a single cluster and is a tuple:
-
-        (lower, upper, center), where:
-            - lower : numpy.ndarray of shape (n_lower_samples, n_features)
+        Each element of the list corresponds to a single cluster and is a tuple, where:
+            lower : numpy.ndarray of shape (n_lower_samples, n_features)
                 Samples belonging exclusively to the lower approximation
                 of the cluster (objects with high assignment certainty).
 
-            - upper : numpy.ndarray of shape (n_upper_samples, n_features)
+            upper : numpy.ndarray of shape (n_upper_samples, n_features)
                 Samples belonging to the upper approximation (boundary region),
                 potentially shared with other clusters due to uncertainty.
 
-            - center : numpy.ndarray of shape (n_features,)
+            center : numpy.ndarray of shape (n_features,)
                 Final centroid of the rough cluster, computed as a weighted
                 combination of lower and boundary region means.
 
@@ -578,15 +576,15 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
         -------
         clusters : list of tuples
             Each tuple represents one cluster and contains (lower, upper, center), where:
-                - lower : numpy.ndarray of shape (n_lower_samples, n_features)
+                lower : numpy.ndarray of shape (n_lower_samples, n_features)
                     Samples belonging exclusively to the lower approximation
                     of the cluster (objects with high assignment certainty).
 
-                - upper : numpy.ndarray of shape (n_upper_samples, n_features)
+                upper : numpy.ndarray of shape (n_upper_samples, n_features)
                     Samples belonging to the upper approximation (boundary region),
                     potentially shared with other clusters due to uncertainty.
 
-                - center : numpy.ndarray of shape (n_features,)
+                center : numpy.ndarray of shape (n_features,)
                     Final centroid of the rough cluster, computed as a weighted
                     combination of lower and boundary region means.
         """
@@ -1594,9 +1592,12 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
         Returns
         -------
-        result : tuple
-            - dict: Mapping of (row_index, column) to the leaf index in the corresponding tree.
-            - pd.DataFrame: DataFrame with missing values initially imputed.
+        Tuple[dict, pd.DataFrame]
+            incomplete_leaf_indices_dict: dict
+                Mapping of (row_index, column) to the leaf index in the corresponding tree.
+            imputed_X: pd.DataFrame
+                DataFrame with missing values initially imputed.
+
         """
         incomplete_leaf_indices_dict = {}
         imputed_X = incomplete_X.copy()
