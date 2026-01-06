@@ -7,7 +7,9 @@ from sklearn.utils.validation import check_is_fitted
 
 from .utils import *
 
-
+# --------------------------------------
+# FuzzyGranularitySelector
+# --------------------------------------
 class FuzzyGranularitySelector(BaseEstimator, TransformerMixin):
     """
     Fuzzy-Implication Granularity Feature Selector (FIGFS).
@@ -725,14 +727,19 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _identify_high_density_region(self, X, y):
         """
-        Identify high-density regions within a dataset based on local density and class labels.
+        Identify high-density region H based on hybrid distance, density and LDF.
 
         Parameters
         ----------
-        X : np.ndarray or pd.DataFrame
-            Feature matrix of shape (n_samples, n_features).
-        y : np.ndarray or pd.Series
-            Class labels corresponding to each row in X.
+        X : pd.DataFrame
+            Input dataset.
+        y : array-like
+            Class labels for all samples.
+
+        Returns
+        -------
+        H_neighbors : np.ndarray
+            Indices of samples belonging to the high-density region H.
         """
         distances = self._compute_HEC(X)
 
@@ -763,12 +770,21 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_HEC(self, X1, X2=None, W=None):
         """
-        Compute Hybrid Mahalanobis (HM) distance supporting numerical, categorical and mixed features including missing values
+        Compute hybrid numeric–categorical distance with optional feature weights.
 
-        Parameters:
-            X1 (pd.DataFrame): input data frame containing mixed feature types
-            X2 (pd.DataFrame or None): optional second data frame; if None, X1 is used
-            W (np.ndarray or None): diagonal weight matrix applied to features; if None, identity matrix is used
+        Parameters
+        ----------
+        X1 : pd.DataFrame
+            First input dataset.
+        X2 : pd.DataFrame or None, default=None
+            Second dataset; if None, X1 is used.
+        W : ndarray or None, default=None
+            Diagonal weight matrix applied to features.
+        
+        Returns
+        -------
+        distances : np.ndarray
+            Pairwise hybrid distance matrix between rows of X1 and X2.
         """
 
         if X2 is None:
@@ -828,11 +844,19 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_density(self, distances, knn_indices):
         """
-        Compute local density rho(x) for each sample based on distances and n_features-nearest neighbors
+        Compute local density rho(x) for each sample based on distances and k-nearest neighbors
 
-        Parameters:
-            distances (np.ndarray): pairwise distance matrix between all samples
-            knn_indices (np.ndarray): matrix of neighbor indices for each sample
+        Parameters
+        ----------
+        distances : ndarray
+            Pairwise distance matrix.
+        knn_indices : ndarray
+            Indices of k nearest neighbors for each sample.
+        
+        Returns
+        -------
+        rho : np.ndarray
+            Local density values for each sample.
         """
         n_samples = distances.shape[0]
         rho = np.zeros(n_samples)
@@ -847,11 +871,19 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_LDF(self, rho, knn_indices):
         """
-        Compute Local Density Factor (LDF) for each sample using density ratios of neighbors
+        Compute Local Density Factor (LDF) for all samples.
 
-        Parameters:
-            rho (np.ndarray): density values for all samples
-            knn_indices (np.ndarray): matrix with n_features-nearest neighbor indices
+        Parameters
+        ----------
+        rho : ndarray
+            Density values for samples.
+        knn_indices : ndarray
+            Indices of k nearest neighbors.
+
+        Returns
+        -------
+        LDF : np.ndarray
+            Local Density Factor for each sample.
         """
 
         n_samples = len(rho)
@@ -868,12 +900,24 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_fuzzy_similarity_relations(self, X, H, W=None):
         """
-        Compute fuzzy similarity relations RM_B(x,y) for single features and feature pairs with respect to region H
+        Compute fuzzy similarity relations RM_B(x,y) for single features and
+        feature pairs with respect to region H.
 
-        Parameters:
-            X (pd.DataFrame): input dataset with mixed features
-            H (array-like): indices of high-density samples
-            W (np.ndarray or None): diagonal weight matrix used for weighted distances
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input dataset.
+        H : array-like
+            Indices of high-density samples.
+        W : ndarray or None, default=None
+            Weight matrix used to scale distances.
+
+        Returns
+        -------
+        relations_single : dict
+            Mapping of feature index to fuzzy relation matrix for single features.
+        relations_pair : dict
+            Mapping of feature index pairs to fuzzy relation matrices.
         """
 
         n_samples, n_features = X.shape
@@ -900,13 +944,23 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_relation_for_subset(self, X, H, feature_subset, W=None):
         """
-        Compute fuzzy relation for an arbitrary subset of features
+        Compute fuzzy similarity relation for an arbitrary feature subset.
 
-        Parameters:
-            X (pd.DataFrame): input dataset
-            H (array-like): indices of high-density samples
-            feature_subset (list): selected feature indices
-            W (np.ndarray or None): weight matrix corresponding to the subset
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input dataset.
+        H : array-like
+            Indices of high-density samples.
+        feature_subset : list
+            Feature indices included in the subset.
+        W : ndarray or None, default=None
+            Sub-matrix of weights for the subset.
+
+        Returns
+        -------
+        relation : np.ndarray
+            Fuzzy similarity relation for the given feature subset.
         """
 
         X_H = X.iloc[H, feature_subset]
@@ -921,12 +975,23 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_POS_NOG_B(self, R_B, y, H):
         """
-        Compute POS^B and NOG^B for a fuzzy relation matrix R_B
+        Compute POS and NOG for a given relation matrix.
 
-        Parameters:
-            R_B (np.ndarray): fuzzy relation matrix of shape (n × |H|)
-            y (array-like): class labels for samples
-            H (array-like): indices of high-density region samples
+        Parameters
+        ----------
+        R_B : ndarray
+            Fuzzy relation matrix (n x |H|).
+        y : array-like
+            Class labels.
+        H : array-like
+            Indices of high-density samples.
+
+        Returns
+        -------
+        POS : np.ndarray
+            Positive region values for each sample.
+        NOG : np.ndarray
+            Negative region values for each sample.
         """
 
         n = len(y)
@@ -938,8 +1003,6 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
         if R_B.shape[1] != len(H):
             R_B = R_B[:, H]
 
-        # Fuzzy decision memberships for all classes (hard labels -> crisp membership)
-        # D_i(y) = 1 if y==class_i else 0
         DI = {c: (y_arr[H] == c).astype(float) for c in classes}
 
         POS = np.zeros(n)
@@ -967,12 +1030,25 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_relevance_B(self, R_B, y, H):
         """
-        Compute relevance Rel(B) for a feature subset using POS and NOG distributions
+        Compute subset relevance Rel(B) using POS and NOG values.
 
-        Parameters:
-            R_B (np.ndarray): fuzzy relation matrix for subset B
-            y (array-like): class labels
-            H (array-like): indices of high-density samples
+        Parameters
+        ----------
+        R_B : ndarray
+            Fuzzy relation matrix for subset B.
+        y : array-like
+            Class labels.
+        H : array-like
+            High-density region indices.
+
+        Returns
+        -------
+        RelB : float
+            Relevance of the feature subset B.
+        POS_B : np.ndarray
+            Positive region values for subset B.
+        NOG_B : np.ndarray
+            Negative region values for subset B.
         """
 
         POS_B, NOG_B = self._compute_POS_NOG_B(R_B, y, H)
@@ -981,12 +1057,21 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_relevance(self, relations_single, y, H):
         """
-        Compute relevance Rel(a) for each individual feature
+        Compute relevance Rel(a) for each single feature.
 
-        Parameters:
-            relations_single (dict): mapping {feature_index: relation_matrix}
-            y (array-like): class labels
-            H (array-like): indices of high-density samples
+        Parameters
+        ----------
+        relations_single : dict
+            Mapping {feature_index: relation_matrix}.
+        y : array-like
+            Class labels.
+        H : array-like
+            High-density region indices.
+
+        Returns
+        -------
+        relevance : dict
+            Relevance scores for each single feature.
         """
 
         relevance = {}
@@ -1003,14 +1088,25 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_redundancy(self, y, H, relevance, relations_pair, cached_REL_pairs=None):
         """
-        Compute redundancy Red(a,b) between feature pairs
+        Compute redundancy Red(a,b) for all feature pairs.
 
-        Parameters:
-            y (array-like): class labels
-            H (array-like): indices of high-density samples
-            relevance (dict): relevance values for single features
-            relations_pair (dict): fuzzy relations for feature pairs
-            cached_REL_pairs (dict or None): optional cache for Rel({a,b})
+        Parameters
+        ----------
+        y : array-like
+            Class labels.
+        H : array-like
+            High-density region indices.
+        relevance : dict
+            Relevance values Rel(a).
+        relations_pair : dict
+            Pairwise fuzzy relations.
+        cached_REL_pairs : dict or None
+            Optional cache of precomputed Rel(a,b).
+
+        Returns
+        -------
+        redundancy : dict
+            Redundancy values for all feature pairs.
         """
 
         if cached_REL_pairs is None:
@@ -1033,11 +1129,19 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_feature_weights(self, relevance, redundancy):
         """
-        Compute feature weights using normalized relevance and redundancy
+        Compute feature weights using normalized relevance and redundancy.
 
-        Parameters:
-            relevance (dict): relevance scores Rel(a)
-            redundancy (dict): redundancy values Red(a,b)
+        Parameters
+        ----------
+        relevance : dict
+            Relevance scores for all features.
+        redundancy : dict
+            Redundancy values for feature pairs.
+
+        Returns
+        -------
+        weights : dict
+            Computed weight for each feature.
         """
 
         features = sorted(list(relevance.keys()))
@@ -1071,11 +1175,19 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _update_weight_matrix(self, weights, n_total_features):
         """
-        Update diagonal weight matrix W for all original features
+        Construct diagonal weight matrix W from feature weights.
 
-        Parameters:
-            weights (dict): feature weights w(a)
-            n_total_features (int): number of total features in X
+        Parameters
+        ----------
+        weights : dict
+            Weight value for each feature.
+        n_total_features : int
+            Total number of original features.
+
+        Returns
+        -------
+        W : np.ndarray
+            Diagonal weight matrix constructed from feature weights.
         """
 
         W = np.zeros((n_total_features, n_total_features))
@@ -1085,12 +1197,23 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_gamma(self, POS_all, NOG_all, features):
         """
-        Compute gamma_P and gamma_N for the current subset of features
+        Compute gamma_P and gamma_N for the current subset of features.
 
-        Parameters:
-            POS_all (dict): mapping from feature to POS distributions
-            NOG_all (dict): mapping from feature to NOG distributions
-            features (list): selected feature indices
+        Parameters
+        ----------
+        POS_all : dict
+            mapping from feature to POS distributions
+        NOG_all : dict
+            mapping from feature to NOG distributions
+        features : list
+            Indices of selected features.
+
+        Returns
+        -------
+        gamma_P : float
+            Mean positive region value for the selected features.
+        gamma_N : float
+            Mean negative region value for the selected features.    
         """
 
         POS_mean = np.mean([POS_all[a] for a in features], axis=0)
@@ -1101,15 +1224,27 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _compute_separability(self, X, y, H, W, selected_features, remaining_features):
         """
-        Compute separability measure sig(a, B, D) for each candidate feature
+        Compute separability measure sig(a, B, D) for each candidate feature.
 
-        Parameters:
-            X (pd.DataFrame): input dataset
-            y (array-like): class labels
-            H (array-like): indices of high-density samples
-            W (np.ndarray): global weight matrix
-            selected_features (list): features already selected
-            remaining_features (list): features remaining to evaluate
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input dataset.
+        y : array-like
+            Class labels.
+        H : array-like
+            High-density region indices.
+        W : ndarray
+            Global weight matrix.
+        selected_features : list
+            Features already in the subset.
+        remaining_features : list
+            Features to evaluate.
+
+        Returns
+        -------
+        separability : dict
+            Separability measure for each candidate feature.
         """
 
         if len(selected_features) == 0:
@@ -1131,14 +1266,27 @@ class WeightedFuzzyRoughSelector(BaseEstimator, TransformerMixin):
 
     def _build_weighted_feature_sequence(self, relations_single, relations_pair, X, y, H):
         """
-        Build weighted feature ranking using greedy selection based on separability
+        Build full weighted feature ranking using greedy separability selection.
 
-        Parameters:
-            relations_single (dict): fuzzy relations for single features
-            relations_pair (dict): fuzzy relations for feature pairs
-            X (pd.DataFrame): input dataset
-            y (array-like): class labels
-            H (array-like): high-density region indices
+        Parameters
+        ----------
+        relations_single : dict
+            Fuzzy relations for single features.
+        relations_pair : dict
+            Fuzzy relations for feature pairs.
+        X : pd.DataFrame
+            Input dataset.
+        y : array-like
+            Class labels.
+        H : array-like
+            High-density sample indices.
+
+        Returns
+        -------
+        sequence : list of int
+            Full ordered feature ranking.
+        Rw : np.ndarray
+            Diagonal matrix of logistic-scaled feature weights.
         """
 
         n_features = X.shape[1]

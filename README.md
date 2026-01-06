@@ -7,7 +7,7 @@
 </br>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/pypi-v1.0.0-blue?style=flat-square" alt="PyPI">
+  <img src="https://img.shields.io/badge/pypi-v0.1.0-blue?style=flat-square" alt="PyPI">
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/coverage-96%25-green?style=flat-square" alt="coverage">
 </p>
@@ -126,6 +126,6 @@ Email: <a>malgosiam628@gmail.com</a> <br>
 Github: <a href="https://github.com/malgosiam2">@malgosiam2</a>
 
 **Bogumiła Okrojek** <br>
-Email: <a>???</a> <br>
+Email: <a>bogumila.okrojek@gmail.com</a> <br>
 Github: <a href="https://github.com/szostkawron">@szostkawron</a>
 

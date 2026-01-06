@@ -9,9 +9,9 @@ description = "Feature selection and missing data imputation"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [
-    { name = "Aleksandra Kwiatkowska", email = "email@example.com" },
-    { name = "Małgorzata Mokwa", email = "email@example.com" },
-    { name = "Bogumiła Okrojek", email = "email@example.com" }
+    { name = "Aleksandra Kwiatkowska", email = "aleksandra.kwiatkowska263@gmail.com" },
+    { name = "Małgorzata Mokwa", email = "malgosiam628@gmail.com" },
+    { name = "Bogumiła Okrojek", email = "bogumila.okrojek@gmail.com" }
 ]
 
 license-files = ["LICENSE"]

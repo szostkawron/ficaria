@@ -7,12 +7,18 @@ from scipy.spatial.distance import cdist
 def split_complete_incomplete(X):
     """
     Split the dataset into complete (no missing values) and incomplete (with missing values) objects.
-    
-    Parameters:
-        X (pd.DataFrame): input data
-    
-    Returns:
-        complete (pd.DataFrame), incomplete (pd.DataFrame)
+
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Input data.
+
+    Returns
+    -------
+    complete : pd.DataFrame
+        Rows without missing values.
+    incomplete : pd.DataFrame
+        Rows containing missing values.
     """
     complete = X.dropna()
     incomplete = X[X.isna().any(axis=1)]
@@ -22,17 +28,25 @@ def split_complete_incomplete(X):
 def check_input_dataset(X, require_numeric=False, allow_nan=True, require_complete_rows=False,
                         no_nan_columns=False):
     """
-    Convert input to DataFrame and check the validity of the dataset
+    Convert input to DataFrame and check the validity of the dataset.
 
-    Parameters:
-        X (pd.DataFrame): input data
-        require_numeric (bool): check if only numeric columns are present
-        allow_nan (bool): allow nan values
-        require_complete_rows (bool): check if complete rows are present
-        no_nan_columns (bool): check if there are no nan columns are present
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Input data.
+    require_numeric : bool
+        If True, ensure that only numeric columns are present.
+    allow_nan : bool
+        If True, allow NaN values in the dataset.
+    require_complete_rows : bool
+        If True, check that complete rows are present.
+    no_nan_columns : bool
+        If True, ensure there are no columns with NaN values.
 
-    Returns:
-        pd.DataFrame: converted data
+    Returns
+    -------
+    X : pd.DataFrame
+        Converted and validated DataFrame.
     """
 
     try:
@@ -71,11 +85,15 @@ def validate_params(params):
     """
     Validate parameters.
 
-    Parameters:
-        params (dict): Dictionary of parameter names and values
+    Parameters
+    ----------
+    params : dict
+        Dictionary of parameter names and values to validate.
 
-    Raises:
-        TypeError, ValueError: If any parameter is invalid.
+    Raises
+    ------
+    TypeError, ValueError
+        If any parameter is invalid.
     """
     if 'max_clusters' in params:
         max_clusters = params['max_clusters']
@@ -219,12 +237,18 @@ def validate_params(params):
 def euclidean_distance(a, b):
     """
     Compute Euclidean distance between two vectors, ignoring NaNs.
-    
-    Parameters:
-        a, b (np.ndarray): input vectors
-    
-    Returns:
-        float: Euclidean distance
+
+    Parameters
+    ----------
+    a : np.ndarray
+        First input vector.
+    b : np.ndarray
+        Second input vector.
+
+    Returns
+    -------
+    distance : float
+        Euclidean distance between vectors a and b.
     """
     mask = ~np.isnan(a) & ~np.isnan(b)
     return np.linalg.norm(a[mask] - b[mask])
@@ -234,17 +258,27 @@ def fuzzy_c_means(X, n_clusters, m=2.0, max_iter=100, tol=1e-5, random_state=Non
     """
     Fuzzy C-Means clustering algorithm.
 
-    Parameters:
-        X (np.ndarray): data matrix (n_samples x n_features)
-        n_clusters (int): number of clusters
-        v (float): fuzziness parameter (>1)
-        max_iter (int): maximum number of iterations
-        tol (float): convergence tolerance
-        random_state (int): random seed
+    Parameters
+    ----------
+    X : np.ndarray of shape (n_samples, n_features)
+        Input data matrix.
+    n_clusters : int
+        Number of clusters to form.
+    v : float
+        Fuzziness parameter, must be greater than 1.
+    max_iter : int
+        Maximum number of iterations.
+    tol : float
+        Convergence tolerance.
+    random_state : int
+        Seed for random number generator.
 
-    Returns:
-        centers (np.ndarray): cluster centers
-        u (np.ndarray): membership matrix (n_samples x n_clusters)
+    Returns
+    -------
+    centers : np.ndarray of shape (n_clusters, n_features)
+        Computed cluster centers.
+    u : np.ndarray of shape (n_samples, n_clusters)
+        Membership matrix for each sample.
     """
     if isinstance(X, pd.DataFrame):
         X = X.to_numpy()
@@ -278,14 +312,19 @@ def fcm_predict(X_new, centers, m=2.0):
     """
     Compute fuzzy membership matrix for new data points given cluster centers.
 
-    Parameters:
-        X_new (np.ndarray): New data to classify (n_samples x n_features).
-        centers (np.ndarray): Cluster centers obtained from Fuzzy C-Means (n_clusters x n_features).
-        m (float): Fuzziness parameter (>1), typically same as used in training.
+    Parameters
+    ----------
+    X_new : np.ndarray of shape (n_samples, n_features)
+        New data points to classify.
+    centers : np.ndarray of shape (n_clusters, n_features)
+        Cluster centers obtained from Fuzzy C-Means.
+    m : float
+        Fuzziness parameter (>1), typically the same as used during training.
 
-    Returns:
-        u_new (np.ndarray): Membership matrix for new samples (n_samples x n_clusters),
-                            where each row sums to 1.
+    Returns
+    -------
+    u_new : np.ndarray of shape (n_samples, n_clusters)
+        Membership matrix for new samples, where each row sums to 1.
     """
     n_samples = X_new.shape[0]
     n_clusters = centers.shape[0]
@@ -300,16 +339,23 @@ def fcm_predict(X_new, centers, m=2.0):
 
 def compute_fcm_objective(X, centers, u, m=2):
     """
-    Compute the fuzzy c-means objective function value.
+    Compute the fuzzy C-Means objective function value.
 
-    Parameters:
-        X (np.array): Data points, shape (n_samples, n_features).
-        centers (np.array): Cluster centers, shape (n_clusters, n_features).
-        u (np.array): Membership matrix, shape (n_samples, n_clusters).
-        m (float): Fuzziness parameter (default is 2).
+    Parameters
+    ----------
+    X : np.ndarray of shape (n_samples, n_features)
+        Data points.
+    centers : np.ndarray of shape (n_clusters, n_features)
+        Cluster centers.
+    u : np.ndarray of shape (n_samples, n_clusters)
+        Membership matrix.
+    m : float, default=2
+        Fuzziness parameter.
 
-    Returns:
-        float: Value of the fuzzy c-means objective function.
+    Returns
+    -------
+    objective_value : float
+        Value of the fuzzy C-Means objective function.
     """
     dist_sq = cdist(X, centers, metric='sqeuclidean')
     return np.sum((u ** m) * dist_sq)
@@ -317,19 +363,29 @@ def compute_fcm_objective(X, centers, u, m=2):
 
 def find_optimal_clusters_fuzzy(X, min_clusters=2, max_clusters=10, random_state=None, m=2, max_iter=100, tol=1e-5):
     """
-    Elbow method for fuzzy C-means with missing data imputation and objective function calculation.
+    Elbow method for fuzzy C-Means with missing data imputation and objective function calculation.
 
-    Parameters:
-        X (pd.DataFrame): Input data with missing values.
-        min_clusters (int): Minimum number of clusters (default is 2).
-        max_clusters (int): Maximum number of clusters (default is 10).
-        random_state (int): Seed for reproducibility (default is None).
-        m (float): Fuzziness parameter (default is 2).
-        max_iter (int): Maximum number of iterations in FCM (default is 100).
-        tol (float): Tolerance for FCM (default is 1e-5).
+    Parameters
+    ----------
+    X : pd.DataFrame
+        Input data with missing values.
+    min_clusters : int, default=2
+        Minimum number of clusters to consider.
+    max_clusters : int, default=10
+        Maximum number of clusters to consider.
+    random_state : int, optional
+        Seed for reproducibility.
+    m : float, default=2
+        Fuzziness parameter for FCM.
+    max_iter : int, default=100
+        Maximum number of iterations in FCM.
+    tol : float, default=1e-5
+        Convergence tolerance for FCM.
 
-    Returns:
-        int or None: Optimal number of clusters found by the elbow method.
+    Returns
+    -------
+    optimal_clusters : int or None
+        Optimal number of clusters determined by the elbow method.
     """
 
     objective_values = []

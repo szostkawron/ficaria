@@ -549,28 +549,46 @@ class FCMRoughParameterImputer(BaseEstimator, TransformerMixin):
     def _rough_kmeans_from_fcm(self, X, memberships, center_init, wl=0.6, wb=0.4, tau=0.5, max_iter_rough_k=100,
                                tol=1e-4):
         """
-        Rough K-Means
-        Applied after FCM clustering (using its centroids as initialization).
-        Each cluster is represented by a lower and an upper approximation, allowing
-        samples in boundary regions to belong to multiple clusters when uncertainty exists.
-        The algorithm starts from FCM centroids and iteratively updates cluster centers
-        using weighted means of lower and boundary regions.
+        Construct rough clusters from FCM memberships using Rough K-Means refinement.
 
-        Parameters:
-            X (np.ndarray): data matrix (n_samples x n_features)
-            memberships (np.ndarray): Membership matrix from FCM (n_samples, n_clusters)
-            center_init (np.ndarray): Initial cluster centers (n_clusters x n_features) - output of FCM
-            wl (float): weight for the lower approximation 
-            wb (float): weight for the boundary region 
-            tau (float): threshold controlling assignment of samples to lower or boundary regions
-            max_iter (int): maximum number of iterations for updating cluster centers
-            tol (float): Convergence tolerance; the algorithm stops if the shift in cluster centers is below this threshold.
+        Samples are assigned to lower or boundary approximations depending on
+        their distance to centroids and threshold τ, and cluster centers are
+        iteratively updated using weighted averages of lower and boundary sets.
 
-        Returns:
-            list of tuples: Each tuple represents one cluster and contains:
-                - lower (np.ndarray): Samples in the lower approximation of the cluster.
-                - upper (np.ndarray): Samples in the upper (boundary) approximation.
-                - center (np.ndarray): Final cluster center vector.
+        Parameters
+        ----------
+        X : np.ndarray shape (n_samples, n_features)
+            Input data matrix.
+        memberships : np.ndarray shape (n_samples, n_clusters)
+            Membership matrix produced by FCM.
+        center_init : np.ndarray shape (n_clusters, n_features)
+            Initial cluster centers obtained from FCM.
+        wl : float
+            Weight assigned to the lower approximation.
+        wb : float
+            Weight assigned to the boundary region.
+        tau : float
+            Threshold defining boundary assignments.
+        max_iter : int
+            Maximum number of refinement iterations.
+        tol : float
+            Convergence tolerance for centroid drift.
+
+        Returns
+        -------
+        clusters : list of tuples
+            Each tuple represents one cluster and contains (lower, upper, center), where:
+                - lower : numpy.ndarray of shape (n_lower_samples, n_features)
+                    Samples belonging exclusively to the lower approximation
+                    of the cluster (objects with high assignment certainty).
+
+                - upper : numpy.ndarray of shape (n_upper_samples, n_features)
+                    Samples belonging to the upper approximation (boundary region),
+                    potentially shared with other clusters due to uncertainty.
+
+                - center : numpy.ndarray of shape (n_features,)
+                    Final centroid of the rough cluster, computed as a weighted
+                    combination of lower and boundary region means.
         """
 
         if isinstance(X, pd.DataFrame):
@@ -813,18 +831,25 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     def _find_best_k(self, St, random_col, original_value, distances):
         """
-        Identify the indices of the best k nearest neighbors that minimize the
-        absolute error when imputing a masked value in a specific column.
+        Identify the indices of the best k nearest neighbors that minimize the absolute error 
+        when imputing a masked value in a specific column.
 
-        Parameters:
-            St (np.ndarray): 2D array of data where the last row contains the masked value.
-            random_col (int): Index of the column that was masked.
-            original_value (float): True value of the masked entry.
-            distances (np.ndarray): 1D array of distances from the last row to all other rows.
+        Parameters
+        ----------
+        St : np.ndarray of shape (n_rows, n_features)
+            2D array of data where the last row contains the masked value.
+        random_col : int
+            Index of the column that was masked.
+        original_value : float
+            True value of the masked entry.
+        distances : np.ndarray of shape (n_rows - 1,)
+            Distances from the last row to all other rows.
 
-        Returns:
-            np.ndarray: Indices of the k nearest neighbors in St (excluding the last row)
-                        that produce the smallest absolute error in the selected column.
+        Returns
+        -------
+        best_indices : np.ndarray
+            Indices of the k nearest neighbors in St (excluding the last row) that produce 
+            the smallest absolute error in the selected column.
         """
         n = St.shape[0]
         if n <= 1:
@@ -860,12 +885,17 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         """
         Impute missing values using the KI method (KNN + Iterative Imputation).
 
-        Parameters:
-            X (pd.DataFrame): Data to impute.
-            X_train (pd.DataFrame): Optional reference data (default is None).
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Data to impute.
+        X_train : pd.DataFrame, optional
+            Optional reference dataset to guide imputation. Default is None.
 
-        Returns:
-            pd.DataFrame: Imputed dataset (same shape and index as X).
+        Returns
+        -------
+        X_imputed : pd.DataFrame
+            Imputed dataset, with the same shape and index as X.
         """
 
         X_incomplete_rows = X.copy()
@@ -951,11 +981,15 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
         """
         Impute missing values using the FCKI method (FCM + KNN + Iterative Imputation).
 
-        Parameters:
-            X (pd.DataFrame): Data to impute.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Data to impute.
 
-        Returns:
-            np.ndarray: Imputed dataset.
+        Returns
+        -------
+        X_imputed : np.ndarray
+            Imputed dataset.
         """
         X_filled = self.imputer_.transform(X)
         membership_matrix = fcm_predict(X_filled, self.centers_, self.m)
@@ -1444,17 +1478,20 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
     def _determine_optimal_n_clusters_FSI(self, X, fcm_function):
         """
-        Determine the optimal number of clusters for fuzzy clustering using the Fuzzy
-        Silhouette Index (FSI).
+        Determine the optimal number of clusters for fuzzy clustering using the Fuzzy Silhouette Index (FSI).
 
-        Parameters:
-            X (pd.DataFrame): Input data to be clustered.
-            fcm_function (callable): Function that performs fuzzy c-means clustering.
-                                     It should return a tuple `(centers, u)`, where `u`
-                                     is the membership matrix.
+        Parameters
+        ----------
+        X : pd.DataFrame
+            Input data to be clustered.
+        fcm_function : callable
+            Function that performs fuzzy c-means clustering. Should return a tuple `(centers, u)`,
+            where `u` is the membership matrix.
 
-        Returns:
-            int: Optimal number of clusters (c) that maximizes the Fuzzy Silhouette Index.
+        Returns
+        -------
+        optimal_clusters : int
+            Optimal number of clusters (c) that maximizes the Fuzzy Silhouette Index.
         """
         if len(X) < 2:
             return 1
@@ -1472,14 +1509,19 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         """
         Compute the Fuzzy Silhouette Index (FSI) for a fuzzy clustering result.
 
-        Parameters:
-            X (np.ndarray or pd.DataFrame): Data points used for clustering (N samples x M features).
-            U (np.ndarray): Fuzzy membership matrix (N samples x C clusters), where each entry
-                            represents the membership degree of a point to a cluster.
-            alpha (float, optional): Weighting exponent for membership differences; default is 1.0.
+        Parameters
+        ----------
+        X : np.ndarray or pd.DataFrame of shape (n_samples, n_features)
+            Data points used for clustering.
+        U : np.ndarray of shape (n_samples, n_clusters)
+            Fuzzy membership matrix, where each entry represents the membership degree of a point to a cluster.
+        alpha : float, optional, default=1.0
+            Weighting exponent for membership differences.
 
-        Returns:
-            float: Fuzzy Silhouette Index, a weighted measure of cluster cohesion and separation.
+        Returns
+        -------
+        FS : float
+            Fuzzy Silhouette Index, a weighted measure of cluster cohesion and separation.
         """
         X = np.asarray(X, dtype=float)
         N, C = U.shape
@@ -1514,40 +1556,47 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
 
     def _calculate_AV(self, new_df, old_df, mask_missing):
         """
-        Compute the average absolute difference between a new and old DataFrame
-        for only the masked/missing entries.
+        Compute the average absolute difference between a new and old DataFrame for only the masked/missing entries.
 
-        Parameters:
-            new_df (pd.DataFrame): DataFrame containing the new/imputed values.
-            old_df (pd.DataFrame): DataFrame containing the original values.
-            mask_missing (pd.DataFrame): Boolean mask indicating which entries were
-                                         missing or masked.
+        Parameters
+        ----------
+        new_df : pd.DataFrame
+            DataFrame containing the new or imputed values.
+        old_df : pd.DataFrame
+            DataFrame containing the original values.
+        mask_missing : pd.DataFrame of bool
+            Boolean mask indicating which entries were missing or masked.
 
-        Returns:
-            float: Average absolute difference for the masked entries. Returns 0.0 if
-                   no masked entries exist or result is NaN.
+        Returns
+        -------
+        avg_abs_diff : float
+            Average absolute difference for the masked entries. Returns 0.0 if no masked entries exist or result is NaN.
         """
         diffs = (new_df - old_df).abs()
         masked_diffs = diffs.where(mask_missing)
         AV = masked_diffs.stack().mean()
         return 0.0 if pd.isna(AV) else AV
 
+
     def _initial_imputation_DT(self, incomplete_X, cols_with_nan):
         """
         Perform initial imputation of missing values in a DataFrame using trained decision trees.
 
-        For each missing entry in the specified columns, the function predicts its value
-        using the corresponding decision tree. If a row has multiple missing values,
-        previously imputed values are used iteratively to fill remaining gaps.
+        For each missing entry in the specified columns, the function predicts its value using the corresponding decision tree.
+        If a row has multiple missing values, previously imputed values are used iteratively to fill remaining gaps.
 
-        Parameters:
-            incomplete_X (pd.DataFrame): DataFrame containing missing values to be imputed.
-            cols_with_nan (pandas.Index): Columns names that contain missing values.
+        Parameters
+        ----------
+        incomplete_X : pd.DataFrame
+            DataFrame containing missing values to be imputed.
+        cols_with_nan : pandas.Index
+            Column names that contain missing values.
 
-        Returns:
-            tuple:
-                - dict: Mapping of (row_index, column) to the leaf index in the corresponding tree.
-                - pd.DataFrame: DataFrame with missing values initially imputed.
+        Returns
+        -------
+        result : tuple
+            - dict: Mapping of (row_index, column) to the leaf index in the corresponding tree.
+            - pd.DataFrame: DataFrame with missing values initially imputed.
         """
         incomplete_leaf_indices_dict = {}
         imputed_X = incomplete_X.copy()
@@ -1578,21 +1627,26 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         """
         Refine imputed values within a specific leaf of a decision tree using fuzzy c-means clustering.
 
-        The function selects all complete and imputed records in a given leaf, determines
-        the optimal number of clusters via Fuzzy Silhouette Index, and updates the imputed
-        values as a weighted combination of cluster centers, adjusted by a learning rate.
+        The function selects all complete and imputed records in a given leaf, determines the optimal number of clusters
+        via Fuzzy Silhouette Index, and updates the imputed values as a weighted combination of cluster centers, adjusted by a learning rate.
 
-        Parameters:
-            k (int): Leaf index within the decision tree for column j.
-            j (int or str): Column index or name for which imputations are being refined.
-            incomplete_leaf_indices_dict (dict): Mapping of (row_index, column) to leaf indices
-                                                 from initial imputation.
-            imputed_X (pd.DataFrame): DataFrame with currently imputed values.
-            fcm_function (callable): Function to perform fuzzy c-means clustering. Should return
-                                     `(centers, u)` where `u` is the membership matrix.
+        Parameters
+        ----------
+        k : int
+            Leaf index within the decision tree for column j.
+        j : int or str
+            Column index or name for which imputations are being refined.
+        incomplete_leaf_indices_dict : dict
+            Mapping of (row_index, column) to leaf indices from initial imputation.
+        imputed_X : pd.DataFrame
+            DataFrame with currently imputed values.
+        fcm_function : callable
+            Function to perform fuzzy c-means clustering. Should return `(centers, u)` where `u` is the membership matrix.
 
-        Returns:
-            pd.DataFrame: Updated DataFrame with refined imputations for column j within leaf k.
+        Returns
+        -------
+        imputed_X_updated : pd.DataFrame
+            Updated DataFrame with refined imputations for column j within leaf k.
         """
         complete_records_in_leaf = self.X_train_complete_[self.leaf_indices_[j] == k].copy()
         complete_records_in_leaf.index = range(len(complete_records_in_leaf))
