@@ -35,3 +35,8 @@ __pycache__/
 Thumbs.db
 
 .feature_sel.py
+
+# Build / packaging
+build/
+dist/
+*.egg-info/

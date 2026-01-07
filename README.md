@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="img/logo.png" alt="Project Logo" width="400">
+  <img src="https://github.com/szostkawron/ficaria/raw/experiments_main/img/logo.png" alt="Project Logo" width="400">
 </p>
 
 <h2 align="center"><em>Fuzzy Imputation and Critical Attribute Reduction for Intelligent Analysis</em></h2>
