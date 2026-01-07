@@ -666,9 +666,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     FCKI improves missing data imputation by first clustering data with fuzzy c-means,
     allowing points to belong to multiple clusters. It then performs KNN-based imputation
-    within clusters, followed by iterative imputation for refinement. This two-level
-   `similarity search enhances accuracy compared to standard KNN imputation.
-    All input features are expected to be numerical and scaled to the [0, 1] interval prior to fitting.
+    within clusters, followed by iterative imputation for refinement. This two-level similarity
+    search enhances accuracy compared to standard KNN imputation.
 
     Parameters
     ----------
@@ -725,6 +724,12 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
     np_rng_ : numpy.random.RandomState
         Random generator used during adaptive neighbor masking.
+
+    min_value_ : float
+        Minimum value observed in the training dataset. Used to constrain imputed values globally.
+
+    max_value_ : float
+    Maximum value observed in the training dataset. Used to constrain imputed values globally.
 
     Examples
     ----------
@@ -800,6 +805,10 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
 
         self.centers_, self.u_ = fuzzy_c_means(X_filled.values, n_clusters=self.n_clusters, m=self.m,
                                                max_iter=self.max_FCM_iter, tol=self.tol, random_state=self.random_state)
+
+        self.min_value_ = X.min(skipna=True).min()
+        self.max_value_ = X.max(skipna=True).max()
+
         return self
 
     def transform(self, X):
@@ -960,8 +969,8 @@ class FCMKIterativeImputer(BaseEstimator, TransformerMixin):
                         S = np.vstack([neighbors_xi, xi.to_numpy()])
                     else:
                         S = St
-                    imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_II_iter, min_value=0,
-                                               max_value=1)
+                    imputer = IterativeImputer(random_state=self.random_state, max_iter=self.max_II_iter,
+                                               min_value=self.min_value_, max_value=self.max_value_)
                     S_filled_EM = imputer.fit_transform(S)
 
                 xi_imputed = S_filled_EM[-1, :]
@@ -1103,7 +1112,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
         self.alpha = alpha
         self.max_iter = max_iter
         self.tol = tol
-        self.is_sigma = sigma
+        self.sigma = sigma
         self.random_state = random_state
 
     def fit(self, X, y=None):
@@ -1173,7 +1182,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
 
             for j, center in enumerate(self.centers_):
                 mask = ~np.isnan(row.values)
-                if self.is_sigma:
+                if self.sigma:
                     sigma_j = self.sigma_[j][mask]
                     diff = row.values[mask] - center[mask]
                     distances.append(np.sqrt(np.sum((diff ** 2) / (sigma_j + 1e-10))))
@@ -1227,7 +1236,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             centers = (uv.T @ data) / np.sum(uv.T, axis=1)[:, None]
             dist = np.zeros((n_samples, self.n_clusters))
 
-            if self.is_sigma:
+            if self.sigma:
                 sigma = np.zeros((self.n_clusters, n_features))
                 for j in range(self.n_clusters):
                     u_m = uv[:, j]
@@ -1235,7 +1244,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
                     sigma[j] = np.sum(u_m[:, None] * diff ** 2, axis=0) / np.sum(u_m)
 
             for j in range(self.n_clusters):
-                if self.is_sigma:
+                if self.sigma:
                     dist[:, j] = np.sqrt(np.sum(((data - centers[j]) ** 2) / (sigma[j] + 1e-10), axis=1))
                 else:
                     dist[:, j] = np.linalg.norm(data - centers[j], axis=1)
@@ -1255,7 +1264,7 @@ class FCMInterpolationIterativeImputer(BaseEstimator, TransformerMixin):
             if avgV <= self.tol:
                 break
 
-        self.sigma_ = sigma if self.is_sigma else None
+        self.sigma_ = sigma if self.sigma else None
         return centers
 
 
@@ -1574,7 +1583,6 @@ class FCMDTIterativeImputer(BaseEstimator, TransformerMixin):
         masked_diffs = diffs.where(mask_missing)
         AV = masked_diffs.stack().mean()
         return 0.0 if pd.isna(AV) else AV
-
 
     def _initial_imputation_DT(self, incomplete_X, cols_with_nan):
         """

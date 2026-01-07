@@ -787,7 +787,7 @@ def test_liiifcm_init(n_clusters, m, alpha, max_iter, tol, max_outer_iter, stop_
     assert imputer.alpha == alpha
     assert imputer.max_iter == max_iter
     assert imputer.tol == tol
-    assert imputer.is_sigma == sigma
+    assert imputer.sigma == sigma
 
 
 @pytest.mark.parametrize(

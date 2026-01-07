@@ -130,7 +130,7 @@ from ficaria.utils import split_complete_incomplete, euclidean_distance, fuzzy_c
         ({"eps": -0.1}, ValueError, "eps must be > 0, got"),
         ({"eps": 0}, ValueError, "eps must be > 0, got"),
 
-        #n_jobs
+        # n_jobs
         ({"n_jobs": "ABC"}, TypeError, "n_jobs must be int, got"),
         ({"n_jobs": [5]}, TypeError, "n_jobs must be int, got"),
         ({"n_jobs": 3.5}, TypeError, "n_jobs must be int, got"),

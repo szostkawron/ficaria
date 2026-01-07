@@ -7,6 +7,7 @@ from sklearn.utils.validation import check_is_fitted
 
 from .utils import *
 
+
 # --------------------------------------
 # FuzzyGranularitySelector
 # --------------------------------------
